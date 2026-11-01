@@ -5,6 +5,12 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Releases reach npm through trusted publishing: publishing a GitHub release stages its retained
+  archive on npm, after checking it against the release's `SHA256SUMS`, and the owner approves
+  the staged version with their two-factor key. No npm token is stored anywhere.
+
 ## [1.0.0-beta.1] - 2026-11-01
 
 The first public release, a beta: on npm under the `beta` dist-tag (`npm install relembra@beta`),

@@ -91,23 +91,9 @@ Before publishing, check that no `refs/tags/v<version>` exists yet, peeled ref i
 (`git ls-remote --tags origin`); a collision blocks the release. Then, in this order:
 
 1. Tag the final commit (`git tag -a v<version>`) and push the tag.
-2. Publish the retained archive, never a fresh pack. npm requires two-factor authentication:
-
-   ```sh
-   npm publish .scratch/release/<attempt>/gate/package/relembra-<version>.tgz --tag beta --access public
-   ```
-
-   A manual publish carries no provenance attestation; that needs trusted publishing from a
-   GitHub Actions workflow. Check that `npm view relembra@<version> dist.integrity` equals the
-   archive's SRI value, and that `npm view relembra dist-tags` points `beta`, not `latest`, at a
-   prerelease:
-
-   ```sh
-   printf 'sha512-%s\n' "$(openssl dgst -sha512 -binary <tgz> | base64 | tr -d '\n')"
-   ```
-3. Create the GitHub release as a draft with every asset attached, then publish it. With
-   immutable releases enabled on the repository, the published release's assets and tag can no
-   longer change:
+2. Create the GitHub release as a draft with every asset attached, then publish it.
+   `SHA256SUMS` must list the binary and the retained archive. With immutable releases enabled
+   on the repository, the published release's assets and tag can no longer change:
 
    ```sh
    gh release create v<version> --verify-tag --draft --prerelease --title v<version> \
@@ -117,6 +103,40 @@ Before publishing, check that no `refs/tags/v<version>` exists yet, peeled ref i
 
    Download the published assets into an empty directory and compare their hashes with the
    evidence record before installing.
+3. Publishing the release runs `.github/workflows/release.yml`. It downloads the release's
+   archive and `SHA256SUMS`, refuses an archive whose bytes, name, version or manifest do not
+   match (`scripts/stage-release.ts`), and stages those exact bytes on npm through trusted
+   publishing, under the dist-tag the manifest declares (`beta` for a prerelease). Staging
+   makes nothing installable and needs no stored token; the job's npm provenance names the
+   workflow run. If the job fails, fix the cause and re-run it; the release cannot change.
+4. Approve the staged version from a terminal; the approval asks for the owner's two-factor
+   key. Check its bytes first:
+
+   ```sh
+   npm stage list relembra
+   npm stage download <stage-id>     # its sha256 must equal the archive's in SHA256SUMS
+   npm stage approve <stage-id>
+   ```
+
+   Then check that `npm view relembra@<version> dist.integrity` equals the archive's SRI value,
+   and that `npm view relembra dist-tags` points `beta`, not `latest`, at a prerelease:
+
+   ```sh
+   printf 'sha512-%s\n' "$(openssl dgst -sha512 -binary <tgz> | base64 | tr -d '\n')"
+   ```
+
+   A staged version that must not ship is removed with `npm stage reject <stage-id>`.
+
+The npm trust configuration lets only this workflow, in this repository, stage the package; it
+cannot publish without the approval. The owner creates it once, from a terminal:
+
+```sh
+npm trust github relembra --repo mneves75/relembra --file release.yml --allow-stage-publish
+npm trust list relembra
+```
+
+Renaming the workflow file or the repository breaks it until the configuration is replaced
+(`npm trust revoke`, then the command above).
 
 ## Mac installation and rollback
 
