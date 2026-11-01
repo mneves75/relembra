@@ -266,9 +266,12 @@ for await (const line of lines) {
   // this candidate killed. The hidden text arrives after the candidate is dead.
   if (mode === "late-writer" && request.cmd === "find" && arg !== undefined && !existsSync(arg)) {
     writeFileSync(arg, "strayed");
-    const script = `setTimeout(() => process.stdout.write(${JSON.stringify(`${hidden[0]}\n`)}), 300)`;
+    // The text goes in the environment, so no code is built from data.
+    const script =
+      "setTimeout(() => process.stdout.write(process.env.RELEMBRA_LATE_TEXT + '\\n'), 300)";
     spawn(process.execPath, ["-e", script], {
       detached: true,
+      env: { ...process.env, RELEMBRA_LATE_TEXT: hidden[0] },
       stdio: ["ignore", "inherit", "ignore"],
     }).unref();
     const result = await answer(request.cmd, request.args);
