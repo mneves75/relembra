@@ -32,6 +32,23 @@ export function archiveName(tag: string): string | undefined {
   return version === undefined ? undefined : `relembra-${version}.tgz`;
 }
 
+/** Why the entries are not npm pack's layout, or undefined when they are. */
+export function layoutProblem(entries: readonly string[]): string | undefined {
+  const seen = new Set<string>();
+  for (const entry of entries) {
+    const parts = entry.split("/");
+    if (parts.length > 1 && parts.at(-1) === "") parts.pop(); // a directory entry
+    const canonical =
+      parts[0] === "package" &&
+      parts.every((part) => part !== "" && part !== "." && part !== ".." && !part.includes("\\"));
+    if (!canonical) return `has an entry outside package/ or not canonical: ${entry}`;
+    const path = parts.join("/");
+    if (seen.has(path)) return `has two entries for ${path}`;
+    seen.add(path);
+  }
+  return seen.has("package/package.json") ? undefined : "has no package/package.json";
+}
+
 export function stagePlan(input: StageInput): StagePlan {
   const archive = archiveName(input.tag);
   if (archive === undefined) return { problems: [`tag ${input.tag} is not v<version>`] };
@@ -50,17 +67,11 @@ export function stagePlan(input: StageInput): StagePlan {
       problems: [`${archive} has sha256 ${input.archiveSha256}, SHA256SUMS says ${expected}`],
     };
   }
-  // npm unpacks with the first path component stripped, so `other/package.json` would land on
-  // the `package/package.json` checked here. Accept only npm pack's layout.
-  const outside = input.entries.filter((entry) => !entry.startsWith("package/"));
-  const manifests = input.entries.filter((entry) => entry === "package/package.json").length;
-  if (outside.length > 0 || manifests !== 1) {
-    return {
-      problems: [
-        `${archive} is not one package/ tree with one package/package.json (${outside.length} entries outside package/, ${manifests} manifests)`,
-      ],
-    };
-  }
+  // npm unpacks with the first path component stripped and each path normalized, so
+  // `other/package.json` or `package/./package.json` would overwrite the manifest checked here.
+  // Accept only npm pack's layout: canonical paths under package/, each written once.
+  const layout = layoutProblem(input.entries);
+  if (layout !== undefined) return { problems: [`${archive} ${layout}`] };
   if (input.manifest.name !== "relembra") {
     return { problems: [`the archive's package is ${String(input.manifest.name)}, not relembra`] };
   }
@@ -78,16 +89,19 @@ function main(tag: string | undefined, dir: string | undefined): number {
   const archive = archiveName(tag);
   const path = archive === undefined ? undefined : join(dir, archive);
   const present = path !== undefined && existsSync(path);
+  const entries = present
+    ? execFileSync("tar", ["-tzf", path], { encoding: "utf8" }).split("\n").filter(Boolean)
+    : [];
+  // Only a canonical layout has exactly one member that tar can extract as the manifest.
+  const readable = present && layoutProblem(entries) === undefined;
   const plan = stagePlan({
     tag,
     sums: readFileSync(join(dir, "SHA256SUMS"), "utf8"),
-    entries: present
-      ? execFileSync("tar", ["-tzf", path], { encoding: "utf8" }).split("\n").filter(Boolean)
-      : [],
+    entries,
     archiveSha256: present
       ? createHash("sha256").update(readFileSync(path)).digest("hex")
       : undefined,
-    manifest: present
+    manifest: readable
       ? JSON.parse(
           execFileSync("tar", ["-xzOf", path, "package/package.json"], { encoding: "utf8" }),
         )

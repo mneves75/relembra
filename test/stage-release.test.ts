@@ -6,9 +6,10 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gzipSync } from "node:zlib";
 import { stagePlan } from "../scripts/stage-release.ts";
 
 const SHA = "a".repeat(64);
@@ -64,18 +65,25 @@ describe("stage plan", () => {
   });
 
   test("refuses an archive npm would unpack differently from what was checked", () => {
-    const problem = (outside: number, manifests: number) => ({
-      problems: [
-        `relembra-1.0.0-beta.2.tgz is not one package/ tree with one package/package.json (${outside} entries outside package/, ${manifests} manifests)`,
-      ],
+    const refused = (extra: string[], why: string) =>
+      expect(stagePlan({ ...good, entries: [...entries, ...extra] })).toEqual({
+        problems: [`relembra-1.0.0-beta.2.tgz ${why}`],
+      });
+    const odd = "has an entry outside package/ or not canonical:";
+    refused(["other/package.json"], `${odd} other/package.json`);
+    refused(["package/./package.json"], `${odd} package/./package.json`);
+    refused(["package//package.json"], `${odd} package//package.json`);
+    refused(["package/dist/../package.json"], `${odd} package/dist/../package.json`);
+    refused(["package\\package.json"], `${odd} package\\package.json`);
+    refused(["package/package.json"], "has two entries for package/package.json");
+    expect(stagePlan({ ...good, entries: ["package/dist/index.js"] })).toEqual({
+      problems: ["relembra-1.0.0-beta.2.tgz has no package/package.json"],
     });
-    expect(stagePlan({ ...good, entries: [...entries, "other/package.json"] })).toEqual(
-      problem(1, 1),
-    );
-    expect(stagePlan({ ...good, entries: [...entries, "package/package.json"] })).toEqual(
-      problem(0, 2),
-    );
-    expect(stagePlan({ ...good, entries: ["package/dist/index.js"] })).toEqual(problem(0, 0));
+    // Directory entries, as tar lists them, are part of npm pack's layout.
+    expect(stagePlan({ ...good, entries: ["package/", "package/dist/", ...entries] })).toEqual({
+      archive: "relembra-1.0.0-beta.2.tgz",
+      distTag: "beta",
+    });
   });
 
   test("refuses an archive whose manifest is another package or another version", () => {
@@ -95,74 +103,75 @@ describe("stage plan", () => {
   });
 });
 
+/** A gzipped ustar archive with these exact entry names, which tar itself would normalize. */
+function tgz(files: ReadonlyArray<readonly [string, string]>): Buffer {
+  const blocks: Buffer[] = [];
+  for (const [name, text] of files) {
+    const body = Buffer.from(text);
+    const header = Buffer.alloc(512);
+    const field = (offset: number, value: string) => header.write(value, offset, "ascii");
+    field(0, name);
+    field(100, "0000644\0");
+    field(108, "0000000\0");
+    field(116, "0000000\0");
+    field(124, `${body.length.toString(8).padStart(11, "0")}\0`);
+    field(136, "00000000000\0");
+    field(148, "        ");
+    field(156, "0");
+    field(257, "ustar\0");
+    field(263, "00");
+    const sum = header.reduce((total, byte) => total + byte, 0);
+    field(148, `${sum.toString(8).padStart(6, "0")}\0 `);
+    blocks.push(header, body, Buffer.alloc((512 - (body.length % 512)) % 512));
+  }
+  blocks.push(Buffer.alloc(1024));
+  return gzipSync(Buffer.concat(blocks));
+}
+
 describe("stage-release command", () => {
   const script = join(import.meta.dir, "..", "scripts", "stage-release.ts");
+  const real = JSON.stringify(manifest);
+  const other = JSON.stringify({ ...manifest, version: "9.9.9" });
 
-  function release(tamper: boolean, second = false): string {
+  function run(files: ReadonlyArray<readonly [string, string]>, tamper = false) {
     const dir = mkdtempSync(join(tmpdir(), "relembra-stage-"));
-    const src = join(dir, "src", "package");
-    mkdirSync(src, { recursive: true });
-    writeFileSync(join(src, "package.json"), JSON.stringify(manifest));
-    if (second) {
-      mkdirSync(join(dir, "src", "other"));
-      const other = { ...manifest, version: "9.9.9" };
-      writeFileSync(join(dir, "src", "other", "package.json"), JSON.stringify(other));
+    try {
+      const archive = tgz(files);
+      const hash = tamper ? "d".repeat(64) : createHash("sha256").update(archive).digest("hex");
+      writeFileSync(join(dir, "relembra-1.0.0-beta.2.tgz"), archive);
+      writeFileSync(join(dir, "SHA256SUMS"), `${hash}  relembra-1.0.0-beta.2.tgz\n`);
+      const result = spawnSync(process.execPath, [script, "v1.0.0-beta.2", dir], {
+        encoding: "utf8",
+      });
+      return { ...result, archive: join(dir, "relembra-1.0.0-beta.2.tgz") };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
-    const assets = join(dir, "assets");
-    mkdirSync(assets);
-    const archive = join(assets, "relembra-1.0.0-beta.2.tgz");
-    const roots = second ? ["package", "other"] : ["package"];
-    const tar = spawnSync("tar", ["-czf", archive, "-C", join(dir, "src"), ...roots]);
-    expect(tar.status).toBe(0);
-    const hash = createHash("sha256").update(readFileSync(archive)).digest("hex");
-    writeFileSync(
-      join(assets, "SHA256SUMS"),
-      `${tamper ? "d".repeat(64) : hash}  relembra-1.0.0-beta.2.tgz\n`,
-    );
-    return dir;
   }
 
   test("prints the archive and dist-tag for a release that vouches for it", () => {
-    const dir = release(false);
-    try {
-      const run = spawnSync(process.execPath, [script, "v1.0.0-beta.2", join(dir, "assets")], {
-        encoding: "utf8",
-      });
-      expect(run.stderr).toBe("");
-      expect(run.status).toBe(0);
-      expect(run.stdout).toBe(
-        `tarball=${join(dir, "assets", "relembra-1.0.0-beta.2.tgz")}\ndist-tag=beta\n`,
-      );
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    const result = run([["package/package.json", real]]);
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe(`tarball=${result.archive}\ndist-tag=beta\n`);
   });
 
   test("exits non-zero and prints no plan when the bytes differ from SHA256SUMS", () => {
-    const dir = release(true);
-    try {
-      const run = spawnSync(process.execPath, [script, "v1.0.0-beta.2", join(dir, "assets")], {
-        encoding: "utf8",
-      });
-      expect(run.status).toBe(1);
-      expect(run.stdout).toBe("");
-      expect(run.stderr).toContain("SHA256SUMS says");
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    const result = run([["package/package.json", real]], true);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("SHA256SUMS says");
   });
 
-  test("refuses an archive with a second manifest npm would unpack over the checked one", () => {
-    const dir = release(false, true);
-    try {
-      const run = spawnSync(process.execPath, [script, "v1.0.0-beta.2", join(dir, "assets")], {
-        encoding: "utf8",
-      });
-      expect(run.status).toBe(1);
-      expect(run.stdout).toBe("");
-      expect(run.stderr).toMatch(/is not one package\/ tree.*[1-9] entries outside package\//);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
+  test("refuses a second manifest npm would unpack over the checked one", () => {
+    for (const alias of ["other/package.json", "package/./package.json"]) {
+      const result = run([
+        ["package/package.json", real],
+        [alias, other],
+      ]);
+      expect(result.status).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain(`not canonical: ${alias}`);
     }
   });
 });
