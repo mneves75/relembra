@@ -100,6 +100,22 @@ describe("site assembly", () => {
     expect(run.stderr).toContain("assets/missing.png");
   });
 
+  test("a relative output path means the caller's directory, never the repository root", () => {
+    const repo = fixture();
+    mkdirSync(join(repo, "sub"));
+    writeFileSync(join(repo, "site", "local.txt"), "uncommitted work");
+    // From sub/, "site" names sub/site, which does not exist; the root's site/ must stay untouched.
+    const run = spawnSync("bash", [script, "site"], { cwd: join(repo, "sub"), encoding: "utf8" });
+    expect(run.stderr).toBe("");
+    expect(run.status).toBe(0);
+    expect(files(join(repo, "sub", "site"))).toContain("index.html");
+    expect(files(join(repo, "site")).sort()).toEqual([
+      "assets/site.css",
+      "index.html",
+      "local.txt",
+    ]);
+  });
+
   test("refuses an output directory that already exists", () => {
     const repo = fixture();
     const first = assemble(repo);

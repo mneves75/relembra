@@ -13,11 +13,12 @@ if [ "$#" -ne 1 ]; then
   echo "usage: scripts/site/assemble.sh <new directory>" >&2
   exit 64
 fi
-out=$1
-if [ -e "$out" ]; then
-  echo "$out already exists: give a new directory." >&2
+if [ -e "$1" ]; then
+  echo "$1 already exists: give a new directory." >&2
   exit 1
 fi
+# Resolved here, from the caller's directory: the script changes directory below.
+out="$(cd "$(dirname "$1")" && pwd -P)/$(basename "$1")"
 
 cd "$(git rev-parse --show-toplevel)"
 source_sha=$(git rev-parse HEAD)
