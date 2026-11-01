@@ -303,8 +303,10 @@ for await (const line of lines) {
     if (arg !== undefined && mode !== "stray-wake") writeFileSync(arg, "strayed");
     const redacted = set?.corpus.find((m) => m.state === "redacted");
     if (redacted === undefined) throw new Error("the set has no redacted memory");
-    write({ id: request.id, ok: true, result: await answer(request.cmd, request.args) });
-    process.stdout.write(`${redacted.text}\n`);
+    // One write, so the answer and the stray line reach the scorer together: written apart, the
+    // stray line can arrive after the scorer sent its next request and be read as that answer.
+    const reply = { id: request.id, ok: true, result: await answer(request.cmd, request.args) };
+    process.stdout.write(`${JSON.stringify(reply)}\n${redacted.text}\n`);
     continue;
   }
   if (request.cmd === "find") {
