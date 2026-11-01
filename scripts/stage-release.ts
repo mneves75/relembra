@@ -18,6 +18,8 @@ export interface StageInput {
   readonly sums: string;
   /** The sha256 of the archive's bytes, or undefined when the release has no such asset. */
   readonly archiveSha256: string | undefined;
+  /** The archive's entry paths, as `tar -tzf` lists them. */
+  readonly entries: readonly string[];
   readonly manifest: Manifest & { readonly name?: unknown };
 }
 
@@ -48,6 +50,17 @@ export function stagePlan(input: StageInput): StagePlan {
       problems: [`${archive} has sha256 ${input.archiveSha256}, SHA256SUMS says ${expected}`],
     };
   }
+  // npm unpacks with the first path component stripped, so `other/package.json` would land on
+  // the `package/package.json` checked here. Accept only npm pack's layout.
+  const outside = input.entries.filter((entry) => !entry.startsWith("package/"));
+  const manifests = input.entries.filter((entry) => entry === "package/package.json").length;
+  if (outside.length > 0 || manifests !== 1) {
+    return {
+      problems: [
+        `${archive} is not one package/ tree with one package/package.json (${outside.length} entries outside package/, ${manifests} manifests)`,
+      ],
+    };
+  }
   if (input.manifest.name !== "relembra") {
     return { problems: [`the archive's package is ${String(input.manifest.name)}, not relembra`] };
   }
@@ -68,6 +81,9 @@ function main(tag: string | undefined, dir: string | undefined): number {
   const plan = stagePlan({
     tag,
     sums: readFileSync(join(dir, "SHA256SUMS"), "utf8"),
+    entries: present
+      ? execFileSync("tar", ["-tzf", path], { encoding: "utf8" }).split("\n").filter(Boolean)
+      : [],
     archiveSha256: present
       ? createHash("sha256").update(readFileSync(path)).digest("hex")
       : undefined,

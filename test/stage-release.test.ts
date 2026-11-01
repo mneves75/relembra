@@ -19,7 +19,8 @@ const manifest = {
   publishConfig: { access: "public", tag: "beta" },
 };
 const sums = `${"b".repeat(64)}  relembra-darwin-arm64\n${SHA}  relembra-1.0.0-beta.2.tgz\n`;
-const good = { tag: "v1.0.0-beta.2", sums, archiveSha256: SHA, manifest };
+const entries = ["package/package.json", "package/dist/index.js"];
+const good = { tag: "v1.0.0-beta.2", sums, archiveSha256: SHA, entries, manifest };
 
 describe("stage plan", () => {
   test("a prerelease the release vouches for stages under its declared tag (positive control)", () => {
@@ -32,6 +33,7 @@ describe("stage plan", () => {
       tag: "v1.0.0",
       sums: `${SHA}  relembra-1.0.0.tgz\n`,
       archiveSha256: SHA,
+      entries,
       manifest: stable,
     });
     expect(plan).toEqual({ archive: "relembra-1.0.0.tgz", distTag: "latest" });
@@ -61,6 +63,21 @@ describe("stage plan", () => {
     });
   });
 
+  test("refuses an archive npm would unpack differently from what was checked", () => {
+    const problem = (outside: number, manifests: number) => ({
+      problems: [
+        `relembra-1.0.0-beta.2.tgz is not one package/ tree with one package/package.json (${outside} entries outside package/, ${manifests} manifests)`,
+      ],
+    });
+    expect(stagePlan({ ...good, entries: [...entries, "other/package.json"] })).toEqual(
+      problem(1, 1),
+    );
+    expect(stagePlan({ ...good, entries: [...entries, "package/package.json"] })).toEqual(
+      problem(0, 2),
+    );
+    expect(stagePlan({ ...good, entries: ["package/dist/index.js"] })).toEqual(problem(0, 0));
+  });
+
   test("refuses an archive whose manifest is another package or another version", () => {
     expect(stagePlan({ ...good, manifest: { ...manifest, name: "other" } })).toEqual({
       problems: ["the archive's package is other, not relembra"],
@@ -81,15 +98,21 @@ describe("stage plan", () => {
 describe("stage-release command", () => {
   const script = join(import.meta.dir, "..", "scripts", "stage-release.ts");
 
-  function release(tamper: boolean): string {
+  function release(tamper: boolean, second = false): string {
     const dir = mkdtempSync(join(tmpdir(), "relembra-stage-"));
     const src = join(dir, "src", "package");
     mkdirSync(src, { recursive: true });
     writeFileSync(join(src, "package.json"), JSON.stringify(manifest));
+    if (second) {
+      mkdirSync(join(dir, "src", "other"));
+      const other = { ...manifest, version: "9.9.9" };
+      writeFileSync(join(dir, "src", "other", "package.json"), JSON.stringify(other));
+    }
     const assets = join(dir, "assets");
     mkdirSync(assets);
     const archive = join(assets, "relembra-1.0.0-beta.2.tgz");
-    const tar = spawnSync("tar", ["-czf", archive, "-C", join(dir, "src"), "package"]);
+    const roots = second ? ["package", "other"] : ["package"];
+    const tar = spawnSync("tar", ["-czf", archive, "-C", join(dir, "src"), ...roots]);
     expect(tar.status).toBe(0);
     const hash = createHash("sha256").update(readFileSync(archive)).digest("hex");
     writeFileSync(
@@ -124,6 +147,20 @@ describe("stage-release command", () => {
       expect(run.status).toBe(1);
       expect(run.stdout).toBe("");
       expect(run.stderr).toContain("SHA256SUMS says");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("refuses an archive with a second manifest npm would unpack over the checked one", () => {
+    const dir = release(false, true);
+    try {
+      const run = spawnSync(process.execPath, [script, "v1.0.0-beta.2", join(dir, "assets")], {
+        encoding: "utf8",
+      });
+      expect(run.status).toBe(1);
+      expect(run.stdout).toBe("");
+      expect(run.stderr).toMatch(/is not one package\/ tree.*[1-9] entries outside package\//);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
