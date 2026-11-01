@@ -397,6 +397,32 @@ describe("site: the page", () => {
     expect(motionFor("fast", true)).toBe("reduced");
   });
 
+  test("language: ?lang= in the link wins, then a saved choice, then the browser", () => {
+    const boot = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1] ?? "";
+    const langFor = (search: string, stored: string | null, browser: string) => {
+      const element = { classList: { add() {} }, lang: "", setAttribute() {} };
+      runInNewContext(boot, {
+        document: { documentElement: element },
+        localStorage: { getItem: (key: string) => (key === "relembra-lang" ? stored : null) },
+        matchMedia: () => ({ matches: false }),
+        navigator: { language: browser },
+        location: { search },
+        URLSearchParams,
+      });
+      return element.lang;
+    };
+    // positive control: without a parameter the browser and the saved choice decide, as before
+    expect(langFor("", null, "pt-BR")).toBe("pt-BR");
+    expect(langFor("", null, "en-US")).toBe("en");
+    expect(langFor("", "en", "pt-BR")).toBe("en");
+    // a shared link names its language, whatever the browser or an earlier visit chose
+    expect(langFor("?lang=en", "pt-BR", "pt-BR")).toBe("en");
+    expect(langFor("?lang=pt-BR", "en", "en-US")).toBe("pt-BR");
+    // anything else in the parameter is ignored
+    expect(langFor("?lang=fr", null, "pt-BR")).toBe("pt-BR");
+    expect(langFor("?lang=<b>", "en", "pt-BR")).toBe("en");
+  });
+
   test("motion: the stylesheet follows the page's choice, not the system's media query", () => {
     const css = readFileSync(join(site, "assets", "site.css"), "utf8");
     // positive control: the motion rules exist and key on the attribute the bootstrap sets
