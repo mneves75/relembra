@@ -6,6 +6,11 @@
  *   node scripts/stage-release.ts <tag> <directory holding the release's assets>
  *
  * On success it prints `tarball=<path>` and `dist-tag=<tag>` for $GITHUB_OUTPUT.
+ *
+ * It binds the staged bytes to the release exactly (sha256) and catches release mistakes: a wrong
+ * version, a private package, a prerelease bound for `latest`. It is not the defence against a
+ * crafted archive: whoever can publish a release writes both the archive and SHA256SUMS, so the
+ * defence is the owner's approval after `npm stage view`, which shows what npm itself read.
  */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";

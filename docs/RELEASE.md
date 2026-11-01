@@ -110,10 +110,12 @@ Before publishing, check that no `refs/tags/v<version>` exists yet, peeled ref i
    makes nothing installable and needs no stored token; the job's npm provenance names the
    workflow run. If the job fails, fix the cause and re-run it; the release cannot change.
 4. Approve the staged version from a terminal; the approval asks for the owner's two-factor
-   key. Check its bytes first:
+   key. Approve only a release you published, and check what npm itself read first, since the
+   workflow's checks catch release mistakes, not a crafted archive:
 
    ```sh
    npm stage list relembra
+   npm stage view <stage-id>         # version and dist-tag must be the release's
    npm stage download <stage-id>     # its sha256 must equal the archive's in SHA256SUMS
    npm stage approve <stage-id>
    ```
