@@ -266,9 +266,12 @@ for await (const line of lines) {
   // this candidate killed. The hidden text arrives after the candidate is dead.
   if (mode === "late-writer" && request.cmd === "find" && arg !== undefined && !existsSync(arg)) {
     writeFileSync(arg, "strayed");
-    const script = `setTimeout(() => process.stdout.write(${JSON.stringify(`${hidden[0]}\n`)}), 300)`;
+    // The text goes in the environment, so no code is built from data.
+    const script =
+      "setTimeout(() => process.stdout.write(process.env.RELEMBRA_LATE_TEXT + '\\n'), 300)";
     spawn(process.execPath, ["-e", script], {
       detached: true,
+      env: { ...process.env, RELEMBRA_LATE_TEXT: hidden[0] },
       stdio: ["ignore", "inherit", "ignore"],
     }).unref();
     const result = await answer(request.cmd, request.args);
@@ -303,8 +306,10 @@ for await (const line of lines) {
     if (arg !== undefined && mode !== "stray-wake") writeFileSync(arg, "strayed");
     const redacted = set?.corpus.find((m) => m.state === "redacted");
     if (redacted === undefined) throw new Error("the set has no redacted memory");
-    write({ id: request.id, ok: true, result: await answer(request.cmd, request.args) });
-    process.stdout.write(`${redacted.text}\n`);
+    // One write, so the answer and the stray line reach the scorer together: written apart, the
+    // stray line can arrive after the scorer sent its next request and be read as that answer.
+    const reply = { id: request.id, ok: true, result: await answer(request.cmd, request.args) };
+    process.stdout.write(`${JSON.stringify(reply)}\n${redacted.text}\n`);
     continue;
   }
   if (request.cmd === "find") {

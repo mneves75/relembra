@@ -116,7 +116,7 @@ function falsify(
           return index === firstClean ? [line, content.replace(" ", "\n")] : [line];
         case "encoded-duplicate": {
           if (index !== firstClean) return [line];
-          const encode = (tag: string) => tag.replace("<", "&lt;").replace(">", "&gt;");
+          const encode = (tag: string) => tag.replaceAll("<", "&lt;").replaceAll(">", "&gt;");
           return [line, `${encode(open)}CONFLICTING FALSE TEXT${encode(close)}`];
         }
         default:
