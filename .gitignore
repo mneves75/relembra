@@ -1,0 +1,10 @@
+node_modules/
+dist/
+bin/
+.scratch/
+*.db
+*.db-wal
+*.db-shm
+coverage/
+# the explainer video ships only on gh-pages (scripts/site/publish.sh)
+/site/assets/video/

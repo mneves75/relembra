@@ -1,0 +1,98 @@
+{
+  "name": "relembra",
+  "version": "1.0.0-beta.1",
+  "description": "A curated, scoped, bounded, durable, erasable and measured memory for AI agents.",
+  "license": "MIT",
+  "author": "mneves75",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mneves75/relembra.git"
+  },
+  "homepage": "https://mneves75.github.io/relembra/",
+  "bugs": {
+    "url": "https://github.com/mneves75/relembra/issues"
+  },
+  "keywords": [
+    "ai-agents",
+    "agent-memory",
+    "memory",
+    "mcp",
+    "sqlite",
+    "postgres",
+    "bm25",
+    "typescript"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "beta",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=24.14"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./postgres": {
+      "types": "./dist/postgres/index.d.ts",
+      "import": "./dist/postgres/index.js"
+    },
+    "./sqlite": {
+      "types": "./dist/sqlite/index.d.ts",
+      "import": "./dist/sqlite/index.js"
+    },
+    "./pi-durable": {
+      "types": "./dist/pi-durable/index.d.ts",
+      "import": "./dist/pi-durable/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "docs/FORMAT.md"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "test:all": "bun scripts/test.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check --error-on-warnings .",
+    "build": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
+    "prepare": "test \"$(git rev-parse --show-toplevel 2>/dev/null)\" = \"$(pwd -P)\" && git config core.hooksPath .githooks || true",
+    "prepack": "npm run build",
+    "eval": "bun eval/main.ts",
+    "test:node": "node --import ./test/sqlite-node-resolve.ts --test test/sqlite-node-smoke.ts",
+    "test:pack": "node scripts/pack-smoke.ts",
+    "check:pack": "node scripts/pack-check.ts",
+    "build:cli": "bun build/cli.ts",
+    "build:site": "bun scripts/site/build.ts",
+    "check:release": "scripts/check-release.sh",
+    "bench:cli": "bun bench/cli.ts"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "@earendil-works/pi-durable": "1.4.0"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-durable": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.4",
+    "@earendil-works/chord": "1.4.0",
+    "@earendil-works/pi-ai": "1.4.0",
+    "@earendil-works/pi-durable": "1.4.0",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@types/bun": "1.4.4",
+    "typescript": "7.0.2"
+  },
+  "overrides": {
+    "jose": "6.2.13"
+  }
+}

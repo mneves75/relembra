@@ -1,0 +1,216 @@
+{
+  "date": "2026-10-31T11:15:09.821Z",
+  "command": "bun bench/eval-latency.ts",
+  "parameters": {
+    "seed": 20261030,
+    "memories": 20000,
+    "scope": "bench",
+    "warm": {
+      "warmup": 50,
+      "measured": 500
+    },
+    "cold": {
+      "warmup": 3,
+      "measured": 30
+    },
+    "findLimit": 10,
+    "wakeBudgetBytes": 9500,
+    "briefBudgetBytes": 4000,
+    "queries": [
+      "porta do vokir",
+      "migrações do dabik",
+      "plantão do lelak",
+      "deploys do zerin",
+      "porta do pofok",
+      "migrações do lolur",
+      "plantão do tomul",
+      "deploys do punex",
+      "porta do dalun",
+      "migrações do nelon"
+    ]
+  },
+  "corpus": {
+    "generator": "bulkCorpus in eval/generate.ts",
+    "textSha256": "d05ab8090a189959b5f2de29ffe10d2a5beaf18042b6e8868d2c6681e8c39e6d"
+  },
+  "store": {
+    "path": "eval/out/bench/seed-20261030-n20000/a/relembra.db",
+    "bytes": 16322560,
+    "sha256": "730ea78f50f4e4408e54b983e5bb8ac07c68f93f9e357d9d0d4e14e2781d70fb",
+    "fileSha256": {
+      "first": "9bb43432aba530fd407690897d1d5966d7673945591ea4623bf38acfdf46b1ee",
+      "rebuild": "e1a88424da8e3d4e04b8ec12045b57a9c81fd545d56e354569a1696af3769a48"
+    },
+    "buildMs": 12232,
+    "identicalRebuild": true,
+    "unchangedByReads": true
+  },
+  "load": {
+    "before": {
+      "averages": [
+        33.26,
+        34.44,
+        32.6
+      ],
+      "uptime": "7:48  up 14:06, 4 users, load averages: 33.26 34.44 32.60"
+    },
+    "after": {
+      "averages": [
+        205.26,
+        479.05,
+        694.54
+      ],
+      "uptime": "8:15  up 14:32, 4 users, load averages: 205.26 479.05 694.54"
+    }
+  },
+  "environment": {
+    "relembra": {
+      "version": "0.0.0",
+      "commit": "6c62ccc628212a461c90f17c228640b2ec3286aa",
+      "dirty": false
+    },
+    "machine": {
+      "cpu": "Apple M5 Pro",
+      "cores": 18,
+      "memoryBytes": 68719476736,
+      "os": "macOS 27.2 (arm64)"
+    },
+    "runtimes": {
+      "bun": "1.4.4 (da867c60bf0bcbf9d6d36994f8ca0efa42075115)",
+      "node": "v26.12.1",
+      "sqlite": "3.54.0",
+      "nodeSqlite": "3.54.0"
+    }
+  },
+  "budget": {
+    "name": "ticket 19: warm find p95 on 20,000 memories, both runtimes",
+    "thresholdMs": 50,
+    "measuredMs": {
+      "bun": 407.01,
+      "node": 1850.32
+    },
+    "met": false
+  },
+  "results": {
+    "bun": {
+      "warm": {
+        "find": {
+          "runs": 500,
+          "p50": 114.62,
+          "p95": 407.01,
+          "p99": 608.22,
+          "min": 70.07,
+          "max": 892.97,
+          "mean": 165.55
+        },
+        "wake": {
+          "runs": 500,
+          "p50": 50.02,
+          "p95": 156.85,
+          "p99": 409.07,
+          "min": 33.95,
+          "max": 603.3,
+          "mean": 72.06
+        },
+        "brief": {
+          "runs": 500,
+          "p50": 119.1,
+          "p95": 480.6,
+          "p99": 838.87,
+          "min": 78.56,
+          "max": 1441.1,
+          "mean": 179.55
+        }
+      },
+      "cold": {
+        "find": {
+          "runs": 30,
+          "p50": 622.04,
+          "p95": 1174.44,
+          "p99": 1207.81,
+          "min": 414.54,
+          "max": 1207.81,
+          "mean": 655.64
+        },
+        "wake": {
+          "runs": 30,
+          "p50": 201.87,
+          "p95": 413.32,
+          "p99": 435.53,
+          "min": 106.45,
+          "max": 435.53,
+          "mean": 233.22
+        },
+        "brief": {
+          "runs": 30,
+          "p50": 841.28,
+          "p95": 1318.41,
+          "p99": 1620.77,
+          "min": 469.4,
+          "max": 1620.77,
+          "mean": 887.65
+        }
+      }
+    },
+    "node": {
+      "warm": {
+        "find": {
+          "runs": 500,
+          "p50": 345.69,
+          "p95": 1850.32,
+          "p99": 3038.84,
+          "min": 132.1,
+          "max": 4440.59,
+          "mean": 570.73
+        },
+        "wake": {
+          "runs": 500,
+          "p50": 405.1,
+          "p95": 1612.89,
+          "p99": 3372.47,
+          "min": 107.08,
+          "max": 5451.22,
+          "mean": 561.55
+        },
+        "brief": {
+          "runs": 500,
+          "p50": 633.33,
+          "p95": 2437.5,
+          "p99": 3823.83,
+          "min": 139.54,
+          "max": 4578.36,
+          "mean": 859.38
+        }
+      },
+      "cold": {
+        "find": {
+          "runs": 30,
+          "p50": 2041.4,
+          "p95": 3332.72,
+          "p99": 3336.02,
+          "min": 1056.05,
+          "max": 3336.02,
+          "mean": 2089.49
+        },
+        "wake": {
+          "runs": 30,
+          "p50": 1146.81,
+          "p95": 1632.16,
+          "p99": 1770.59,
+          "min": 776,
+          "max": 1770.59,
+          "mean": 1202.89
+        },
+        "brief": {
+          "runs": 30,
+          "p50": 763.98,
+          "p95": 1297.32,
+          "p99": 1878.9,
+          "min": 420.47,
+          "max": 1878.9,
+          "mean": 837.76
+        }
+      }
+    }
+  }
+}

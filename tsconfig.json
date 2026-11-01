@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["bun"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "relembra": ["./src/index.ts"],
+      "relembra/postgres": ["./src/postgres/index.ts"],
+      "relembra/sqlite": ["./src/sqlite/index.ts"],
+      "relembra/pi-durable": ["./src/pi-durable/index.ts"],
+      "relembra/testing": ["./src/testing/index.ts"]
+    }
+  },
+  "include": ["src", "test", "eval", "scripts", "build", "bench", "examples"]
+}

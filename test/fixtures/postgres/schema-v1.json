@@ -1,0 +1,519 @@
+{
+  "memories": [
+    {
+      "id": "m-pinned",
+      "scope": "fixture/a",
+      "seq": 1,
+      "pinned": true,
+      "notedAt": 1793465184580,
+      "revision": {
+        "number": 1,
+        "text": "Releases are cut on Thursdays.",
+        "at": 1000,
+        "provenance": {
+          "agent": "fixture-agent",
+          "harness": "fixture",
+          "model": "none",
+          "host": "fixture",
+          "trust": "owner",
+          "opId": "op-pinned"
+        }
+      },
+      "status": "live"
+    },
+    {
+      "id": "m-old",
+      "scope": "fixture/a",
+      "seq": 2,
+      "pinned": false,
+      "notedAt": 1793465184593,
+      "revision": {
+        "number": 1,
+        "text": "Deploys run from the main branch.",
+        "at": 2000,
+        "provenance": {
+          "agent": "fixture-agent",
+          "harness": "fixture",
+          "model": "none",
+          "host": "fixture",
+          "trust": "owner",
+          "opId": "op-old"
+        }
+      },
+      "status": "superseded",
+      "supersededBy": "m-new"
+    },
+    {
+      "id": "m-new",
+      "scope": "fixture/a",
+      "seq": 3,
+      "pinned": false,
+      "notedAt": 1793465184602,
+      "revision": {
+        "number": 1,
+        "text": "Deploys run from the release branch.",
+        "at": 3000,
+        "provenance": {
+          "agent": "fixture-agent",
+          "harness": "fixture",
+          "model": "none",
+          "host": "fixture",
+          "trust": "agent",
+          "opId": "op-new"
+        }
+      },
+      "status": "live"
+    },
+    {
+      "id": "m-sourced",
+      "scope": "fixture/a",
+      "seq": 5,
+      "pinned": false,
+      "notedAt": 1793465184608,
+      "revision": {
+        "number": 1,
+        "text": "The agent reviews each release.",
+        "at": 4000,
+        "provenance": {
+          "agent": "fixture-agent",
+          "harness": "fixture",
+          "model": "none",
+          "host": "fixture",
+          "trust": "owner",
+          "opId": "op-sourced"
+        }
+      },
+      "status": "retracted"
+    },
+    {
+      "id": "m-summary",
+      "scope": "fixture/a",
+      "seq": 6,
+      "pinned": false,
+      "notedAt": 1793465184614,
+      "revision": {
+        "number": 1,
+        "text": "Summary: releases are reviewed.",
+        "at": 5000,
+        "provenance": {
+          "agent": "fixture-agent",
+          "harness": "fixture",
+          "model": "none",
+          "host": "fixture",
+          "trust": "agent",
+          "opId": "op-summary"
+        }
+      },
+      "status": "retracted",
+      "sources": [
+        {
+          "memoryId": "m-sourced",
+          "revision": 1
+        }
+      ]
+    },
+    {
+      "id": "m-other",
+      "scope": "fixture/b",
+      "seq": 9,
+      "pinned": false,
+      "notedAt": 1793465184629,
+      "revision": {
+        "number": 1,
+        "text": "Migrações do banco rodam à noite.",
+        "at": 6000,
+        "provenance": {
+          "agent": "fixture-agent",
+          "harness": "fixture",
+          "model": "none",
+          "host": "fixture",
+          "trust": "owner",
+          "opId": "op-other"
+        }
+      },
+      "status": "live"
+    },
+    {
+      "id": "m-gone",
+      "scope": "fixture/a",
+      "seq": 11,
+      "status": "redacted"
+    }
+  ],
+  "ops": [
+    {
+      "principalId": "fixture-owner",
+      "opId": "op-pinned",
+      "fingerprint": "18bd746a207b6de700e8310900721a96815910ff875ac7d514efe1c635f19409",
+      "memoryId": "m-pinned",
+      "at": 1793465184580,
+      "seq": 1
+    },
+    {
+      "principalId": "fixture-owner",
+      "opId": "op-old",
+      "fingerprint": "604d5be64ff15bf251e1e2860cb3d5152a937d9068b96bec4f3f1eb17a5a6220",
+      "memoryId": "m-old",
+      "at": 1793465184593,
+      "seq": 2
+    },
+    {
+      "principalId": "fixture-owner",
+      "opId": "op-new",
+      "fingerprint": "a882725ee5b642587604f79e6e050e0e66700ad84b338cd3bb728bff20bea816",
+      "memoryId": "m-new",
+      "at": 1793465184602,
+      "seq": 3
+    },
+    {
+      "principalId": "fixture-owner",
+      "opId": "op-sourced",
+      "fingerprint": "8af87480916a5e8973e6cfa5efe5a85605d16bcb3877e33aad3d2b7d65af3f58",
+      "memoryId": "m-sourced",
+      "at": 1793465184608,
+      "seq": 5
+    },
+    {
+      "principalId": "fixture-owner",
+      "opId": "op-summary",
+      "fingerprint": "26323b680ae6fa2adbd0da8ac84afab6748a7fd000fb4d9dcc21b4f800a3e456",
+      "memoryId": "m-summary",
+      "at": 1793465184614,
+      "seq": 6
+    },
+    {
+      "principalId": "fixture-owner",
+      "opId": "op-other",
+      "fingerprint": "aa82cd7c519a43e6e87d67836e1389688d9e24c81946f4a7aec81a5a91715335",
+      "memoryId": "m-other",
+      "at": 1793465184629,
+      "seq": 9
+    },
+    {
+      "principalId": "fixture-owner",
+      "opId": "op-gone",
+      "memoryId": "m-gone",
+      "at": 1793465184635,
+      "seq": 10
+    }
+  ],
+  "fence": 3,
+  "checkpoint": {
+    "source": "optmem:fixture",
+    "bytes": 96,
+    "width": 32
+  },
+  "events": [
+    {
+      "format": 1,
+      "kind": "note",
+      "memoryId": "m-pinned",
+      "scope": "fixture/a",
+      "principalId": "fixture-owner",
+      "pinned": true,
+      "revision": {
+        "number": 1,
+        "text": "Releases are cut on Thursdays.",
+        "at": 1000,
+        "provenance": {
+          "agent": "fixture-agent",
+          "harness": "fixture",
+          "model": "none",
+          "host": "fixture",
+          "trust": "owner",
+          "opId": "op-pinned"
+        }
+      },
+      "seq": 1
+    },
+    {
+      "format": 1,
+      "kind": "note",
+      "memoryId": "m-old",
+      "scope": "fixture/a",
+      "principalId": "fixture-owner",
+      "pinned": false,
+      "revision": {
+        "number": 1,
+        "text": "Deploys run from the main branch.",
+        "at": 2000,
+        "provenance": {
+          "agent": "fixture-agent",
+          "harness": "fixture",
+          "model": "none",
+          "host": "fixture",
+          "trust": "owner",
+          "opId": "op-old"
+        }
+      },
+      "seq": 2
+    },
+    {
+      "format": 1,
+      "kind": "note",
+      "memoryId": "m-new",
+      "scope": "fixture/a",
+      "principalId": "fixture-owner",
+      "pinned": false,
+      "revision": {
+        "number": 1,
+        "text": "Deploys run from the release branch.",
+        "at": 3000,
+        "provenance": {
+          "agent": "fixture-agent",
+          "harness": "fixture",
+          "model": "none",
+          "host": "fixture",
+          "trust": "agent",
+          "opId": "op-new"
+        }
+      },
+      "seq": 3
+    },
+    {
+      "format": 1,
+      "kind": "supersede",
+      "memoryId": "m-old",
+      "scope": "fixture/a",
+      "principalId": "fixture-owner",
+      "by": "m-new",
+      "seq": 4
+    },
+    {
+      "format": 1,
+      "kind": "note",
+      "memoryId": "m-sourced",
+      "scope": "fixture/a",
+      "principalId": "fixture-owner",
+      "pinned": false,
+      "revision": {
+        "number": 1,
+        "text": "The agent reviews each release.",
+        "at": 4000,
+        "provenance": {
+          "agent": "fixture-agent",
+          "harness": "fixture",
+          "model": "none",
+          "host": "fixture",
+          "trust": "owner",
+          "opId": "op-sourced"
+        }
+      },
+      "seq": 5
+    },
+    {
+      "format": 1,
+      "kind": "summarize",
+      "memoryId": "m-summary",
+      "scope": "fixture/a",
+      "principalId": "fixture-owner",
+      "sources": [
+        {
+          "memoryId": "m-sourced",
+          "revision": 1
+        }
+      ],
+      "revision": {
+        "number": 1,
+        "text": "Summary: releases are reviewed.",
+        "at": 5000,
+        "provenance": {
+          "agent": "fixture-agent",
+          "harness": "fixture",
+          "model": "none",
+          "host": "fixture",
+          "trust": "agent",
+          "opId": "op-summary"
+        }
+      },
+      "seq": 6
+    },
+    {
+      "format": 1,
+      "kind": "retract",
+      "memoryId": "m-sourced",
+      "scope": "fixture/a",
+      "principalId": "fixture-owner",
+      "seq": 7
+    },
+    {
+      "format": 1,
+      "kind": "retract",
+      "memoryId": "m-summary",
+      "scope": "fixture/a",
+      "principalId": "fixture-owner",
+      "seq": 8
+    },
+    {
+      "format": 1,
+      "kind": "note",
+      "memoryId": "m-other",
+      "scope": "fixture/b",
+      "principalId": "fixture-owner",
+      "pinned": false,
+      "revision": {
+        "number": 1,
+        "text": "Migrações do banco rodam à noite.",
+        "at": 6000,
+        "provenance": {
+          "agent": "fixture-agent",
+          "harness": "fixture",
+          "model": "none",
+          "host": "fixture",
+          "trust": "owner",
+          "opId": "op-other"
+        }
+      },
+      "seq": 9
+    },
+    {
+      "format": 1,
+      "kind": "note",
+      "memoryId": "m-gone",
+      "scope": "fixture/a",
+      "principalId": "fixture-owner",
+      "pinned": false,
+      "redacted": true,
+      "seq": 10
+    },
+    {
+      "format": 1,
+      "kind": "redact",
+      "memoryId": "m-gone",
+      "scope": "fixture/a",
+      "cause": "request",
+      "principalId": "fixture-owner",
+      "seq": 11
+    }
+  ],
+  "erasures": [
+    {
+      "seq": 11,
+      "memoryId": "m-gone",
+      "carriers": []
+    }
+  ],
+  "recall": [
+    {
+      "id": "m-other",
+      "scope": "fixture/b",
+      "seq": 9,
+      "pinned": false,
+      "notedAt": 1793465184629,
+      "revision": {
+        "number": 1,
+        "text": "Migrações do banco rodam à noite.",
+        "at": 6000,
+        "provenance": {
+          "agent": "fixture-agent",
+          "harness": "fixture",
+          "model": "none",
+          "host": "fixture",
+          "trust": "owner",
+          "opId": "op-other"
+        }
+      },
+      "status": "live"
+    },
+    {
+      "id": "m-summary",
+      "scope": "fixture/a",
+      "seq": 6,
+      "pinned": false,
+      "notedAt": 1793465184614,
+      "revision": {
+        "number": 1,
+        "text": "Summary: releases are reviewed.",
+        "at": 5000,
+        "provenance": {
+          "agent": "fixture-agent",
+          "harness": "fixture",
+          "model": "none",
+          "host": "fixture",
+          "trust": "agent",
+          "opId": "op-summary"
+        }
+      },
+      "status": "retracted",
+      "sources": [
+        {
+          "memoryId": "m-sourced",
+          "revision": 1
+        }
+      ]
+    },
+    {
+      "id": "m-sourced",
+      "scope": "fixture/a",
+      "seq": 5,
+      "pinned": false,
+      "notedAt": 1793465184608,
+      "revision": {
+        "number": 1,
+        "text": "The agent reviews each release.",
+        "at": 4000,
+        "provenance": {
+          "agent": "fixture-agent",
+          "harness": "fixture",
+          "model": "none",
+          "host": "fixture",
+          "trust": "owner",
+          "opId": "op-sourced"
+        }
+      },
+      "status": "retracted"
+    },
+    {
+      "id": "m-new",
+      "scope": "fixture/a",
+      "seq": 3,
+      "pinned": false,
+      "notedAt": 1793465184602,
+      "revision": {
+        "number": 1,
+        "text": "Deploys run from the release branch.",
+        "at": 3000,
+        "provenance": {
+          "agent": "fixture-agent",
+          "harness": "fixture",
+          "model": "none",
+          "host": "fixture",
+          "trust": "agent",
+          "opId": "op-new"
+        }
+      },
+      "status": "live"
+    },
+    {
+      "id": "m-pinned",
+      "scope": "fixture/a",
+      "seq": 1,
+      "pinned": true,
+      "notedAt": 1793465184580,
+      "revision": {
+        "number": 1,
+        "text": "Releases are cut on Thursdays.",
+        "at": 1000,
+        "provenance": {
+          "agent": "fixture-agent",
+          "harness": "fixture",
+          "model": "none",
+          "host": "fixture",
+          "trust": "owner",
+          "opId": "op-pinned"
+        }
+      },
+      "status": "live"
+    }
+  ],
+  "find": [
+    {
+      "id": "m-new",
+      "score": 1.8913201532178305
+    },
+    {
+      "id": "m-other",
+      "score": 0.9456600766089153
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+name: Bug report
+description: Something relembra does differs from what its docs say.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        For a vulnerability, do not open an issue: report it privately as SECURITY.md describes.
+        Leave out secrets and real memory content; a synthetic example is enough.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The relembra version (npm package or the export header's `relembra` field) or commit.
+      placeholder: 1.0.0-beta.1
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where
+      options:
+        - Library on Node
+        - Library on Bun
+        - CLI
+        - MCP server (relembra mcp)
+        - pi-durable integration
+        - Landing page
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform and runtime
+      placeholder: macOS arm64, Node 26, SQLite store
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The smallest code or commands that show it.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual result
+      description: What the docs say should happen, and what happened instead, with the exact error.
+    validations:
+      required: true

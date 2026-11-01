@@ -1,0 +1,6 @@
+2026-01-05 The build runs with make, never with the IDE's button.                                  
+2026-01-05 Tests live beside the code they test.                                                   
+2026-01-06 A configuração fica em config.toml, na raiz do projeto.                               
+2026-01-07 The staging database is recreated before each release.                                  
+2026-01-09 Use UTC timestamps in every log line.                                                   
+2026-01-12 Café, naïve and 日本語 must round-trip byte for byte.                              

@@ -1,0 +1,309 @@
+[
+  {
+    "date": "2026-10-31T10:18:50.258Z",
+    "commands": {
+      "help": "relembra --help",
+      "wake": "relembra wake",
+      "hook": "relembra hook",
+      "find": "relembra find <query> (10 fixed queries, cycled)",
+      "libraryFind": "Relembra.find in one process, 50 warm-up, 500 measured"
+    },
+    "artifact": {
+      "path": "bin/relembra",
+      "sha256": "7578c882b4602c17aa5e720b9bfb5931b029699425d4e579abc2bc7f7165e337",
+      "bytes": 38895474
+    },
+    "dataset": {
+      "generator": "bench/cli.ts",
+      "seed": 20261031,
+      "memories": 20000,
+      "textSha256": "53029c60229408b4845a0de1defe91da6105241710777ffd3cf51be05a91b816",
+      "storeBytes": 19173376,
+      "generationMs": 4946,
+      "queries": [
+        "lavoni zominera",
+        "kefepe",
+        "zire kasuzepi",
+        "getuda",
+        "vifanoti vinizesa",
+        "puma",
+        "pefo pesosavo",
+        "tiroto",
+        "nukilego gebafa",
+        "vokabafe"
+      ]
+    },
+    "repetitions": {
+      "warmup": 5,
+      "measured": 50
+    },
+    "machine": {
+      "cpu": "Apple M5 Pro",
+      "memoryBytes": 68719476736,
+      "os": "macOS 27.2 (arm64)"
+    },
+    "runtimes": {
+      "bun": "1.4.4",
+      "bunRevision": "da867c60bf0bcbf9d6d36994f8ca0efa42075115",
+      "node": "v26.12.1",
+      "sqlite": "3.54.0"
+    },
+    "resultsMs": {
+      "help": {
+        "runs": 50,
+        "p50": 18.45,
+        "p95": 31.41,
+        "p99": 32.85,
+        "min": 16.06,
+        "max": 32.85,
+        "mean": 20.27
+      },
+      "wake": {
+        "runs": 50,
+        "p50": 60.04,
+        "p95": 101.98,
+        "p99": 169.81,
+        "min": 55.28,
+        "max": 169.81,
+        "mean": 66.86
+      },
+      "hook": {
+        "runs": 50,
+        "p50": 71.64,
+        "p95": 140.64,
+        "p99": 397.53,
+        "min": 55.83,
+        "max": 397.53,
+        "mean": 85
+      },
+      "find": {
+        "runs": 50,
+        "p50": 177.8,
+        "p95": 359.51,
+        "p99": 517.93,
+        "min": 135.57,
+        "max": 517.93,
+        "mean": 204.21
+      },
+      "libraryFind": {
+        "runs": 500,
+        "p50": 159.15,
+        "p95": 276.93,
+        "p99": 398.39,
+        "min": 93.83,
+        "max": 631.75,
+        "mean": 172.41
+      }
+    },
+    "load1m": {
+      "before": null,
+      "after": null,
+      "cores": 18,
+      "note": "not captured; uptime read 19.15 just before and 55.09 just after the run"
+    }
+  },
+  {
+    "date": "2026-10-31T10:20:34.739Z",
+    "commands": {
+      "help": "relembra --help",
+      "wake": "relembra wake",
+      "hook": "relembra hook",
+      "find": "relembra find <query> (10 fixed queries, cycled)",
+      "libraryFind": "Relembra.find in one process, 50 warm-up, 500 measured"
+    },
+    "artifact": {
+      "path": "bin/relembra",
+      "sha256": "7578c882b4602c17aa5e720b9bfb5931b029699425d4e579abc2bc7f7165e337",
+      "bytes": 38895474
+    },
+    "dataset": {
+      "generator": "bench/cli.ts",
+      "seed": 20261031,
+      "memories": 20000,
+      "textSha256": "53029c60229408b4845a0de1defe91da6105241710777ffd3cf51be05a91b816",
+      "storeBytes": 19173376,
+      "generationMs": 5356,
+      "queries": [
+        "lavoni zominera",
+        "kefepe",
+        "zire kasuzepi",
+        "getuda",
+        "vifanoti vinizesa",
+        "puma",
+        "pefo pesosavo",
+        "tiroto",
+        "nukilego gebafa",
+        "vokabafe"
+      ]
+    },
+    "repetitions": {
+      "warmup": 5,
+      "measured": 50
+    },
+    "load1m": {
+      "before": 46.65234375,
+      "after": 20.576171875,
+      "cores": 18
+    },
+    "machine": {
+      "cpu": "Apple M5 Pro",
+      "memoryBytes": 68719476736,
+      "os": "macOS 27.2 (arm64)"
+    },
+    "runtimes": {
+      "bun": "1.4.4",
+      "bunRevision": "da867c60bf0bcbf9d6d36994f8ca0efa42075115",
+      "node": "v26.12.1",
+      "sqlite": "3.54.0"
+    },
+    "resultsMs": {
+      "help": {
+        "runs": 50,
+        "p50": 20.1,
+        "p95": 35.43,
+        "p99": 101.54,
+        "min": 16.94,
+        "max": 101.54,
+        "mean": 23.2
+      },
+      "wake": {
+        "runs": 50,
+        "p50": 59.68,
+        "p95": 81.96,
+        "p99": 156.24,
+        "min": 54.03,
+        "max": 156.24,
+        "mean": 63.68
+      },
+      "hook": {
+        "runs": 50,
+        "p50": 54.9,
+        "p95": 63.41,
+        "p99": 74.73,
+        "min": 47.95,
+        "max": 74.73,
+        "mean": 55.62
+      },
+      "find": {
+        "runs": 50,
+        "p50": 131.27,
+        "p95": 144.9,
+        "p99": 275.09,
+        "min": 120.31,
+        "max": 275.09,
+        "mean": 134.98
+      },
+      "libraryFind": {
+        "runs": 500,
+        "p50": 103.12,
+        "p95": 136.01,
+        "p99": 153.92,
+        "min": 71.74,
+        "max": 267.36,
+        "mean": 106.63
+      }
+    }
+  },
+  {
+    "date": "2026-10-31T10:21:55.558Z",
+    "commands": {
+      "help": "relembra --help",
+      "wake": "relembra wake",
+      "hook": "relembra hook",
+      "find": "relembra find <query> (10 fixed queries, cycled)",
+      "libraryFind": "Relembra.find in one process, 50 warm-up, 500 measured"
+    },
+    "artifact": {
+      "path": "bin/relembra",
+      "sha256": "7578c882b4602c17aa5e720b9bfb5931b029699425d4e579abc2bc7f7165e337",
+      "bytes": 38895474
+    },
+    "dataset": {
+      "generator": "bench/cli.ts",
+      "seed": 20261031,
+      "memories": 20000,
+      "textSha256": "53029c60229408b4845a0de1defe91da6105241710777ffd3cf51be05a91b816",
+      "storeBytes": 19173376,
+      "generationMs": 3552,
+      "queries": [
+        "lavoni zominera",
+        "kefepe",
+        "zire kasuzepi",
+        "getuda",
+        "vifanoti vinizesa",
+        "puma",
+        "pefo pesosavo",
+        "tiroto",
+        "nukilego gebafa",
+        "vokabafe"
+      ]
+    },
+    "repetitions": {
+      "warmup": 5,
+      "measured": 50
+    },
+    "load1m": {
+      "before": 20.576171875,
+      "after": 17.11962890625,
+      "cores": 18
+    },
+    "machine": {
+      "cpu": "Apple M5 Pro",
+      "memoryBytes": 68719476736,
+      "os": "macOS 27.2 (arm64)"
+    },
+    "runtimes": {
+      "bun": "1.4.4",
+      "bunRevision": "da867c60bf0bcbf9d6d36994f8ca0efa42075115",
+      "node": "v26.12.1",
+      "sqlite": "3.54.0"
+    },
+    "resultsMs": {
+      "help": {
+        "runs": 50,
+        "p50": 16.49,
+        "p95": 18.64,
+        "p99": 19,
+        "min": 14.64,
+        "max": 19,
+        "mean": 16.54
+      },
+      "wake": {
+        "runs": 50,
+        "p50": 52.84,
+        "p95": 60.75,
+        "p99": 69.17,
+        "min": 41.9,
+        "max": 69.17,
+        "mean": 52.72
+      },
+      "hook": {
+        "runs": 50,
+        "p50": 48.79,
+        "p95": 54.61,
+        "p99": 195.92,
+        "min": 37.24,
+        "max": 195.92,
+        "mean": 53.61
+      },
+      "find": {
+        "runs": 50,
+        "p50": 105.86,
+        "p95": 127.32,
+        "p99": 129.5,
+        "min": 96.67,
+        "max": 129.5,
+        "mean": 108.91
+      },
+      "libraryFind": {
+        "runs": 500,
+        "p50": 116.21,
+        "p95": 152.12,
+        "p99": 171.58,
+        "min": 75.46,
+        "max": 269.61,
+        "mean": 118.28
+      }
+    }
+  }
+]
