@@ -23,8 +23,8 @@ from a device you trust, not the one you suspect.
    - A bad npm version: move the dist-tag back (`npm dist-tag add relembra@<good> beta`), mark it
      (`npm deprecate relembra@<bad> "<reason>"`), and unpublish it if npm's policy still allows
      (`npm unpublish relembra@<bad>`).
-   - The site: publish the last good tree again with `scripts/site/publish.sh` from a checkout of
-     the last good commit.
+   - The site: run the `pages` workflow on the last good commit
+     (`gh workflow run pages.yml --ref <tag or branch at it>`); it deploys that commit's `site/`.
 4. If users installed something bad, publish a GitHub security advisory saying which versions,
    what they did, and what to do.
 

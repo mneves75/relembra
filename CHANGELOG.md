@@ -10,6 +10,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 - Releases reach npm through trusted publishing: publishing a GitHub release stages its retained
   archive on npm, after checking it against the release's `SHA256SUMS`, and the owner approves
   the staged version with their two-factor key. No npm token is stored anywhere.
+- The site deploys to GitHub Pages from a manually run workflow with OIDC
+  (`actions/deploy-pages`), so no stored token can change it. `scripts/site/assemble.sh` replaces
+  `scripts/site/publish.sh` and builds what ships from a commit's `site/` and the checked video.
 
 ## [1.0.0-beta.1] - 2026-11-01
 

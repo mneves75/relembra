@@ -304,9 +304,10 @@ The landing page is `site/`: static files, no build step besides `bun run build:
 the library into `site/assets/relembra.js` so the page's demos run the real code in the browser
 (`test/site.test.ts` fails while that file is stale). Preview it with
 `python3 -m http.server --directory site`, or open `site/index.html` directly.
-`scripts/site/publish.sh` publishes a committed `site/` to the `gh-pages` branch for GitHub Pages
-(`--dry-run` shows the tree without pushing); the explainer video in `site/assets/video/` is
-git-ignored on `main` and ships only there.
+The `pages` workflow (`gh workflow run pages.yml --ref main`) publishes it to GitHub Pages with
+OIDC, no stored token: `scripts/site/assemble.sh <new directory>` builds what ships from the
+commit's `site/` plus the explainer video, which is git-ignored on `main` and kept on the
+`gh-pages` branch, checked against `scripts/site/video.sha256`.
 
 Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md).
 
