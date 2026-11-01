@@ -1,0 +1,757 @@
+WEBVTT
+
+1
+00:00:01.488 --> 00:00:03.800
+Seus agentes esquecem tudo entre uma
+
+2
+00:00:03.820 --> 00:00:05.128
+sessão e outra.
+
+3
+00:00:05.591 --> 00:00:08.394
+O relembra é uma memória que todos eles
+
+4
+00:00:08.414 --> 00:00:09.382
+compartilham:
+
+5
+00:00:09.402 --> 00:00:12.063
+fatos curtos, escolhidos pelo próprio
+
+6
+00:00:12.083 --> 00:00:14.571
+agente, guardados por projeto.
+
+7
+00:00:14.821 --> 00:00:17.523
+É código aberto, escrito em TypeScript,
+
+8
+00:00:17.543 --> 00:00:20.361
+sem nenhuma dependência de execução.
+
+9
+00:00:20.462 --> 00:00:22.964
+E foi desenhado para se encaixar em
+
+10
+00:00:22.984 --> 00:00:24.995
+qualquer sistema de agentes:
+
+11
+00:00:25.015 --> 00:00:27.937
+o host diz quem é quem, e o núcleo aplica
+
+12
+00:00:27.957 --> 00:00:29.028
+as regras.
+
+13
+00:00:31.744 --> 00:00:34.292
+As memórias para agentes que existem hoje
+
+14
+00:00:34.312 --> 00:00:36.814
+costumam cair em quatro armadilhas.
+
+15
+00:00:36.872 --> 00:00:37.846
+A primeira:
+
+16
+00:00:37.866 --> 00:00:39.834
+tudo vive num fluxo só.
+
+17
+00:00:39.854 --> 00:00:43.395
+Um resumo de ontem mistura quatro projetos
+
+18
+00:00:43.415 --> 00:00:45.206
+numa única linha.
+
+19
+00:00:45.590 --> 00:00:46.413
+A segunda:
+
+20
+00:00:46.433 --> 00:00:48.175
+nada pode ser apagado.
+
+21
+00:00:48.195 --> 00:00:51.317
+Uma senha colada por engano fica lá para
+
+22
+00:00:51.337 --> 00:00:52.237
+sempre.
+
+23
+00:00:52.257 --> 00:00:53.135
+A terceira:
+
+24
+00:00:53.155 --> 00:00:56.202
+exigem um servidor rodando o tempo todo,
+
+25
+00:00:56.222 --> 00:00:59.345
+ou capturam cada palavra da conversa, sem
+
+26
+00:00:59.365 --> 00:01:00.787
+escolher nada.
+
+27
+00:01:00.974 --> 00:01:01.739
+E a quarta:
+
+28
+00:01:01.759 --> 00:01:04.550
+confiam na busca sem medir se ela encontra
+
+29
+00:01:04.570 --> 00:01:07.354
+o que os agentes realmente perguntam.
+
+30
+00:01:10.718 --> 00:01:13.423
+O relembra junta ideias que já se provaram
+
+31
+00:01:13.443 --> 00:01:15.768
+em sistemas de memória e de execução
+
+32
+00:01:15.788 --> 00:01:16.658
+durável.
+
+33
+00:01:16.871 --> 00:01:19.585
+Da memória curada vem o fato escolhido:
+
+34
+00:01:19.605 --> 00:01:22.456
+o agente decide o que merece uma linha, e
+
+35
+00:01:22.476 --> 00:01:25.569
+o despertar cabe num orçamento de bytes.
+
+36
+00:01:25.589 --> 00:01:28.471
+Da execução durável vem a disciplina:
+
+37
+00:01:28.491 --> 00:01:31.450
+gravar antes de mostrar, e repetir uma
+
+38
+00:01:31.470 --> 00:01:33.679
+operação sem duplicá-la.
+
+39
+00:01:33.794 --> 00:01:36.307
+Dos sistemas com vários usuários vêm o
+
+40
+00:01:36.327 --> 00:01:38.970
+escopo em cada registro e a avaliação da
+
+41
+00:01:38.990 --> 00:01:40.524
+busca com números.
+
+42
+00:01:40.974 --> 00:01:43.108
+E ele deixa de fora o servidor
+
+43
+00:01:43.128 --> 00:01:46.097
+obrigatório, a captura automática de tudo,
+
+44
+00:01:46.117 --> 00:01:47.973
+e qualquer código copiado:
+
+45
+00:01:47.993 --> 00:01:50.336
+o algoritmo de busca nasce de uma
+
+46
+00:01:50.356 --> 00:01:52.254
+especificação própria.
+
+47
+00:01:55.845 --> 00:01:58.902
+O princípio se resume em seis ideias.
+
+48
+00:01:58.922 --> 00:01:59.859
+Curada.
+
+49
+00:01:59.879 --> 00:02:01.295
+Com escopo.
+
+50
+00:02:01.315 --> 00:02:02.491
+Limitada.
+
+51
+00:02:02.511 --> 00:02:03.568
+Durável.
+
+52
+00:02:03.588 --> 00:02:04.765
+Apagável.
+
+53
+00:02:04.785 --> 00:02:06.042
+Medida.
+
+54
+00:02:06.101 --> 00:02:08.408
+É a combinação das seis que o projeto
+
+55
+00:02:08.428 --> 00:02:09.341
+persegue.
+
+56
+00:02:12.255 --> 00:02:15.263
+No centro, um núcleo puro, sem acesso a
+
+57
+00:02:15.283 --> 00:02:16.625
+disco nem a rede:
+
+58
+00:02:16.645 --> 00:02:19.805
+o modelo de eventos, a guarda de escrita,
+
+59
+00:02:19.825 --> 00:02:22.833
+a busca BM25 em português e inglês, e o
+
+60
+00:02:22.853 --> 00:02:25.045
+compositor do despertar.
+
+61
+00:02:25.075 --> 00:02:27.621
+O núcleo só conversa por portas.
+
+62
+00:02:27.641 --> 00:02:29.799
+Embaixo, os armazenamentos:
+
+63
+00:02:29.819 --> 00:02:31.743
+em memória, para testes;
+
+64
+00:02:31.763 --> 00:02:34.776
+o SQLite nativo, que roda no Node e no
+
+65
+00:02:34.796 --> 00:02:35.165
+Bun;
+
+66
+00:02:35.185 --> 00:02:38.431
+e o Postgres, que compartilha uma memória
+
+67
+00:02:38.451 --> 00:02:39.995
+entre máquinas.
+
+68
+00:02:40.460 --> 00:02:43.054
+Todo armazenamento passa pela mesma
+
+69
+00:02:43.074 --> 00:02:44.870
+bateria de conformidade.
+
+70
+00:02:44.890 --> 00:02:47.992
+Quem escrever um adaptador novo prova, com
+
+71
+00:02:48.012 --> 00:02:50.752
+os mesmos testes, que ele se comporta
+
+72
+00:02:50.772 --> 00:02:51.580
+igual.
+
+73
+00:02:51.741 --> 00:02:53.669
+Em cima, as integrações:
+
+74
+00:02:53.689 --> 00:02:56.863
+a linha de comando, os ganchos de início
+
+75
+00:02:56.883 --> 00:03:00.135
+de sessão, o servidor MCP e o pi-durable,
+
+76
+00:03:00.155 --> 00:03:02.091
+a integração padrão.
+
+77
+00:03:02.510 --> 00:03:05.653
+A linha de comando é um único binário
+
+78
+00:03:05.673 --> 00:03:07.401
+compilado com o Bun.
+
+79
+00:03:07.421 --> 00:03:10.814
+A biblioteca roda no Bun e no Node 24 ou
+
+80
+00:03:10.834 --> 00:03:12.050
+mais novo.
+
+81
+00:03:13.792 --> 00:03:16.252
+Siga uma memória do começo ao fim.
+
+82
+00:03:16.356 --> 00:03:18.375
+O agente escreve uma linha.
+
+83
+00:03:18.395 --> 00:03:21.507
+A guarda recusa mais de 280 bytes, quebras
+
+84
+00:03:21.527 --> 00:03:24.638
+de linha, caracteres invisíveis e formatos
+
+85
+00:03:24.658 --> 00:03:27.333
+conhecidos de credenciais, sem nunca
+
+86
+00:03:27.353 --> 00:03:29.546
+repetir o texto recusado.
+
+87
+00:03:29.689 --> 00:03:32.145
+Cada escrita leva uma identidade de
+
+88
+00:03:32.165 --> 00:03:33.382
+operação (op id).
+
+89
+00:03:33.402 --> 00:03:35.996
+Se a chamada se repetir depois de uma
+
+90
+00:03:36.016 --> 00:03:38.884
+queda, volta o resultado guardado, e nada
+
+91
+00:03:38.904 --> 00:03:40.029
+se duplica.
+
+92
+00:03:40.458 --> 00:03:43.297
+Na mesma transação, o host pode conferir
+
+93
+00:03:43.317 --> 00:03:45.947
+se quem escreve ainda tem autoridade.
+
+94
+00:03:45.967 --> 00:03:48.667
+Uma escrita atrasada, depois de perder
+
+95
+00:03:48.687 --> 00:03:51.288
+essa autoridade, não grava nada.
+
+96
+00:03:51.740 --> 00:03:54.808
+Na sessão seguinte, o despertar respeita
+
+97
+00:03:54.828 --> 00:03:57.294
+um limite padrão de 9.500 bytes:
+
+98
+00:03:57.314 --> 00:04:00.307
+primeiro as memórias fixadas, depois as
+
+99
+00:04:00.327 --> 00:04:03.471
+recentes do projeto, depois os resumos, e
+
+100
+00:04:03.491 --> 00:04:05.900
+por fim um índice do resto.
+
+101
+00:04:06.099 --> 00:04:08.928
+E cada memória chega ao modelo como
+
+102
+00:04:08.948 --> 00:04:11.857
+evidência atribuída, com identidade,
+
+103
+00:04:11.877 --> 00:04:13.282
+escopo e revisão.
+
+104
+00:04:13.302 --> 00:04:16.527
+Um fato para pesar, nunca uma ordem para
+
+105
+00:04:16.547 --> 00:04:17.559
+cumprir.
+
+106
+00:04:19.432 --> 00:04:22.398
+O relembra não sabe quem é o usuário.
+
+107
+00:04:22.418 --> 00:04:23.969
+Quem sabe é o host:
+
+108
+00:04:23.989 --> 00:04:27.348
+o Projeto A, o Projeto B, cada sistema que
+
+109
+00:04:27.368 --> 00:04:28.532
+o integra.
+
+110
+00:04:28.662 --> 00:04:31.127
+Cada host entrega uma política:
+
+111
+00:04:31.147 --> 00:04:34.155
+a partir do seu próprio login, ela diz
+
+112
+00:04:34.175 --> 00:04:37.339
+quais escopos aquele principal pode ler,
+
+113
+00:04:37.359 --> 00:04:38.970
+escrever e promover.
+
+114
+00:04:38.990 --> 00:04:41.921
+O Projeto A pode separar por usuário;
+
+115
+00:04:41.941 --> 00:04:44.182
+o Projeto B, por equipe.
+
+116
+00:04:44.560 --> 00:04:47.021
+O escopo nunca vem do que o modelo
+
+117
+00:04:47.041 --> 00:04:47.658
+digitou.
+
+118
+00:04:47.678 --> 00:04:50.210
+E o filtro acontece antes da busca:
+
+119
+00:04:50.230 --> 00:04:52.974
+o que está fora do escopo nem entra na
+
+120
+00:04:52.994 --> 00:04:53.770
+conta.
+
+121
+00:04:53.790 --> 00:04:56.688
+Na linha de comando, toda sessão também lê
+
+122
+00:04:56.708 --> 00:04:59.606
+um escopo global, com regras para todos os
+
+123
+00:04:59.626 --> 00:05:02.049
+projetos, mas só escreve no próprio
+
+124
+00:05:02.069 --> 00:05:02.980
+projeto.
+
+125
+00:05:03.021 --> 00:05:06.248
+Com o pi-durable, a identidade de operação
+
+126
+00:05:06.268 --> 00:05:09.268
+junta a conversa, a tarefa e a chamada.
+
+127
+00:05:09.288 --> 00:05:12.137
+Se o processo cair depois de gravar e
+
+128
+00:05:12.157 --> 00:05:15.308
+antes de confirmar, a repetição devolve a
+
+129
+00:05:15.328 --> 00:05:16.761
+mesma memória.
+
+130
+00:05:16.867 --> 00:05:19.510
+E um filtro de saída, também do host,
+
+131
+00:05:19.530 --> 00:05:22.384
+mascara ou bloqueia o que cada principal
+
+132
+00:05:22.404 --> 00:05:25.227
+pode ver, logo antes do texto sair.
+
+133
+00:05:27.123 --> 00:05:29.433
+Apagar precisa ser de verdade.
+
+134
+00:05:29.687 --> 00:05:32.216
+Retirar esconde uma memória dos agentes,
+
+135
+00:05:32.236 --> 00:05:34.587
+mas o dono ainda pode revisá-la.
+
+136
+00:05:34.815 --> 00:05:37.469
+Tarjar troca o texto por uma lápide e
+
+137
+00:05:37.489 --> 00:05:40.424
+invalida, na mesma transação, todo resumo
+
+138
+00:05:40.444 --> 00:05:42.081
+que dependia dele.
+
+139
+00:05:42.507 --> 00:05:45.379
+Cada saída registra quais memórias levou
+
+140
+00:05:45.399 --> 00:05:47.001
+para fora do relembra.
+
+141
+00:05:47.021 --> 00:05:49.894
+Depois de tarjar uma, o relembra entrega
+
+142
+00:05:49.914 --> 00:05:52.856
+ao host cada destino que recebeu o texto,
+
+143
+00:05:52.876 --> 00:05:55.466
+até ouvir confirmado ou sem suporte.
+
+144
+00:05:55.486 --> 00:05:58.537
+E nunca diz que uma cópia foi apagada.
+
+145
+00:05:58.917 --> 00:06:01.814
+E uma regra de retenção por escopo tarja
+
+146
+00:06:01.834 --> 00:06:04.803
+as memórias vencidas quando o host roda a
+
+147
+00:06:04.823 --> 00:06:05.585
+varredura.
+
+148
+00:06:05.605 --> 00:06:08.218
+Remover as cópias fora do relembra é
+
+149
+00:06:08.238 --> 00:06:11.277
+trabalho do host, e o projeto diz isso com
+
+150
+00:06:11.297 --> 00:06:12.807
+todas as letras.
+
+151
+00:06:16.353 --> 00:06:19.487
+E nada disso é aceito por preferência.
+
+152
+00:06:19.507 --> 00:06:21.343
+Primeiro, mede-se.
+
+153
+00:06:21.481 --> 00:06:24.172
+Um avaliador faz as mesmas perguntas ao
+
+154
+00:06:24.192 --> 00:06:26.883
+relembra e a 17 candidatos de controle,
+
+155
+00:06:26.903 --> 00:06:29.730
+feitos para falhar, e conta acertos entre
+
+156
+00:06:29.750 --> 00:06:32.509
+os cinco primeiros (hit@5), a posição do
+
+157
+00:06:32.529 --> 00:06:35.355
+acerto (MRR), e quando a resposta certa é
+
+158
+00:06:35.375 --> 00:06:36.421
+não saber.
+
+159
+00:06:36.865 --> 00:06:38.624
+Também conta vazamentos:
+
+160
+00:06:38.644 --> 00:06:41.115
+escopo negado, memória apagada que
+
+161
+00:06:41.135 --> 00:06:44.033
+reaparece, até uma identidade solta numa
+
+162
+00:06:44.053 --> 00:06:45.050
+resposta.
+
+163
+00:06:45.070 --> 00:06:47.866
+Respostas malformadas são recusadas, e
+
+164
+00:06:47.886 --> 00:06:49.888
+quem trava perde por tempo.
+
+165
+00:06:49.908 --> 00:06:53.240
+Um candidato não consegue enganar a nota.
+
+166
+00:06:53.275 --> 00:06:56.647
+E a velocidade é medida sobre 20.000
+
+167
+00:06:56.667 --> 00:06:57.563
+memórias.
+
+168
+00:06:57.583 --> 00:07:01.047
+Com o processo aberto, 95% das buscas
+
+169
+00:07:01.067 --> 00:07:04.255
+terminam em menos de 10 ms no Bun.
+
+170
+00:07:04.275 --> 00:07:07.325
+No Node, em pouco mais de 40.
+
+171
+00:07:09.685 --> 00:07:12.293
+O relembra cresce em camadas, cada uma
+
+172
+00:07:12.313 --> 00:07:14.905
+sobre um produto que já funciona.
+
+173
+00:07:15.326 --> 00:07:18.971
+A v0.1 roda numa máquina, com SQLite.
+
+174
+00:07:18.991 --> 00:07:22.733
+A v0.2 compartilha entre máquinas pelo
+
+175
+00:07:22.753 --> 00:07:25.626
+Postgres e liga o pi-durable.
+
+176
+00:07:25.646 --> 00:07:29.388
+A v0.3 traz o servidor MCP, a promoção
+
+177
+00:07:29.408 --> 00:07:33.438
+entre escopos e os portões de lançamento.
+
+178
+00:07:33.458 --> 00:07:37.586
+Hoje, a versão 0.3.0 é uma prévia privada:
+
+179
+00:07:37.606 --> 00:07:41.154
+o código é MIT, e o repositório abre
+
+180
+00:07:41.174 --> 00:07:42.246
+depois.
+
+181
+00:07:42.505 --> 00:07:45.556
+Daqui a cinco anos, modelos e fornecedores
+
+182
+00:07:45.576 --> 00:07:46.556
+terão mudado.
+
+183
+00:07:46.576 --> 00:07:49.199
+A memória precisa sobreviver a eles:
+
+184
+00:07:49.219 --> 00:07:52.055
+um formato aberto e documentado, escopo
+
+185
+00:07:52.075 --> 00:07:54.984
+desde o primeiro evento, e uma avaliação
+
+186
+00:07:55.004 --> 00:07:57.356
+que cresce a cada erro real.
+
+187
+00:07:57.376 --> 00:07:58.137
+relembra.
+
+188
+00:07:58.157 --> 00:08:01.262
+Uma memória para todos os seus agentes.
+
+189
+00:08:01.282 --> 00:08:03.926
+Medida antes de ser confiada.

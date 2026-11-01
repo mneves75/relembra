@@ -1,0 +1,757 @@
+WEBVTT
+
+1
+00:00:01.488 --> 00:00:03.800
+Your agents forget everything between one
+
+2
+00:00:03.820 --> 00:00:05.128
+session and the next.
+
+3
+00:00:05.591 --> 00:00:08.394
+relembra is a memory that all of them
+
+4
+00:00:08.414 --> 00:00:09.382
+share:
+
+5
+00:00:09.402 --> 00:00:12.063
+short facts, chosen by the agent
+
+6
+00:00:12.083 --> 00:00:14.571
+itself, kept per project.
+
+7
+00:00:14.821 --> 00:00:17.523
+It is open source, written in TypeScript,
+
+8
+00:00:17.543 --> 00:00:20.361
+with no runtime dependencies at all.
+
+9
+00:00:20.462 --> 00:00:22.964
+And it was designed to fit into
+
+10
+00:00:22.984 --> 00:00:24.995
+any agent system:
+
+11
+00:00:25.015 --> 00:00:27.937
+the host says who is who, and the core enforces
+
+12
+00:00:27.957 --> 00:00:29.028
+the rules.
+
+13
+00:00:31.744 --> 00:00:34.292
+The agent memories that exist today
+
+14
+00:00:34.312 --> 00:00:36.814
+tend to fall into four traps.
+
+15
+00:00:36.872 --> 00:00:37.846
+The first:
+
+16
+00:00:37.866 --> 00:00:39.834
+everything lives in a single stream.
+
+17
+00:00:39.854 --> 00:00:43.395
+A summary from yesterday mixes four projects
+
+18
+00:00:43.415 --> 00:00:45.206
+into a single line.
+
+19
+00:00:45.590 --> 00:00:46.413
+The second:
+
+20
+00:00:46.433 --> 00:00:48.175
+nothing can be deleted.
+
+21
+00:00:48.195 --> 00:00:51.317
+A password pasted by mistake stays there
+
+22
+00:00:51.337 --> 00:00:52.237
+forever.
+
+23
+00:00:52.257 --> 00:00:53.135
+The third:
+
+24
+00:00:53.155 --> 00:00:56.202
+they need a server running all the time,
+
+25
+00:00:56.222 --> 00:00:59.345
+or they capture every word of the conversation, without
+
+26
+00:00:59.365 --> 00:01:00.787
+choosing anything.
+
+27
+00:01:00.974 --> 00:01:01.739
+And the fourth:
+
+28
+00:01:01.759 --> 00:01:04.550
+they trust search without measuring whether it finds
+
+29
+00:01:04.570 --> 00:01:07.354
+what agents actually ask.
+
+30
+00:01:10.718 --> 00:01:13.423
+relembra brings together ideas already proven
+
+31
+00:01:13.443 --> 00:01:15.768
+in memory systems and in durable
+
+32
+00:01:15.788 --> 00:01:16.658
+execution.
+
+33
+00:01:16.871 --> 00:01:19.585
+From curated memory comes the chosen fact:
+
+34
+00:01:19.605 --> 00:01:22.456
+the agent decides what deserves a line, and
+
+35
+00:01:22.476 --> 00:01:25.569
+the wake fits in a byte budget.
+
+36
+00:01:25.589 --> 00:01:28.471
+From durable execution comes the discipline:
+
+37
+00:01:28.491 --> 00:01:31.450
+write before showing, and repeat an
+
+38
+00:01:31.470 --> 00:01:33.679
+operation without duplicating it.
+
+39
+00:01:33.794 --> 00:01:36.307
+From multi-user systems come
+
+40
+00:01:36.327 --> 00:01:38.970
+a scope on every record and search
+
+41
+00:01:38.990 --> 00:01:40.524
+evaluated with numbers.
+
+42
+00:01:40.974 --> 00:01:43.108
+And it leaves out the mandatory
+
+43
+00:01:43.128 --> 00:01:46.097
+server, the automatic capture of everything,
+
+44
+00:01:46.117 --> 00:01:47.973
+and any copied code:
+
+45
+00:01:47.993 --> 00:01:50.336
+the search algorithm comes from its
+
+46
+00:01:50.356 --> 00:01:52.254
+own specification.
+
+47
+00:01:55.845 --> 00:01:58.902
+The principle comes down to six ideas.
+
+48
+00:01:58.922 --> 00:01:59.859
+Curated.
+
+49
+00:01:59.879 --> 00:02:01.295
+Scoped.
+
+50
+00:02:01.315 --> 00:02:02.491
+Bounded.
+
+51
+00:02:02.511 --> 00:02:03.568
+Durable.
+
+52
+00:02:03.588 --> 00:02:04.765
+Erasable.
+
+53
+00:02:04.785 --> 00:02:06.042
+Measured.
+
+54
+00:02:06.101 --> 00:02:08.408
+It is the combination of all six that the project
+
+55
+00:02:08.428 --> 00:02:09.341
+pursues.
+
+56
+00:02:12.255 --> 00:02:15.263
+At the center, a pure core, with no access to
+
+57
+00:02:15.283 --> 00:02:16.625
+disk or network:
+
+58
+00:02:16.645 --> 00:02:19.805
+the event model, the write guard,
+
+59
+00:02:19.825 --> 00:02:22.833
+BM25 search in Portuguese and English, and the
+
+60
+00:02:22.853 --> 00:02:25.045
+wake composer.
+
+61
+00:02:25.075 --> 00:02:27.621
+The core only talks through ports.
+
+62
+00:02:27.641 --> 00:02:29.799
+Below, the stores:
+
+63
+00:02:29.819 --> 00:02:31.743
+in memory, for tests;
+
+64
+00:02:31.763 --> 00:02:34.776
+native SQLite, which runs on Node and
+
+65
+00:02:34.796 --> 00:02:35.165
+Bun;
+
+66
+00:02:35.185 --> 00:02:38.431
+and Postgres, which shares one memory
+
+67
+00:02:38.451 --> 00:02:39.995
+across machines.
+
+68
+00:02:40.460 --> 00:02:43.054
+Every store goes through the same
+
+69
+00:02:43.074 --> 00:02:44.870
+conformance suite.
+
+70
+00:02:44.890 --> 00:02:47.992
+Anyone who writes a new adapter proves, with
+
+71
+00:02:48.012 --> 00:02:50.752
+the same tests, that it behaves
+
+72
+00:02:50.772 --> 00:02:51.580
+the same.
+
+73
+00:02:51.741 --> 00:02:53.669
+On top, the integrations:
+
+74
+00:02:53.689 --> 00:02:56.863
+the command line, the session-start
+
+75
+00:02:56.883 --> 00:03:00.135
+hooks, the MCP server and pi-durable,
+
+76
+00:03:00.155 --> 00:03:02.091
+the default integration.
+
+77
+00:03:02.510 --> 00:03:05.653
+The command line is a single binary
+
+78
+00:03:05.673 --> 00:03:07.401
+compiled with Bun.
+
+79
+00:03:07.421 --> 00:03:10.814
+The library runs on Bun and on Node 24 or
+
+80
+00:03:10.834 --> 00:03:12.050
+newer.
+
+81
+00:03:13.792 --> 00:03:16.252
+Follow one memory from start to finish.
+
+82
+00:03:16.356 --> 00:03:18.375
+The agent writes a line.
+
+83
+00:03:18.395 --> 00:03:21.507
+The guard refuses more than 280 bytes, line
+
+84
+00:03:21.527 --> 00:03:24.638
+breaks, invisible characters and known
+
+85
+00:03:24.658 --> 00:03:27.333
+credential formats, without ever
+
+86
+00:03:27.353 --> 00:03:29.546
+repeating the refused text.
+
+87
+00:03:29.689 --> 00:03:32.145
+Every write carries an operation
+
+88
+00:03:32.165 --> 00:03:33.382
+identity (op id).
+
+89
+00:03:33.402 --> 00:03:35.996
+If the call is repeated after a
+
+90
+00:03:36.016 --> 00:03:38.884
+crash, the stored result comes back, and nothing
+
+91
+00:03:38.904 --> 00:03:40.029
+is duplicated.
+
+92
+00:03:40.458 --> 00:03:43.297
+In the same transaction, the host can check
+
+93
+00:03:43.317 --> 00:03:45.947
+whether the writer still holds authority.
+
+94
+00:03:45.967 --> 00:03:48.667
+A late write, after losing
+
+95
+00:03:48.687 --> 00:03:51.288
+that authority, records nothing.
+
+96
+00:03:51.740 --> 00:03:54.808
+In the next session, the wake respects
+
+97
+00:03:54.828 --> 00:03:57.294
+a default limit of 9,500 bytes:
+
+98
+00:03:57.314 --> 00:04:00.307
+first the pinned memories, then the
+
+99
+00:04:00.327 --> 00:04:03.471
+project's recent ones, then the summaries, and
+
+100
+00:04:03.491 --> 00:04:05.900
+finally an index of the rest.
+
+101
+00:04:06.099 --> 00:04:08.928
+And each memory reaches the model as
+
+102
+00:04:08.948 --> 00:04:11.857
+attributed evidence, with identity,
+
+103
+00:04:11.877 --> 00:04:13.282
+scope and revision.
+
+104
+00:04:13.302 --> 00:04:16.527
+A fact to weigh, never an order to
+
+105
+00:04:16.547 --> 00:04:17.559
+follow.
+
+106
+00:04:19.432 --> 00:04:22.398
+relembra does not know who the user is.
+
+107
+00:04:22.418 --> 00:04:23.969
+The host does:
+
+108
+00:04:23.989 --> 00:04:27.348
+Project A, Project B, every system that
+
+109
+00:04:27.368 --> 00:04:28.532
+integrates it.
+
+110
+00:04:28.662 --> 00:04:31.127
+Each host provides a policy:
+
+111
+00:04:31.147 --> 00:04:34.155
+from its own login, it says
+
+112
+00:04:34.175 --> 00:04:37.339
+which scopes that principal may read,
+
+113
+00:04:37.359 --> 00:04:38.970
+write and promote.
+
+114
+00:04:38.990 --> 00:04:41.921
+Project A can separate by user;
+
+115
+00:04:41.941 --> 00:04:44.182
+Project B, by team.
+
+116
+00:04:44.560 --> 00:04:47.021
+The scope never comes from what the model
+
+117
+00:04:47.041 --> 00:04:47.658
+typed.
+
+118
+00:04:47.678 --> 00:04:50.210
+And the filter applies before the search:
+
+119
+00:04:50.230 --> 00:04:52.974
+whatever is out of scope never even enters
+
+120
+00:04:52.994 --> 00:04:53.770
+the count.
+
+121
+00:04:53.790 --> 00:04:56.688
+On the command line, every session also reads
+
+122
+00:04:56.708 --> 00:04:59.606
+a global scope, with rules for all
+
+123
+00:04:59.626 --> 00:05:02.049
+projects, but only writes to its own
+
+124
+00:05:02.069 --> 00:05:02.980
+project.
+
+125
+00:05:03.021 --> 00:05:06.248
+With pi-durable, the operation identity
+
+126
+00:05:06.268 --> 00:05:09.268
+combines the conversation, the task and the call.
+
+127
+00:05:09.288 --> 00:05:12.137
+If the process crashes after writing and
+
+128
+00:05:12.157 --> 00:05:15.308
+before confirming, the retry returns the
+
+129
+00:05:15.328 --> 00:05:16.761
+same memory.
+
+130
+00:05:16.867 --> 00:05:19.510
+And an egress filter, also the host's,
+
+131
+00:05:19.530 --> 00:05:22.384
+masks or blocks what each principal
+
+132
+00:05:22.404 --> 00:05:25.227
+may see, right before the text leaves.
+
+133
+00:05:27.123 --> 00:05:29.433
+Deleting has to be real.
+
+134
+00:05:29.687 --> 00:05:32.216
+Retracting hides a memory from agents,
+
+135
+00:05:32.236 --> 00:05:34.587
+but the owner can still review it.
+
+136
+00:05:34.815 --> 00:05:37.469
+Redacting swaps the text for a tombstone and
+
+137
+00:05:37.489 --> 00:05:40.424
+invalidates, in the same transaction, every summary
+
+138
+00:05:40.444 --> 00:05:42.081
+that depended on it.
+
+139
+00:05:42.507 --> 00:05:45.379
+Every egress records which memories it took
+
+140
+00:05:45.399 --> 00:05:47.001
+out of relembra.
+
+141
+00:05:47.021 --> 00:05:49.894
+After one is redacted, relembra hands
+
+142
+00:05:49.914 --> 00:05:52.856
+the host each destination that received the text,
+
+143
+00:05:52.876 --> 00:05:55.466
+until it hears acknowledged or unsupported.
+
+144
+00:05:55.486 --> 00:05:58.537
+And it never says a copy was erased.
+
+145
+00:05:58.917 --> 00:06:01.814
+And a per-scope retention rule redacts
+
+146
+00:06:01.834 --> 00:06:04.803
+expired memories when the host runs the
+
+147
+00:06:04.823 --> 00:06:05.585
+sweep.
+
+148
+00:06:05.605 --> 00:06:08.218
+Removing the copies outside relembra is
+
+149
+00:06:08.238 --> 00:06:11.277
+the host's job, and the project says so
+
+150
+00:06:11.297 --> 00:06:12.807
+in plain words.
+
+151
+00:06:16.353 --> 00:06:19.487
+And none of this is accepted on preference.
+
+152
+00:06:19.507 --> 00:06:21.343
+First, it is measured.
+
+153
+00:06:21.481 --> 00:06:24.172
+An evaluator asks the same questions of
+
+154
+00:06:24.192 --> 00:06:26.883
+relembra and of 17 control candidates,
+
+155
+00:06:26.903 --> 00:06:29.730
+built to fail, and counts hits among
+
+156
+00:06:29.750 --> 00:06:32.509
+the first five (hit@5), the rank of the
+
+157
+00:06:32.529 --> 00:06:35.355
+hit (MRR), and when the right answer is
+
+158
+00:06:35.375 --> 00:06:36.421
+not knowing.
+
+159
+00:06:36.865 --> 00:06:38.624
+It also counts leaks:
+
+160
+00:06:38.644 --> 00:06:41.115
+a denied scope, a deleted memory that
+
+161
+00:06:41.135 --> 00:06:44.033
+reappears, even an identity left loose in an
+
+162
+00:06:44.053 --> 00:06:45.050
+answer.
+
+163
+00:06:45.070 --> 00:06:47.866
+Malformed answers are refused, and
+
+164
+00:06:47.886 --> 00:06:49.888
+whoever hangs loses on time.
+
+165
+00:06:49.908 --> 00:06:53.240
+A candidate cannot game the score.
+
+166
+00:06:53.275 --> 00:06:56.647
+And speed is measured over 20,000
+
+167
+00:06:56.667 --> 00:06:57.563
+memories.
+
+168
+00:06:57.583 --> 00:07:01.047
+With the process already running, 95% of searches
+
+169
+00:07:01.067 --> 00:07:04.255
+finish in under 10 ms on Bun.
+
+170
+00:07:04.275 --> 00:07:07.325
+On Node, in just over 40.
+
+171
+00:07:09.685 --> 00:07:12.293
+relembra grows in layers, each one
+
+172
+00:07:12.313 --> 00:07:14.905
+on top of a product that already works.
+
+173
+00:07:15.326 --> 00:07:18.971
+v0.1 runs on one machine, with SQLite.
+
+174
+00:07:18.991 --> 00:07:22.733
+v0.2 shares across machines through
+
+175
+00:07:22.753 --> 00:07:25.626
+Postgres and turns on pi-durable.
+
+176
+00:07:25.646 --> 00:07:29.388
+v0.3 brings the MCP server, promotion
+
+177
+00:07:29.408 --> 00:07:33.438
+across scopes and the release gates.
+
+178
+00:07:33.458 --> 00:07:37.586
+Today, version 0.3.0 is a private preview:
+
+179
+00:07:37.606 --> 00:07:41.154
+the code is MIT, and the repository opens
+
+180
+00:07:41.174 --> 00:07:42.246
+later.
+
+181
+00:07:42.505 --> 00:07:45.556
+Five years from now, models and vendors
+
+182
+00:07:45.576 --> 00:07:46.556
+will have changed.
+
+183
+00:07:46.576 --> 00:07:49.199
+Memory has to outlive them:
+
+184
+00:07:49.219 --> 00:07:52.055
+an open, documented format, scope
+
+185
+00:07:52.075 --> 00:07:54.984
+from the very first event, and an evaluation
+
+186
+00:07:55.004 --> 00:07:57.356
+that grows with every real error.
+
+187
+00:07:57.376 --> 00:07:58.137
+relembra.
+
+188
+00:07:58.157 --> 00:08:01.262
+One memory for all your agents.
+
+189
+00:08:01.282 --> 00:08:03.926
+Measured before it is trusted.

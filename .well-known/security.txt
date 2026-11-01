@@ -1,0 +1,5 @@
+Contact: https://github.com/mneves75/relembra/security/advisories/new
+Expires: 2027-10-31T00:00:00Z
+Policy: https://github.com/mneves75/relembra/security/policy
+Preferred-Languages: en, pt
+Canonical: https://mneves75.github.io/relembra/.well-known/security.txt
