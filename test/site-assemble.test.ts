@@ -116,6 +116,15 @@ describe("site assembly", () => {
     ]);
   });
 
+  test("stops when the output's parent directory does not exist", () => {
+    const repo = fixture();
+    const run = spawnSync("bash", [script, "missing/site"], { cwd: repo, encoding: "utf8" });
+    expect(run.status).not.toBe(0);
+    expect(run.stderr).toContain("missing");
+    // It stops at the parent, before creating anything: never `mkdir /site`, the old fallback.
+    expect(run.stderr).not.toContain("mkdir");
+  });
+
   test("refuses an output directory that already exists", () => {
     const repo = fixture();
     const first = assemble(repo);
