@@ -19,6 +19,7 @@ import {
   VARYING_HEADER_BYTES,
 } from "../bench/eval-latency.js";
 import { bulkCorpus, DEFAULT_SEED } from "../eval/generate.js";
+import { MIGRATIONS } from "../src/sqlite/migrations.js";
 import { NO_RELEASE_TOOLING } from "./platform-support.js";
 
 const ROOT = join(import.meta.dir, "..");
@@ -87,7 +88,9 @@ describe("the benchmark store", () => {
     expect(c.sha256).not.toBe(a.sha256);
     expect(c.fileSha256).not.toBe(a.fileSha256);
     // Every byte that differs between the two raw files is one storeSha256 zeroes: the header's
-    // change counter or a migration time (6 bytes inside the schema_version rows).
+    // change counter or a migration time, a 6-byte integer in each schema_version row. How many
+    // of a time's bytes differ depends on how far apart the builds ran: two bytes under 65 s,
+    // with a carry three, as on a slow Windows runner (run 41389502801: 18).
     const fa = readFileSync(join(scratch, "a", "relembra.db"));
     const fb = readFileSync(join(scratch, "b", "relembra.db"));
     expect(fb.length).toBe(fa.length);
@@ -95,7 +98,7 @@ describe("the benchmark store", () => {
       VARYING_HEADER_BYTES.some(([start, end]) => i >= start && i < end);
     const differing: number[] = [];
     for (let i = 0; i < fa.length; i++) if (fa[i] !== fb[i] && !header(i)) differing.push(i);
-    expect(differing.length).toBeLessThanOrEqual(2 * 6);
+    expect(differing.length).toBeLessThanOrEqual(6 * MIGRATIONS.length);
     expect(a.bytes).toBeGreaterThan(0);
     // Only the database file remains once the store is closed.
     expect(readdirSync(join(scratch, "a"))).toEqual(["relembra.db"]);
