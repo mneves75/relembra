@@ -209,8 +209,9 @@ describe("wake and hook reserve room for each scope; unused room passes to the o
     const box = ready();
     ok(box, ["note", "Project fact: the harbor build listens on port 4100."]);
     const newestPin = fill(box, IN_G, "Global");
-    // Control: g alone overflows the default budget, so its wake ends in an index.
-    expect(ok(box, ["wake"], { env: IN_G }).text).toContain("<index ");
+    // Control: g alone overflows the default budget: its oldest covered memory is not shown in
+    // full. (Whether an index line follows depends on the room the last full line leaves.)
+    expect(ok(box, ["wake"], { env: IN_G }).text).not.toContain("Global rule 5:");
     const context = hookContext(box, WITH_G);
     expect(bytes(context)).toBeLessThanOrEqual(DEFAULT_BUDGET);
     const [project, glob] = frames(context);
@@ -229,7 +230,8 @@ describe("wake and hook reserve room for each scope; unused room passes to the o
     const box = ready();
     ok(box, ["note", "Global fact: every commit message says why."], { env: IN_G });
     const newestPin = fill(box, {}, "Project");
-    expect(ok(box, ["wake"]).text).toContain("<index ");
+    // Control: the project alone overflows the default budget, as g does above.
+    expect(ok(box, ["wake"]).text).not.toContain("Project rule 5:");
     const context = hookContext(box, WITH_G);
     expect(bytes(context)).toBeLessThanOrEqual(DEFAULT_BUDGET);
     const [mine, glob] = frames(context);
