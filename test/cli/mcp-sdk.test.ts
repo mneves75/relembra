@@ -87,6 +87,13 @@ describe("a stdio round trip through the official MCP client, pinned to 2026-07-
       const mcp = client();
       await mcp.connect(transport);
       const pid = transport.pid;
+      // What reached the client, so a call that never settles names its last answers.
+      const received: string[] = [];
+      const deliver = transport.onmessage;
+      transport.onmessage = (message) => {
+        received.push(JSON.stringify(message).slice(0, 300));
+        deliver?.(message);
+      };
       try {
         const { tools } = await mcp.listTools();
         expect(tools.map((tool) => tool.name)).toEqual([
@@ -129,9 +136,20 @@ describe("a stdio round trip through the official MCP client, pinned to 2026-07-
         const after = await mcp.callTool({ name: "find", arguments: { query: "round trip" } });
         expect(text(after)).toBe("<find>\n</find>");
 
-        await expect(
-          mcp.callTool({ name: "note", arguments: { text: "x", scope: "y" } }),
-        ).rejects.toThrow();
+        // An argument the tool does not take is a -32602 error, which the client rejects.
+        const outcome = await Promise.race([
+          mcp.callTool({ name: "note", arguments: { text: "x", scope: "y" } }).then(
+            () => "resolved",
+            () => "rejected",
+          ),
+          Bun.sleep(10_000).then(() => "unsettled"),
+        ]);
+        const settled = outcome === "rejected";
+        expect({
+          outcome,
+          received: settled ? [] : received.slice(-2),
+          stderr: settled ? "" : stderr.slice(-500),
+        }).toEqual({ outcome: "rejected", received: [], stderr: "" });
       } finally {
         // The SDK's close ends stdin, then waits for the child's close event before it signals.
         // Under Bun on the Windows runners that wait never ended though every call was answered,
