@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createOwnerOnly } from "../src/sqlite/database.js";
@@ -35,10 +35,14 @@ function sid(): string {
 }
 
 describe.skipIf(!WINDOWS)("Windows store ACL", () => {
-  test("a plain temporary folder inherits its ACL (positive control)", () => {
-    const dir = mkdtempSync(join(tmpdir(), "relembra-acl-plain-"));
-    dirs.push(dir);
-    expect(acl(dir)).toContain("(I)");
+  test("a plain folder made where the store makes its own inherits its ACL (positive control)", () => {
+    // mkdtemp gives its folder an explicit ACL, so the control is a folder made inside one, as
+    // createOwnerOnly makes the store's folder below.
+    const parent = mkdtempSync(join(tmpdir(), "relembra-acl-plain-"));
+    dirs.push(parent);
+    const plain = join(parent, "home");
+    mkdirSync(plain);
+    expect(acl(plain)).toContain("(I)");
   });
 
   test("a new store's folder and file grant only the user, SYSTEM and Administrators", () => {

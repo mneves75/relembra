@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { createRelembra, type Memory } from "../../src/index.js";
 import { openSqliteStore } from "../../src/sqlite/index.js";
-import { BINARY, cliTest, ok, type Sandbox, sandbox, sandboxEnv } from "./support.js";
+import { BINARY, ok, posixCliTest, type Sandbox, sandbox, sandboxEnv } from "./support.js";
 
 const DAY = 86_400_000;
 const SUMMARY = "Concurrent owner summary.";
@@ -84,7 +84,7 @@ const python = spawnSync("python3", ["--version"]).status === 0;
 
 describe("a confirmation approves one plan: a write landing while the prompt waits is shown again", () => {
   for (const op of OPS) {
-    cliTest(
+    posixCliTest(
       `${op.name}: Sol's repro, the unseen summary survives and the new prompt shows it`,
       async () => {
         if (!python) return console.warn(`${op.name} race test SKIPPED: python3 is not available`);
@@ -105,7 +105,7 @@ describe("a confirmation approves one plan: a write landing while the prompt wai
       },
     );
 
-    cliTest(
+    posixCliTest(
       `${op.name}: positive control, the same race confirmed again goes through`,
       async () => {
         if (!python) return console.warn(`${op.name} race test SKIPPED: python3 is not available`);
@@ -123,37 +123,43 @@ describe("a confirmation approves one plan: a write landing while the prompt wai
     );
   }
 
-  cliTest("a plan that keeps changing stops with plan-changed and writes nothing", async () => {
-    if (!python) return console.warn("plan-changed race test SKIPPED: python3 is not available");
-    const { box, source } = await seeded(0);
-    try {
-      const result = race(box, source, "right,right,right,right", ["redact", source.id], {
-        each: true,
-      });
-      expect(prompts(result.stdout).length - 1).toBe(3);
-      expect(result.status).toBe(1);
-      expect(result.stdout).toContain('"plan-changed"');
-      expect(liveSummaries(box)).toBe(3);
-      expect(ok(box, ["zoom", source.id]).memory.status).toBe("live");
-    } finally {
-      box.remove();
-    }
-  });
+  posixCliTest(
+    "a plan that keeps changing stops with plan-changed and writes nothing",
+    async () => {
+      if (!python) return console.warn("plan-changed race test SKIPPED: python3 is not available");
+      const { box, source } = await seeded(0);
+      try {
+        const result = race(box, source, "right,right,right,right", ["redact", source.id], {
+          each: true,
+        });
+        expect(prompts(result.stdout).length - 1).toBe(3);
+        expect(result.status).toBe(1);
+        expect(result.stdout).toContain('"plan-changed"');
+        expect(liveSummaries(box)).toBe(3);
+        expect(ok(box, ["zoom", source.id]).memory.status).toBe("live");
+      } finally {
+        box.remove();
+      }
+    },
+  );
 
-  cliTest("redact: text rewritten in place while the prompt waits is shown again", async () => {
-    if (!python) return console.warn("in-place race test SKIPPED: python3 is not available");
-    const { box, source } = await seeded(0);
-    try {
-      const result = race(box, source, "right,wrong", ["redact", source.id], { write: "edit" });
-      // Sol's round-4 repro: same id, seq, revision and trust, so the old code erased the new text.
-      const zoomed = ok(box, ["zoom", source.id]).memory;
-      expect(zoomed.status).toBe("live");
-      expect(zoomed.revision.text).toBe("Concurrent in-place text.");
-      expect(prompts(result.stdout)[1]).toContain("Concurrent in-place text.");
-      expect(result.status).toBe(1);
-      expect(result.stdout).toContain('"mismatch"');
-    } finally {
-      box.remove();
-    }
-  });
+  posixCliTest(
+    "redact: text rewritten in place while the prompt waits is shown again",
+    async () => {
+      if (!python) return console.warn("in-place race test SKIPPED: python3 is not available");
+      const { box, source } = await seeded(0);
+      try {
+        const result = race(box, source, "right,wrong", ["redact", source.id], { write: "edit" });
+        // Sol's round-4 repro: same id, seq, revision and trust, so the old code erased the new text.
+        const zoomed = ok(box, ["zoom", source.id]).memory;
+        expect(zoomed.status).toBe("live");
+        expect(zoomed.revision.text).toBe("Concurrent in-place text.");
+        expect(prompts(result.stdout)[1]).toContain("Concurrent in-place text.");
+        expect(result.status).toBe(1);
+        expect(result.stdout).toContain('"mismatch"');
+      } finally {
+        box.remove();
+      }
+    },
+  );
 });

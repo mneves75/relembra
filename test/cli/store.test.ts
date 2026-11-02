@@ -3,7 +3,7 @@ import { chmodSync, closeSync, openSync, readFileSync, statSync, writeSync } fro
 import { DatabaseSync } from "node:sqlite";
 import { createRelembra, type Principal } from "relembra";
 import { openSqliteStore } from "relembra/sqlite";
-import { cliTest, ok, refused, run, type Sandbox, sandbox } from "./support.js";
+import { cliTest, ok, posixCliTest, refused, run, type Sandbox, sandbox } from "./support.js";
 
 let box: Sandbox;
 afterEach(() => {
@@ -48,7 +48,7 @@ describe("store errors exit 3 with a JSON error document", () => {
     expect(readFileSync(box.store).equals(before)).toBe(true);
   });
 
-  cliTest("a store readable by others is refused, never chmodded", () => {
+  posixCliTest("a store readable by others is refused, never chmodded", () => {
     withStore();
     chmodSync(box.store, 0o644);
     const result = refused(box, ["wake"], 3, "store-file");
@@ -56,7 +56,7 @@ describe("store errors exit 3 with a JSON error document", () => {
     expect(statSync(box.store).mode & 0o777).toBe(0o644);
   });
 
-  cliTest("an unreadable store is a store error", () => {
+  posixCliTest("an unreadable store is a store error", () => {
     withStore();
     chmodSync(box.store, 0o000);
     const result = run(box, ["wake", "--json"]);
@@ -120,7 +120,7 @@ describe("store errors exit 3 with a JSON error document", () => {
     },
   );
 
-  cliTest("a store error in text mode goes to stderr only", () => {
+  posixCliTest("a store error in text mode goes to stderr only", () => {
     withStore();
     chmodSync(box.store, 0o644);
     const result = run(box, ["wake"]);

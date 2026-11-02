@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { CandidateProcess } from "../eval/transport.js";
+import { NO_RELEASE_TOOLING } from "./platform-support.js";
 
 const FAULTY = join(import.meta.dir, "eval-faulty-candidate.ts");
 const started: CandidateProcess[] = [];
@@ -134,24 +135,29 @@ describe("CandidateProcess", () => {
     expect(running(pid)).toBe(false);
   });
 
-  test("a candidate whose leader exits leaves no child running, and close does not hang", async () => {
-    const c = candidate("orphan-child");
-    const pid = await childPid(c);
-    expect(pid).toBeGreaterThan(0);
-    // Positive control: the child runs before the kill.
-    expect(running(pid)).toBe(true);
-    const outcome = await c.exchange(request("r1"), 500);
-    expect(outcome.status).toBe("timeout");
-    const closed = await Promise.race([
-      c.close(200).then(() => "closed"),
-      Bun.sleep(3000).then(() => "hung"),
-    ]);
-    for (let i = 0; i < 50 && running(pid); i++) await Bun.sleep(20);
-    const survived = running(pid);
-    if (survived) process.kill(pid, "SIGKILL");
-    expect(closed).toBe("closed");
-    expect(survived).toBe(false);
-  });
+  // A process group outlives its leader only on POSIX: Windows has none, so the eval (which the
+  // hosted CI runs on Linux) cannot reach a child the leader left behind there.
+  test.skipIf(NO_RELEASE_TOOLING)(
+    "a candidate whose leader exits leaves no child running, and close does not hang",
+    async () => {
+      const c = candidate("orphan-child");
+      const pid = await childPid(c);
+      expect(pid).toBeGreaterThan(0);
+      // Positive control: the child runs before the kill.
+      expect(running(pid)).toBe(true);
+      const outcome = await c.exchange(request("r1"), 500);
+      expect(outcome.status).toBe("timeout");
+      const closed = await Promise.race([
+        c.close(200).then(() => "closed"),
+        Bun.sleep(3000).then(() => "hung"),
+      ]);
+      for (let i = 0; i < 50 && running(pid); i++) await Bun.sleep(20);
+      const survived = running(pid);
+      if (survived) process.kill(pid, "SIGKILL");
+      expect(closed).toBe("closed");
+      expect(survived).toBe(false);
+    },
+  );
 
   test("lines no request asked for kill the candidate at once, and are never queued", async () => {
     const c = candidate("unsolicited-flood", { maxLineBytes: 1024 });

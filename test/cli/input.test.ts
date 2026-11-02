@@ -18,6 +18,21 @@ function refusedWrite(args: string[], rule: string, input?: string) {
   return result;
 }
 
+/**
+ * A line break inside an argument. On Windows the command line splits the argument there before
+ * relembra reads it, so the write is refused as a usage error (an extra argument), nothing stored
+ * (docs/CLI.md#windows); elsewhere the guard refuses it by `rule`.
+ */
+function refusedLineBreak(args: string[], code: "guard" | "provenance", rule: string) {
+  const windows = process.platform === "win32";
+  const before = count();
+  const result = windows ? refused(box, args, 2, "usage") : refused(box, args, 1, code);
+  expect(result.json?.ok === false && result.json.error.rule).toBe(
+    windows ? "extra-argument" : rule,
+  );
+  expect(count()).toBe(before);
+}
+
 // Built at run time, so no credential-shaped literal sits in the repository.
 const shaped = ["gh", "p_", "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"].join("");
 
@@ -44,9 +59,9 @@ describe("bad input, refused cleanly by the compiled binary", () => {
   });
 
   cliTest("multi-line, from an argument or stdin", () => {
-    refusedWrite(["note", "first\nsecond"], "multi-line");
+    refusedLineBreak(["note", "first\nsecond"], "guard", "multi-line");
     refusedWrite(["note"], "multi-line", "first\nsecond\n");
-    refusedWrite(["note", "first\r\nsecond"], "multi-line");
+    refusedLineBreak(["note", "first\r\nsecond"], "guard", "multi-line");
   });
 
   cliTest("bidi and zero-width characters", () => {
@@ -85,8 +100,11 @@ describe("bad input, refused cleanly by the compiled binary", () => {
   });
 
   cliTest("provenance that breaks a guard rule is refused, naming the field", () => {
-    const result = refused(box, ["note", "fine text", "--agent", "bad\nagent"], 1, "provenance");
-    expect(result.json?.ok === false && result.json.error.rule).toBe("agent:multi-line");
+    refusedLineBreak(
+      ["note", "fine text", "--agent", "bad\nagent"],
+      "provenance",
+      "agent:multi-line",
+    );
   });
 
   cliTest("usage errors exit 2 with the JSON error document", () => {

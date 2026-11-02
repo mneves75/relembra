@@ -8,7 +8,16 @@ import { afterAll, describe, expect } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { dirname } from "node:path";
 import { call, lines, mcp, toolText } from "./mcp-support.js";
-import { cliTest, ok, refused, run, type Sandbox, sandbox, sandboxEnv } from "./support.js";
+import {
+  cliTest,
+  HOOK_SHELL,
+  ok,
+  refused,
+  run,
+  type Sandbox,
+  sandbox,
+  sandboxEnv,
+} from "./support.js";
 
 const G = "team/global-rules";
 const boxes: Sandbox[] = [];
@@ -179,7 +188,7 @@ describe("RELEMBRA_GLOBAL_SCOPE: the session also reads the global scope", () =>
     expect(command).toContain('RELEMBRA_GLOBAL_SCOPE="$RELEMBRA_GLOBAL_SCOPE"');
     ok(box, ["note", "A rule every project should see."], { env: IN_G });
     const viaHarness = (extra: Record<string, string>) => {
-      const result = spawnSync("/bin/sh", ["-c", command], {
+      const result = spawnSync(HOOK_SHELL, ["-c", command], {
         cwd: box.repo,
         env: sandboxEnv(box, extra),
         encoding: "utf8",

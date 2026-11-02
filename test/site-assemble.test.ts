@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import { NO_RELEASE_TOOLING } from "./platform-support.js";
 
 const script = join(import.meta.dir, "..", "scripts", "site", "assemble.sh");
 const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -66,7 +67,7 @@ function assemble(repo: string) {
   return { ...run, out };
 }
 
-describe("site assembly", () => {
+describe.skipIf(NO_RELEASE_TOOLING)("site assembly", () => {
   test("ships the commit's site/, the checked video and .nojekyll (positive control)", () => {
     const run = assemble(fixture());
     expect(run.stderr).toBe("");

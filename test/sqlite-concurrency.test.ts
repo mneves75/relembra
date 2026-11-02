@@ -9,6 +9,8 @@ const WRITER = join(import.meta.dir, "sqlite-writer.ts");
 const SCOPE = "concurrency/one-file";
 const WRITERS = ["alpha", "beta"] as const;
 const PER_WRITER = 200;
+// 400 synchronous=FULL commits ran past 30 s on a hosted Windows runner, whose flushes are slow.
+const BUDGET_MS = process.platform === "win32" ? 120_000 : 30_000;
 
 describe("two writer processes on one sqlite file", () => {
   let dir: ReturnType<typeof tempDir>;
@@ -62,22 +64,30 @@ describe("two writer processes on one sqlite file", () => {
     }
   }
 
-  test("lose no write", async () => {
-    const result = await runWriters("store");
+  test(
+    "lose no write",
+    async () => {
+      const result = await runWriters("store");
 
-    expect(result.count).toBe(WRITERS.length * PER_WRITER);
-    expect(result.distinctIds).toBe(WRITERS.length * PER_WRITER);
-    // Evidence the writers overlapped rather than ran one after the other.
-    expect(result.switches).toBeGreaterThan(1);
-  }, 30_000);
+      expect(result.count).toBe(WRITERS.length * PER_WRITER);
+      expect(result.distinctIds).toBe(WRITERS.length * PER_WRITER);
+      // Evidence the writers overlapped rather than ran one after the other.
+      expect(result.switches).toBeGreaterThan(1);
+    },
+    BUDGET_MS,
+  );
 
-  test("negative control: the same count check catches writers that lose writes", async () => {
-    const result = await runWriters("lossy");
+  test(
+    "negative control: the same count check catches writers that lose writes",
+    async () => {
+      const result = await runWriters("lossy");
 
-    // Each lossy writer overwrites the table with its own snapshot, so one writer's rows remain.
-    expect(result.count).toBe(PER_WRITER);
-    expect(result.count).not.toBe(WRITERS.length * PER_WRITER);
-  }, 30_000);
+      // Each lossy writer overwrites the table with its own snapshot, so one writer's rows remain.
+      expect(result.count).toBe(PER_WRITER);
+      expect(result.count).not.toBe(WRITERS.length * PER_WRITER);
+    },
+    BUDGET_MS,
+  );
 });
 
 async function waitFor(condition: () => boolean): Promise<void> {

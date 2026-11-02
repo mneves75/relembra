@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import {
   BINARY,
   cliTest,
+  HOOK_SHELL,
   ok,
   type RunOptions,
   run,
@@ -70,7 +71,7 @@ describe("the session-start hook fails open: whatever goes wrong, exit 0 and no 
       const command = ok(box, ["init"]).hooks.claudeCode.hooks.SessionStart[0].hooks[0].command;
       ok(box, ["note", "Deploys go through staging."]);
       const viaHarness = (extra: Record<string, string>) =>
-        spawnSync("/bin/sh", ["-c", command], {
+        spawnSync(HOOK_SHELL, ["-c", command], {
           cwd: box.repo,
           env: sandboxEnv(box, extra),
           encoding: "utf8",

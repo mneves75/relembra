@@ -8,7 +8,8 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const script = join(import.meta.dir, "..", "scripts", "bun-toolchain.sh");
 const VERSION = "9.9.9-canary.1";
@@ -31,7 +32,8 @@ function registry(revision = REVISION): { root: string; integrity: string } {
   const dir = join(root, "@oven", "bun-test-x64", "-");
   mkdirSync(dir, { recursive: true });
   const archive = join(dir, `bun-test-x64-${VERSION}.tgz`);
-  const tar = spawnSync("tar", ["-czf", archive, "-C", work, "package"]);
+  // The archive by its bare name in its folder: GNU tar takes "C:\..." for host:path.
+  const tar = spawnSync("tar", ["-czf", basename(archive), "-C", work, "package"], { cwd: dir });
   if (tar.status !== 0) throw new Error(`tar: ${tar.stderr}`);
   const integrity = `sha512-${createHash("sha512").update(readFileSync(archive)).digest("base64")}`;
   return { root, integrity };
@@ -57,7 +59,7 @@ function run(pinFile: string, registryRoot: string, platform = "test-x64") {
     env: {
       ...process.env,
       RELEMBRA_BUN_PIN: pinFile,
-      RELEMBRA_BUN_REGISTRY: `file://${registryRoot}`,
+      RELEMBRA_BUN_REGISTRY: pathToFileURL(registryRoot).href,
     },
   });
   return { ...result, dest };

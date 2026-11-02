@@ -15,6 +15,7 @@ import {
   piProvenance,
   run,
 } from "./pi-durable-support.js";
+import { selfKilled } from "./platform-support.js";
 import { tempDir } from "./sqlite-support.js";
 
 const CHILD = join(import.meta.dir, "pi-durable-wake-crash-child.ts");
@@ -51,7 +52,7 @@ describe("pi-durable wake after a crash inside a model request", () => {
     await seed.close();
 
     const child = spawnSync(process.execPath, [CHILD, piPath, storePath], { encoding: "utf8" });
-    expect(child.signal, child.stderr).toBe("SIGKILL");
+    expect(selfKilled(child), child.stderr).toBe(true);
 
     store = openSqliteStore({ path: storePath });
     const relembra = createRelembra({ store, policy: piPolicy, egress });

@@ -17,6 +17,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { NO_RELEASE_TOOLING } from "./platform-support.js";
 
 const ROOT = join(import.meta.dir, "..");
 const SMOKE = join(ROOT, "scripts", "pack-smoke.ts");
@@ -72,7 +73,7 @@ beforeAll(() => {
   tarball = join(copy, "out", file as string);
 }, 120_000);
 
-describe("scripts/pack-smoke.ts --tarball", () => {
+describe.skipIf(NO_RELEASE_TOOLING)("scripts/pack-smoke.ts --tarball", () => {
   test("Node and Bun install and run the same archive, unchanged, without building", () => {
     const before = sha256(tarball);
     for (const [runtime, name] of [

@@ -55,6 +55,19 @@ export function cliTest(name: string, fn: () => void | Promise<void>, timeoutMs 
 }
 
 /**
+ * A CLI test that needs what only POSIX gives: file modes, or a pseudo-terminal behind /dev/tty.
+ * Skipped on Windows, where test/sqlite-windows-acl.test.ts covers the owner-only store, and owner
+ * trust, with no /dev/tty, is always refused as `no-tty` (docs/CLI.md#windows).
+ */
+export function posixCliTest(
+  name: string,
+  fn: () => void | Promise<void>,
+  timeoutMs = 30_000,
+): void {
+  (binary === undefined || process.platform === "win32" ? test.skip : test)(name, fn, timeoutMs);
+}
+
+/**
  * The OS user part of a scope: the uid (see src/cli/scope.ts on why not the name), and on Windows,
  * which has none, the lowercased account name.
  */
@@ -84,7 +97,10 @@ export interface Sandbox {
 
 /** A temp HOME, RELEMBRA_HOME and git repository, removed by `remove`. */
 export function sandbox(): Sandbox {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "relembra-cli-")));
+  // The long-name real path on Windows (the temp folder can be a short 8.3 name), as the binary
+  // resolves it, so the scope this sandbox expects is the one the binary derives.
+  const real = process.platform === "win32" ? realpathSync.native : realpathSync;
+  const root = real(mkdtempSync(join(tmpdir(), "relembra-cli-")));
   const home = join(root, "home");
   const relembraHome = join(root, "relembra-home");
   const repo = join(root, "work", `repo-${basename(root).slice(-6)}`);
@@ -141,6 +157,9 @@ export type JsonDocument =
 export const exercised = new Set<string>();
 
 /** The sandbox's environment: no RELEMBRA_SCOPE, HOME in the sandbox, plus `extra`. */
+/** The shell a harness runs a hook command in: Claude Code uses Git Bash on Windows. */
+export const HOOK_SHELL = process.platform === "win32" ? "bash" : "/bin/sh";
+
 export function sandboxEnv(
   box: Sandbox,
   extra: Record<string, string | undefined> = {},
