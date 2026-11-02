@@ -242,7 +242,8 @@ function checkFolderChain(systemRoot: string | undefined, dir: string, sid: stri
 
 /**
  * A folder's access list as SDDL. `icacls <folder> /save <file>` writes the folder's name on one
- * line and its access list on the next, in UTF-16 or the console's encoding.
+ * line (none for a drive root) and its access list on the next, in UTF-16 or the console's
+ * encoding; parseDacl drops the SACL that follows it on that line.
  */
 function savedDacl(systemRoot: string | undefined, folder: string, temp: string): string {
   const file = join(temp, "acl");
@@ -253,8 +254,9 @@ function savedDacl(systemRoot: string | undefined, folder: string, temp: string)
     .replace(/^﻿/, "")
     .split(/\r?\n/)
     .filter((line) => line.trim() !== "");
-  const dacl = lines[1];
-  if (lines.length !== 2 || dacl === undefined) {
+  // A drive root has no name, so its file holds the access list alone.
+  const dacl = lines.at(-1);
+  if (lines.length > 2 || dacl === undefined || !dacl.startsWith("D:")) {
     throw new Error(
       `icacls /save did not write one access list for ${folder}: ${lines.join(" | ")}`,
     );

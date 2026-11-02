@@ -17,6 +17,12 @@ const USERS =
 /** C:\: Authenticated Users may add folders to it and get Modify on what they make. */
 const ROOT =
   "D:PAI(A;OICI;FA;;;BA)(A;OICI;FA;;;SY)(A;OICI;0x1200a9;;;BU)(A;OICIIO;SDGXGWGR;;;AU)(A;;LC;;;AU)";
+/**
+ * C:\ on the windows-latest runner, as `icacls C:\ /save` wrote it (PR #7's first run): an app
+ * container's read, and the mandatory label's SACL on the same line.
+ */
+const RUNNER_ROOT =
+  "D:AI(A;;0x1000a1;;;S-1-15-3-65536-1888954469-739942743-1668119174-2468466756-4239452838-1296943325-355587736-700089176)(A;;LC;;;AU)(A;OICIIO;SDGXGWGR;;;AU)(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)S:PAI(ML;OINPIO;NW;;;HI)";
 
 const chain = (parent: string, ...above: string[]) => [
   { path: "C:\\Users\\me\\AppData", dacl: parent, holdsStoreFolder: true },
@@ -51,6 +57,21 @@ describe("parseDacl reads an SDDL access list", () => {
         sid: "S-1-5-32-544",
       },
     ]);
+  });
+
+  test("a SACL after the access list ends it", () => {
+    expect(parseDacl(RUNNER_ROOT)?.map((ace) => ace.sid)).toEqual([
+      "S-1-15-3-65536-1888954469-739942743-1668119174-2468466756-4239452838-1296943325-355587736-700089176",
+      "S-1-5-11",
+      "S-1-5-11",
+      "S-1-5-18",
+      "S-1-5-32-544",
+      "S-1-5-32-545",
+    ]);
+    expect(chainRefusal(chain(PROFILE, PROFILE, USERS, RUNNER_ROOT), TRUSTED)).toBeUndefined();
+    expect(parseDacl("D:PS:PAI(ML;OINPIO;NW;;;HI)")).toEqual([]);
+    // Only a SACL may follow: anything else is refused.
+    expect(() => parseDacl("D:(A;;FA;;;BA)O:BA")).toThrow();
   });
 
   test("a null DACL and an empty one differ", () => {

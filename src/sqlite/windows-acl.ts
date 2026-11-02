@@ -124,13 +124,15 @@ export function trustedAccounts(userSid: string): ReadonlySet<string> {
  * thrown, never skipped: a skipped entry could be the one that grants another account access.
  */
 export function parseDacl(sddl: string): Ace[] | null {
-  const body = /^D:([A-Z_]*)(.*)$/s.exec(sddl.trim());
+  const body = /^D:((?:P|AI|AR|NO_ACCESS_CONTROL)*)(.*)$/s.exec(sddl.trim());
   if (body === null) throw new Error(`not an SDDL access list: ${sddl}`);
   const [, controlFlags = "", rest = ""] = body;
   if (controlFlags.includes("NO_ACCESS_CONTROL")) return null;
   const aces: Ace[] = [];
   let index = 0;
   while (index < rest.length) {
+    // `icacls /save` writes the SACL, the mandatory label, on the same line: it ends the DACL.
+    if (rest.startsWith("S:", index)) break;
     if (rest[index] !== "(")
       throw new Error(`unexpected text in access list: ${rest.slice(index)}`);
     // A conditional entry holds parentheses of its own, so the entry ends where depth returns to 0.
