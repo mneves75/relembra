@@ -9,7 +9,7 @@
  * Everyone read to everything made in it, and folders made by cmd, which inherit that grant.
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createOwnerOnly, windowsSystem32 } from "../src/sqlite/database.js";
@@ -133,6 +133,18 @@ describe.skipIf(!WINDOWS)("Windows store ACL", () => {
       expect(() => createOwnerOnly(store)).toThrow(/exists without its store/);
       expect(existsSync(store)).toBe(false);
     }
+  });
+
+  test("a dangling link as a sidecar is refused too, before the store's first byte", () => {
+    const parent = leakyParent();
+    const home = plainFolder(join(parent, "home"));
+    const store = join(home, "relembra.db");
+    // The target is missing, so existsSync, which follows links, would call the sidecar absent.
+    symlinkSync(join(parent, "elsewhere.wal"), `${store}-wal`, "file");
+    expect(existsSync(`${store}-wal`)).toBe(false);
+    expect(lstatSync(`${store}-wal`).isSymbolicLink()).toBe(true);
+    expect(() => createOwnerOnly(store)).toThrow(/exists without its store/);
+    expect(existsSync(store)).toBe(false);
   });
 
   test("an existing store's folder is left as it is", () => {

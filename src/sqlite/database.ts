@@ -86,7 +86,7 @@ export function createOwnerOnly(path: string): void {
     // opens a file by its full path whatever the folder grants, so SQLite would write into a file
     // another account can read. Checked after the ACL, when no other account can add one.
     for (const sidecar of [`${path}-wal`, `${path}-shm`, `${path}-journal`]) {
-      if (existsSync(sidecar)) {
+      if (hasEntry(sidecar)) {
         throw new Error(`${sidecar} exists without its store; no store is created beside it`);
       }
     }
@@ -230,6 +230,17 @@ export function checkOwnerOnly(path: string): void {
 function isSymbolicLink(path: string): boolean {
   try {
     return lstatSync(path).isSymbolicLink();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+/** Whether a directory entry exists at `path`: a link counts, even one whose target is missing. */
+function hasEntry(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
     throw error;
