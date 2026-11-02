@@ -151,10 +151,13 @@ export function windowsUserSid(systemRoot: string | undefined): string {
  * the user, SYSTEM and the Administrators group only, inherited by everything in it. An owner may
  * always rewrite an ACL, so a folder another account made would otherwise give that account its
  * access back; `/setowner` fails, and no store is created, unless the user may take ownership.
- * `/reset` then drops every explicit grant a folder that already existed carried, and
- * `/inheritance:r` drops what it inherited, so the three grants are the whole ACL. Accounts are
- * named by SID, so no account name or system language is involved. Any failure is thrown: a store
- * is never created in a folder others may read.
+ * `/inheritance:r` with the three `/grant:r` then drops what the folder inherited, in one change
+ * that never widens access: another process may already have made the store here (two first
+ * opens at once), and a step that restored the parent's grants, as `/reset` does, would let the
+ * store inherit them for a moment. An explicit grant to anyone else is refused, not dropped: the
+ * ACL is read back and must hold the three grants alone. Accounts are named by SID, so no account
+ * name or system language is involved. Any failure is thrown: a store is never created in a
+ * folder others may read.
  */
 export function restrictFolderToOwner(dir: string): void {
   // icacls follows a junction or symbolic link: the owner and ACL of its target would change.
@@ -164,7 +167,6 @@ export function restrictFolderToOwner(dir: string): void {
   const sid = windowsUserSid(systemRoot);
   const grant = (who: string) => ["/grant:r", `*${who}:(OI)(CI)F`];
   runSystemTool(systemRoot, "icacls.exe", [dir, "/setowner", `*${sid}`]);
-  runSystemTool(systemRoot, "icacls.exe", [dir, "/reset"]);
   runSystemTool(systemRoot, "icacls.exe", [
     dir,
     "/inheritance:r",
@@ -172,6 +174,15 @@ export function restrictFolderToOwner(dir: string): void {
     ...grant("S-1-5-18"), // SYSTEM
     ...grant("S-1-5-32-544"), // Administrators
   ]);
+  // icacls prints one `name:(flags)` entry per line; the path, on the first, holds no `:(`.
+  const entries = runSystemTool(systemRoot, "icacls.exe", [dir])
+    .split(/\r?\n/)
+    .filter((line) => line.includes(":("));
+  if (entries.length !== 3) {
+    throw new Error(
+      `${dir} grants another account access (${entries.length} entries, not 3); no store is created in it: remove those grants or use another folder`,
+    );
+  }
 }
 
 /**

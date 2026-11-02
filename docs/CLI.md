@@ -667,8 +667,8 @@ The release binaries `relembra-windows-x64.exe` and `relembra-windows-arm64.exe`
 - **Store protection.** Windows files have no modes, so the mode checks do not apply. Instead,
   before a new store's first byte, its folder (`%USERPROFILE%\.relembra`, or `RELEMBRA_HOME`)
   gets an ACL of its own: full control for the current user's SID, SYSTEM and Administrators,
-  and nothing else. A folder that already existed loses every other grant, explicit or
-  inherited. The store and SQLite's `-wal` and `-shm` files inherit it. The folder becomes
+  and nothing else. A folder that already existed loses what it inherited; one that grants anyone
+  else access explicitly is refused, and no store is created until you remove that grant. The store and SQLite's `-wal` and `-shm` files inherit it. The folder becomes
   yours first, since a folder's owner can always rewrite its ACL: if you may not take ownership of
   a folder another account made, no store is created. A `-wal`, `-shm` or `-journal` file already
   there without its store is refused, since it keeps its own ACL, and so is a store folder that is

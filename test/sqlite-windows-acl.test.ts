@@ -12,7 +12,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, lstatSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createOwnerOnly, windowsSystem32 } from "../src/sqlite/database.js";
+import { createOwnerOnly, restrictFolderToOwner, windowsSystem32 } from "../src/sqlite/database.js";
 import { windowsSid, windowsTool } from "./platform-support.js";
 
 const WINDOWS = process.platform === "win32";
@@ -102,13 +102,23 @@ describe.skipIf(!WINDOWS)("Windows store ACL", () => {
     expect(windowsSid()).toMatch(/^S-1-5-21-/);
   });
 
-  test("an explicit grant to Everyone on an existing home is dropped before the store exists", () => {
+  test("an existing home with an explicit grant to Everyone is refused before the store exists", () => {
     const home = plainFolder(join(leakyParent(), "home"));
     windowsTool("icacls.exe", [home, "/grant", EVERYONE_READS]);
-    // Positive control: the grant is explicit, so dropping inheritance alone would keep it.
+    // Positive control: the grant is explicit, so dropping inheritance alone keeps it.
     expect(acl(home)).toMatch(/Everyone:\(OI\)/);
     const store = join(home, "relembra.db");
+    expect(() => createOwnerOnly(store)).toThrow(/grants another account access \(4 entries/);
+    expect(existsSync(store)).toBe(false);
+  });
+
+  test("the ACL step run again beside a store another process made keeps it owner-only", () => {
+    // Two first opens at once: the second runs the ACL step after the first made the store. No
+    // step may restore the leaky parent's grants, even for a moment, or the store inherits them.
+    const home = plainFolder(join(leakyParent(), "home"));
+    const store = join(home, "relembra.db");
     createOwnerOnly(store);
+    restrictFolderToOwner(home);
     expectOwnerOnly(home, store);
   });
 
