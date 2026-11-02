@@ -672,6 +672,18 @@ The release binaries `relembra-windows-x64.exe` and `relembra-windows-arm64.exe`
   (<https://code.claude.com/docs/en/hooks>, read 2026-11-02), which has `/usr/bin/env`; without
   Git Bash, Claude Code falls back to PowerShell, where this command does not run. Install Git for
   Windows.
+- **Owner trust.** The confirmation code is read from `/dev/tty`, which Windows does not have, so
+  every action that needs owner trust is refused as `owner-confirmation-required` (`no-tty`):
+  `--trust owner`, and a `retract`, `redact`, `supersede` or `sweep` that would change an owner
+  memory. Agent-trust work runs as elsewhere; this release has no owner trust on Windows.
+- **Line breaks in arguments.** The Windows command line splits an argument at a line break
+  before relembra reads it, so such a note is refused as a usage error (`extra-argument`, exit 2)
+  rather than by the guard. Either way nothing is written; on stdin the guard refuses it as
+  `multi-line`.
+- **Release tooling.** The library and the CLI are tested on Windows. The release gate
+  (`scripts/ci.sh`, `scripts/check-release.sh`), the benchmarks, the evaluation harness,
+  `install.sh`, the package smoke test and the site assembly are POSIX tools that run on macOS and
+  Linux only.
 - **Install.** Check the binary against `SHA256SUMS`, then put it on `PATH` as `relembra.exe`:
 
   ```powershell

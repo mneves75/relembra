@@ -21,6 +21,18 @@ unchanged from 1.0.0-beta.1.
     place of the POSIX mode checks Windows cannot apply.
   - git is found as `git.exe`, and paths are compared case-blind by their canonical real path.
   - The session hook runs in Git Bash, as Claude Code does on Windows.
+  - Not yet on Windows: owner trust, which needs `/dev/tty` (those actions are refused as
+    `no-tty`), and the release tooling (gate, benchmarks, `install.sh`), which stays on macOS and
+    Linux.
+
+### Fixed
+
+- A store whose `-wal` has no `-shm` beside it has its schema version read from the in-memory
+  WAL image straight away. On Windows a read-only connection there created the `-shm`, so a store
+  from a newer relembra was refused only after a file had changed, and a WAL it could not replay
+  failed with SQLite's `SQLITE_PROTOCOL` instead of `StoreUnverifiedError`.
+- `.gitattributes` keeps every text file LF in every checkout: Windows' default CRLF made the
+  guard refuse the fixtures and changed every digest.
 
 ## [1.0.0-beta.1] - 2026-11-01
 
