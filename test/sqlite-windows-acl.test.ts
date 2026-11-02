@@ -112,18 +112,17 @@ describe.skipIf(!WINDOWS)("Windows store ACL", () => {
     expectOwnerOnly(home, store);
   });
 
-  test("a folder another account owns is refused, untouched, before the store's first byte", () => {
+  test("a folder another account owns becomes the user's before the grants", () => {
     const home = plainFolder(join(leakyParent(), "home"));
     // BUILTIN\Users stands in for another account: an owner may always rewrite the ACL.
     windowsTool("icacls.exe", [home, "/setowner", "*S-1-5-32-545"]);
     // Positive control: the owner really changed.
     expect(ownerOf(home)).toBe("S-1-5-32-545");
-    const before = acl(home);
     const store = join(home, "relembra.db");
-    expect(() => createOwnerOnly(store)).toThrow(/owned by S-1-5-32-545/);
-    expect(existsSync(store)).toBe(false);
-    expect(acl(home)).toBe(before);
-  });
+    createOwnerOnly(store);
+    expect(ownerOf(home)).toBe(windowsSid());
+    expectOwnerOnly(home, store);
+  }, 30_000);
 
   test("a sidecar without its store is refused before the store's first byte", () => {
     for (const suffix of ["-wal", "-shm", "-journal"]) {

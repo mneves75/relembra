@@ -668,13 +668,13 @@ The release binaries `relembra-windows-x64.exe` and `relembra-windows-arm64.exe`
   before a new store's first byte, its folder (`%USERPROFILE%\.relembra`, or `RELEMBRA_HOME`)
   gets an ACL of its own: full control for the current user's SID, SYSTEM and Administrators,
   and nothing else. A folder that already existed loses every other grant, explicit or
-  inherited. The store and SQLite's `-wal` and `-shm` files inherit it. A folder another account
-  owns is refused, since a folder's owner can always rewrite its ACL (the owner may be you,
-  SYSTEM or Administrators), and so is a `-wal`, `-shm` or `-journal` file already there without
-  its store: such a file keeps its own ACL. If `whoami`, `icacls` or `Get-Acl` fails, no store is
-  created. An existing store's ACL is not read again on every open, since that would cost a
-  process per command: a store folder made by another tool, or whose ACL was widened later, is
-  not detected. Keep `RELEMBRA_HOME` a folder of its own.
+  inherited. The store and SQLite's `-wal` and `-shm` files inherit it. The folder becomes
+  yours first, since a folder's owner can always rewrite its ACL: if you may not take ownership of
+  a folder another account made, no store is created. A `-wal`, `-shm` or `-journal` file already
+  there without its store is refused, since it keeps its own ACL. If `whoami` or `icacls` fails,
+  no store is created. An existing store's ACL is not read again on every open, since that would
+  cost a process per command: a store folder made by another tool, or whose ACL was widened later,
+  is not detected. Keep `RELEMBRA_HOME` a folder of its own.
 - **Hook.** `relembra init` prints the same session hook as elsewhere, a `sh` command line under
   `/usr/bin/env -i`. Claude Code runs hook commands in Git Bash on Windows
   (<https://code.claude.com/docs/en/hooks>, read 2026-11-02), which has `/usr/bin/env`; without
