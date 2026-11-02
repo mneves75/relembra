@@ -44,9 +44,21 @@ describe("a stdio round trip through the official MCP client, pinned to 2026-07-
       transport.stderr?.on("data", (chunk) => {
         stderr += chunk;
       });
+      // Diagnostic: on the Windows runners this test timed out with no failing step, so each step
+      // is logged there until the stalled one is known.
+      const step = (name: string) => {
+        if (process.platform === "win32") console.warn(`mcp-sdk step: ${name}`);
+      };
       const mcp = client();
+      const callTool = mcp.callTool.bind(mcp);
+      mcp.callTool = ((params, ...rest) => {
+        step(`callTool ${params.name}`);
+        return callTool(params, ...rest);
+      }) as typeof mcp.callTool;
+      step("connect");
       await mcp.connect(transport);
       try {
+        step("listTools");
         const { tools } = await mcp.listTools();
         expect(tools.map((tool) => tool.name)).toEqual([
           "note",
@@ -92,7 +104,9 @@ describe("a stdio round trip through the official MCP client, pinned to 2026-07-
           mcp.callTool({ name: "note", arguments: { text: "x", scope: "y" } }),
         ).rejects.toThrow();
       } finally {
+        step("close");
         await mcp.close();
+        step("closed");
       }
       expect(ok(box, ["recall", "--retracted"]).memories).toHaveLength(1);
       expect(stderr).not.toContain("{");

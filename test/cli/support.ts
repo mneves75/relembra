@@ -160,6 +160,26 @@ export const exercised = new Set<string>();
 /** The shell a harness runs a hook command in: Claude Code uses Git Bash on Windows. */
 export const HOOK_SHELL = process.platform === "win32" ? "bash" : "/bin/sh";
 
+/**
+ * Why init's hook `command` printed nothing, since the hook fails open: the same command line with
+ * `wake --json` in place of `hook` reports the error the hook swallows. "printed" when it did print.
+ */
+export function hookSilence(
+  box: Sandbox,
+  command: string,
+  printed: string,
+  extra: Record<string, string> = {},
+): string {
+  if (printed !== "") return "printed";
+  const wake = spawnSync(HOOK_SHELL, ["-c", command.replace(/ hook$/, " wake --json")], {
+    cwd: box.repo,
+    env: sandboxEnv(box, extra),
+    encoding: "utf8",
+    timeout: 30_000,
+  });
+  return `silent; wake through the same command: status ${wake.status}\n${wake.stdout}\n${wake.stderr}`;
+}
+
 export function sandboxEnv(
   box: Sandbox,
   extra: Record<string, string | undefined> = {},
@@ -184,10 +204,17 @@ export function sandboxEnv(
 const SETSID = ["-MPOSIX", "-e", "POSIX::setsid(); exec { $ARGV[0] } @ARGV or die $!"];
 /** perl by absolute path, so a test can give the binary a PATH without perl (or git) in it. */
 const PERL = existsSync("/usr/bin/perl") ? "/usr/bin/perl" : "perl";
+/**
+ * The command line that starts the binary with `args`. Windows has no sessions and no /dev/tty, so
+ * there the binary starts directly; elsewhere through setsid, as above.
+ */
+const launch = (args: readonly string[]): [string, string[]] =>
+  process.platform === "win32" ? [BINARY, [...args]] : [PERL, [...SETSID, BINARY, ...args]];
 
 /** Runs the binary in the sandbox: its repo as cwd, a clean environment with no RELEMBRA_SCOPE. */
 export function run(box: Sandbox, args: readonly string[], options: RunOptions = {}): RunResult {
-  const result = spawnSync(PERL, [...SETSID, BINARY, ...args], {
+  const [command, argv] = launch(args);
+  const result = spawnSync(command, argv, {
     cwd: options.cwd ?? box.repo,
     env: sandboxEnv(box, options.env),
     input: options.input ?? "",
@@ -234,7 +261,8 @@ export function runStdinOpen(
 ): Promise<{ status: number | null; stdout: string; elapsedMs: number; killed: boolean }> {
   return new Promise((resolve) => {
     const started = performance.now();
-    const child = spawn(PERL, [...SETSID, BINARY, ...args], {
+    const [command, argv] = launch(args);
+    const child = spawn(command, argv, {
       cwd: box.repo,
       env: sandboxEnv(box),
       stdio: ["pipe", "pipe", "pipe"],

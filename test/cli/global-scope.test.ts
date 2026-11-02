@@ -11,6 +11,7 @@ import { call, lines, mcp, toolText } from "./mcp-support.js";
 import {
   cliTest,
   HOOK_SHELL,
+  hookSilence,
   ok,
   refused,
   run,
@@ -195,6 +196,7 @@ describe("RELEMBRA_GLOBAL_SCOPE: the session also reads the global scope", () =>
         timeout: 30_000,
       });
       expect(result.status).toBe(0);
+      expect(hookSilence(box, command, result.stdout, extra)).toBe("printed");
       return JSON.parse(result.stdout).hookSpecificOutput.additionalContext as string;
     };
     expect(viaHarness(WITH_G)).toContain("A rule every project should see.");

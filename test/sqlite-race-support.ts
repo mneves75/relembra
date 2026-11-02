@@ -10,6 +10,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { openSqliteStore } from "relembra/sqlite";
 import { MIGRATIONS } from "../src/sqlite/migrations.js";
+import { selfKilled } from "./platform-support.js";
 
 const CHILD = join(fileURLToPath(new URL(".", import.meta.url)), "sqlite-upgrader-child.ts");
 
@@ -52,7 +53,7 @@ export async function openDuringUpgrade(
   const upgrade = (wal: boolean) => {
     const args = [CHILD, path, String(MIGRATIONS.length + 1), ...(wal ? ["wal"] : [])];
     const child = spawnSync(process.execPath, args, { encoding: "utf8" });
-    if (child.signal !== "SIGKILL") throw new Error(`upgrader was not killed: ${child.stderr}`);
+    if (!selfKilled(child)) throw new Error(`upgrader was not killed: ${child.stderr}`);
   };
 
   const exec = DatabaseSync.prototype.exec;

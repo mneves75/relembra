@@ -6,6 +6,7 @@ import {
   BINARY,
   cliTest,
   HOOK_SHELL,
+  hookSilence,
   ok,
   type RunOptions,
   run,
@@ -91,6 +92,7 @@ describe("the session-start hook fails open: whatever goes wrong, exit 0 and no 
       ]) {
         const result = viaHarness(extra);
         expect({ extra, status: result.status }).toEqual({ extra, status: 0 });
+        expect(hookSilence(box, command, result.stdout, extra)).toBe("printed");
         expect(JSON.parse(result.stdout).hookSpecificOutput.additionalContext).toContain(
           "Deploys go through staging.",
         );

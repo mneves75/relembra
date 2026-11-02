@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const script = join(import.meta.dir, "..", "scripts", "bun-toolchain.sh");
@@ -71,7 +71,8 @@ describe("pinned Bun toolchain", () => {
     const result = run(pin(integrity), root);
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe(join(result.dest, "package", "bin"));
+    // resolve: on Windows bash prints the path with forward slashes, which the runner accepts.
+    expect(resolve(result.stdout.trim())).toBe(join(result.dest, "package", "bin"));
     expect(existsSync(join(result.dest, "package", "bin", "bun"))).toBe(true);
     expect(existsSync(join(result.dest, "bun.tgz"))).toBe(false);
   });

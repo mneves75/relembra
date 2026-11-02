@@ -19,17 +19,18 @@ function refusedWrite(args: string[], rule: string, input?: string) {
 }
 
 /**
- * A line break inside an argument. On Windows the command line splits the argument there before
- * relembra reads it, so the write is refused as a usage error (an extra argument), nothing stored
- * (docs/CLI.md#windows); elsewhere the guard refuses it by `rule`.
+ * A line break inside an argument: the guard refuses it by `rule`, nothing stored. On Windows the
+ * launcher may split the argument there before relembra reads it (Git for Windows' MSYS runtime did
+ * on the hosted runners), and the write is refused as an extra argument (docs/CLI.md#windows).
  */
 function refusedLineBreak(args: string[], code: "guard" | "provenance", rule: string) {
-  const windows = process.platform === "win32";
   const before = count();
-  const result = windows ? refused(box, args, 2, "usage") : refused(box, args, 1, code);
-  expect(result.json?.ok === false && result.json.error.rule).toBe(
-    windows ? "extra-argument" : rule,
-  );
+  const result = run(box, [...args, "--json"]);
+  const error = result.json?.ok === false ? result.json.error : undefined;
+  const split = { status: 2, code: "usage", rule: "extra-argument" };
+  const refusal = { status: result.status, code: error?.code, rule: error?.rule };
+  if (process.platform === "win32" && refusal.code === "usage") expect(refusal).toEqual(split);
+  else expect(refusal).toEqual({ status: 1, code, rule });
   expect(count()).toBe(before);
 }
 
