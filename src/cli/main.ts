@@ -37,6 +37,7 @@ import {
 import { importOptmem } from "../optmem.js";
 import { createRelembra, type NoteProvenance, type Relembra } from "../relembra.js";
 import { identityEgress, renderMemory } from "../render.js";
+import { OWNER_MODES } from "../sqlite/database.js";
 import { openSqliteStore, type SqliteStore } from "../sqlite/index.js";
 import { exportJsonl, type ImportReport, importJsonl, MAX_IMPORT_BYTES } from "../transfer.js";
 import { flagValue, hasFlag, intFlag, type Parsed, parseArgs, wantsJson } from "./args.js";
@@ -622,7 +623,7 @@ function parseSource(value: string): { memoryId: string; revision: number } {
  */
 async function check(scope: string, store: SqliteStore, path: string): Promise<Output> {
   const homeMode = Number(lstatSync(dirname(path)).mode) & 0o777;
-  if ((homeMode & 0o077) !== 0) {
+  if (OWNER_MODES && (homeMode & 0o077) !== 0) {
     throw new CliError("store-file", "the store's directory grants group or others access", "mode");
   }
   const db = new DatabaseSync(path, { readOnly: true });

@@ -41,8 +41,8 @@ if [ "$actual" != "$integrity" ]; then
   rm -f "$archive"
   refuse "$url does not match the pinned sha512"
 fi
-tar -xzf "$archive" -C "$dest"
-rm -f "$archive"
+# Relative names: GNU tar on Windows reads "D:\..." as a remote host:path.
+(cd "$dest" && tar -xzf bun.tgz && rm -f bun.tgz)
 
 bin="$dest/package/bin"
 exe="$bin/bun"

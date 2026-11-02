@@ -66,6 +66,9 @@ export function checkBusyTimeout(busyTimeoutMs: number): number {
   return busyTimeoutMs;
 }
 
+/** Whether file modes say who may read a file: every platform but Windows. */
+export const OWNER_MODES = process.platform !== "win32";
+
 /**
  * Creates missing directories as 0700 and a missing file as 0600, then checks the files with
  * checkOwnerOnly. A symbolic link at the path is refused before anything is created, so no file
@@ -99,8 +102,13 @@ export function checkOwnerOnly(path: string): void {
       throw error;
     }
     if (!stats.isFile()) throw new StoreFileTypeError(file);
-    const mode = Number(stats.mode) & 0o777;
-    if ((mode & 0o077) !== 0) throw new StoreFileModeError(file, mode);
+    // Windows has no mode bits: Node and Bun report 0o666 for every writable file, whatever its
+    // access control list grants. There the store relies on its folder's ACL, which under the
+    // user profile grants only the user, SYSTEM and Administrators (docs/CLI.md, Windows).
+    if (OWNER_MODES) {
+      const mode = Number(stats.mode) & 0o777;
+      if ((mode & 0o077) !== 0) throw new StoreFileModeError(file, mode);
+    }
   }
 }
 

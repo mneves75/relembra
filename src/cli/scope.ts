@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { accessSync, constants, existsSync, realpathSync, statSync } from "node:fs";
-import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { homedir, userInfo } from "node:os";
+import { basename, delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { findGuardViolation } from "../guard.js";
 import { MAX_SCOPE_BYTES, utf8Bytes } from "../render.js";
 import { CliError } from "./errors.js";
@@ -31,9 +31,28 @@ export interface CliEnv {
  * without USER would land in a second scope. The uid is the same in every environment.
  */
 export function osUser(): string {
+  if (process.platform === "win32") return windowsUser();
   const uid = process.getuid?.();
   if (uid === undefined) throw new CliError("no-scope", "this platform has no OS user id");
   return `uid-${uid}`;
+}
+
+/**
+ * Windows has no uid: the user is `user-<name>`, the account name lowercased, since Windows
+ * compares account names without case. A runtime that cannot name the account ("unknown" or
+ * empty) is refused, never mapped to a shared scope.
+ */
+function windowsUser(): string {
+  let name: string;
+  try {
+    name = userInfo().username.toLowerCase();
+  } catch {
+    name = "";
+  }
+  if (name === "" || name === "unknown") {
+    throw new CliError("no-scope", "no scope: the OS did not name the user; set RELEMBRA_SCOPE");
+  }
+  return `user-${name}`;
 }
 
 /** The store file: RELEMBRA_HOME/relembra.db, RELEMBRA_HOME defaulting to ~/.relembra. */
@@ -79,6 +98,9 @@ export function resolveScopes(env: CliEnv, cwd: string): SessionScopes | undefin
   return global === undefined || global === session ? { session } : { session, global };
 }
 
+/** Git's file name: Windows runs only files named .exe. */
+const GIT = process.platform === "win32" ? "git.exe" : "git";
+
 /** Git gets this long to answer each question before the scope is refused. */
 const GIT_TIMEOUT_MS = 2_000;
 
@@ -109,17 +131,17 @@ function hostGit(env: CliEnv, cwd: string): { git: string; path: string } {
     }
     if (dirname(dir) === dir) break;
   }
-  const inside = (dir: string) => fences.some((f) => dir === f || dir.startsWith(`${f}/`));
+  const inside = (dir: string) => fences.some((f) => dir === f || dir.startsWith(`${f}${sep}`));
   const entries = (env.PATH ?? "")
-    .split(":")
+    .split(delimiter)
     .filter((entry) => isAbsolute(entry) && !inside(safeRealpath(entry)));
   for (const entry of entries) {
     try {
-      const candidate = realpathSync(join(entry, "git"));
+      const candidate = realpathSync(join(entry, GIT));
       if (inside(candidate)) continue;
       if (statSync(candidate).isFile()) {
         accessSync(candidate, constants.X_OK);
-        return { git: candidate, path: entries.join(":") };
+        return { git: candidate, path: entries.join(delimiter) };
       }
     } catch {
       // Not there, or not executable: keep looking.
