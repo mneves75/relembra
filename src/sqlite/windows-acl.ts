@@ -5,6 +5,7 @@
  * a folder on that path, or open the new folder before its ACL is set. Pure: the caller reads the
  * access lists with icacls.
  */
+import { win32 } from "node:path";
 
 /** One access control entry, as the rules need it. */
 export interface Ace {
@@ -95,6 +96,9 @@ const RIGHTS: Readonly<Record<string, number>> = {
 const FLAGS = new Set(["OI", "CI", "NP", "IO", "ID", "SA", "FA", "TP", "CR"]);
 const ALLOW_TYPES = new Set(["A", "XA", "OA", "ZA"]);
 const DENY_TYPES = new Set(["D", "XD", "OD"]);
+/** Entry types that may end in a condition; their allow ones count as unconditional here. */
+const CALLBACK_TYPES = new Set(["XA", "XD", "ZA"]);
+const GUID = /^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$/;
 
 const DELETE = 0x10000;
 const WRITE_DAC = 0x40000;
@@ -135,14 +139,21 @@ export function parseDacl(sddl: string): Ace[] | null {
     if (rest.startsWith("S:", index)) break;
     if (rest[index] !== "(")
       throw new Error(`unexpected text in access list: ${rest.slice(index)}`);
-    // A conditional entry holds parentheses of its own, so the entry ends where depth returns to 0.
+    // A conditional entry holds parentheses of its own, so the entry ends where depth returns to 0,
+    // counting none inside a quoted string, which SDDL delimits with `"` and never escapes.
     let depth = 0;
+    let quoted = false;
     let end = index;
     for (; end < rest.length; end++) {
-      if (rest[end] === "(") depth++;
-      else if (rest[end] === ")" && --depth === 0) break;
+      const char = rest[end];
+      if (char === '"') quoted = !quoted;
+      else if (quoted) continue;
+      else if (char === "(") depth++;
+      else if (char === ")" && --depth === 0) break;
     }
-    if (depth !== 0) throw new Error(`unclosed entry in access list: ${rest.slice(index)}`);
+    if (depth !== 0 || quoted) {
+      throw new Error(`unclosed entry in access list: ${rest.slice(index)}`);
+    }
     aces.push(parseAce(rest.slice(index + 1, end)));
     index = end + 1;
   }
@@ -151,10 +162,19 @@ export function parseDacl(sddl: string): Ace[] | null {
 
 function parseAce(text: string): Ace {
   const fields = text.split(";");
-  if (fields.length < 6) throw new Error(`malformed access entry: (${text})`);
-  const [type = "", flags = "", rights = "", , , sid = ""] = fields;
+  const [type = "", flags = "", rights = "", objectGuid = "", inheritGuid = "", sid = ""] = fields;
   const allow = ALLOW_TYPES.has(type);
   if (!allow && !DENY_TYPES.has(type)) throw new Error(`unknown access entry type: (${text})`);
+  // Only a callback entry may carry a condition, its seventh field; its text may hold `;` and
+  // quotes of its own. Every other field is checked, so no quote can hide in one.
+  const condition = fields.slice(6).join(";");
+  const conditionOk = CALLBACK_TYPES.has(type)
+    ? fields.length === 6 || (condition.startsWith("(") && condition.endsWith(")"))
+    : fields.length === 6;
+  if (fields.length < 6 || !conditionOk) throw new Error(`malformed access entry: (${text})`);
+  if (![objectGuid, inheritGuid].every((guid) => guid === "" || GUID.test(guid))) {
+    throw new Error(`malformed GUID in access entry: (${text})`);
+  }
   const flagList: string[] = flags.match(/../g) ?? [];
   if (flagList.join("") !== flags || flagList.some((flag) => !FLAGS.has(flag))) {
     throw new Error(`unknown access entry flags: (${text})`);
@@ -184,6 +204,23 @@ function parseRights(rights: string, text: string): number {
     mask = (mask | right) >>> 0;
   }
   return mask;
+}
+
+/**
+ * The folders whose access lists decide whether the store folder's path holds: its parent up to
+ * the drive root, written as given (an 8.3 short name stays short). Never the canonical path: a
+ * folder on this path that another account may swap would go unread, and the ACL steps use this
+ * path. Every folder here is read where it lies, so no other account can rename or replace one
+ * without a right the rules see: DELETE on it, or DELETE_CHILD on the folder above.
+ */
+export function storeFolderChain(storeFolder: string): string[] {
+  const chain: string[] = [];
+  let folder = win32.resolve(storeFolder);
+  for (let up = win32.dirname(folder); up !== folder; up = win32.dirname(folder)) {
+    chain.push(up);
+    folder = up;
+  }
+  return chain;
 }
 
 /**

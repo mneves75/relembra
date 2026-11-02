@@ -687,8 +687,10 @@ The release binaries `relembra-windows-x64.exe` and `relembra-windows-arm64.exe`
   world-writable place, such as `D:\data` under a drive root's default access list, is refused.
   Owners are not read, since no tool that comes with Windows prints one as a SID: a folder on the
   path that another account owns, but whose access list does not name that account, is not
-  detected. These checks run only when relembra creates a store, one `icacls` per folder on the
-  path. An existing store's ACL is not read again on every open, since that would cost a process
+  detected. `icacls /save` writes each access list to a file, in a folder under `TEMP` that
+  relembra first makes yours alone. `TEMP` itself is not checked: it must be a folder where no
+  other account can delete or rename what it holds, as the default under your profile is. These
+  checks run only when relembra creates a store, about one `icacls` per folder on the path. An existing store's ACL is not read again on every open, since that would cost a process
   per command: a store folder made by another tool, or whose ACL was widened later, is not
   detected.
 - **Hook.** `relembra init` prints the same session hook as elsewhere, a `sh` command line under

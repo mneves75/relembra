@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import {
   closeSync,
   existsSync,
@@ -7,7 +8,6 @@ import {
   mkdtempSync,
   openSync,
   readFileSync,
-  realpathSync,
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,7 +20,12 @@ import { MIGRATIONS, migrate, SchemaTooNewError, schemaVersion } from "./migrati
 export { StoreBusyError };
 
 import { walImage } from "./wal-image.js";
-import { type ChainFolder, chainRefusal, trustedAccounts } from "./windows-acl.js";
+import {
+  type ChainFolder,
+  chainRefusal,
+  storeFolderChain,
+  trustedAccounts,
+} from "./windows-acl.js";
 
 /** Thrown when an existing store file, or its -wal or -shm file, grants group or others access. */
 export class StoreFileModeError extends Error {
@@ -200,37 +205,35 @@ export function restrictFolderToOwner(dir: string): void {
  * Windows: refuses a store folder whose path another account could change (docs/specs/w-nv1/spec.md).
  * The ACL steps work on the folder's path, so they hold only while no other account can rename,
  * delete or re-permission a folder above it, make the store folder first, or open it before its
- * ACL is set. Every folder from the store folder's parent up to the drive root is read as SDDL
- * with `icacls /save`, which names accounts by SID, and judged by chainRefusal. A link on the
- * path is refused first: icacls would read its target, and whoever may change the link may point
- * it elsewhere. Owners are not read, since no stock tool prints one as a SID: an ancestor another
- * account owns, whose access list does not name that account, is not detected.
+ * ACL is set. Every folder from the store folder's parent up to the drive root, on the path as
+ * given (storeFolderChain), is read as SDDL with `icacls /save`, which names accounts by SID, and
+ * judged by chainRefusal. A link on the path is refused: icacls would read its target, and whoever
+ * may change the link may point it elsewhere. Owners are not read, since no stock tool prints one
+ * as a SID: an ancestor another account owns, whose access list does not name that account, is
+ * not detected.
  */
 function checkFolderChain(systemRoot: string | undefined, dir: string, sid: string): void {
-  const parent = win32.dirname(win32.resolve(dir));
-  if (parent === win32.resolve(dir)) return;
-  for (let folder = parent; ; folder = win32.dirname(folder)) {
+  const folders = storeFolderChain(dir);
+  for (const folder of folders) {
     if (lstatSync(folder).isSymbolicLink()) {
       throw new Error(
         `${folder} is a link; no store is created under it: use a path without links`,
       );
     }
-    if (win32.dirname(folder) === folder) break;
   }
+  if (folders.length === 0) return;
   const chain: ChainFolder[] = [];
-  const temp = mkdtempSync(join(tmpdir(), "relembra-acl-"));
+  const scratch = privateScratch(systemRoot, sid);
   try {
-    // With no link on the path, the real path names the same folders, written in full: a short
-    // 8.3 name is resolved, so no folder is read twice.
-    let folder = realpathSync.native(parent);
-    for (let holdsStoreFolder = true; ; holdsStoreFolder = false) {
-      chain.push({ path: folder, dacl: savedDacl(systemRoot, folder, temp), holdsStoreFolder });
-      const up = win32.dirname(folder);
-      if (up === folder) break;
-      folder = up;
+    for (const [index, folder] of folders.entries()) {
+      chain.push({
+        path: folder,
+        dacl: savedDacl(systemRoot, folder, scratch),
+        holdsStoreFolder: index === 0,
+      });
     }
   } finally {
-    rmSync(temp, { recursive: true, force: true });
+    rmSync(scratch, { recursive: true, force: true });
   }
   const refusal = chainRefusal(chain, trustedAccounts(sid));
   if (refusal !== undefined) {
@@ -241,17 +244,53 @@ function checkFolderChain(systemRoot: string | undefined, dir: string, sid: stri
 }
 
 /**
+ * A folder under TEMP that only the user can open, for the `icacls /save` files the chain check
+ * trusts. TEMP may let another account write in it: Node's mkdtemp gives the folder TEMP's
+ * inherited ACL (Bun's gives it an owner-only one), so the folder is made the user's, and its ACL
+ * replaced by the user alone, read back on stdout, which no other account can change. A folder
+ * another account swapped in keeps that account's own entries, so it holds more than one, or it
+ * refuses `/setowner`. A handle another account kept from before cannot open the files, which
+ * inherit the user-only ACL, nor make one first, since each has a random name. TEMP must still
+ * keep other accounts from deleting or renaming its entries; the default, under the profile, does.
+ */
+function privateScratch(systemRoot: string | undefined, sid: string): string {
+  const scratch = mkdtempSync(join(tmpdir(), "relembra-acl-"));
+  try {
+    runSystemTool(systemRoot, "icacls.exe", [scratch, "/setowner", `*${sid}`]);
+    runSystemTool(systemRoot, "icacls.exe", [
+      scratch,
+      "/inheritance:r",
+      "/grant:r",
+      `*${sid}:(OI)(CI)F`,
+    ]);
+    const entries = runSystemTool(systemRoot, "icacls.exe", [scratch])
+      .split(/\r?\n/)
+      .filter((line) => line.includes(":("));
+    if (entries.length !== 1) {
+      throw new Error(
+        `${scratch} grants another account access (${entries.length} entries, not 1); no store is created: point TEMP at a folder only you can change`,
+      );
+    }
+    return scratch;
+  } catch (error) {
+    rmSync(scratch, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+/**
  * A folder's access list as SDDL. `icacls <folder> /save <file>` writes the folder's name on one
  * line (none for a drive root) and its access list on the next, in UTF-16 or the console's
  * encoding; parseDacl drops the SACL that follows it on that line.
  */
-function savedDacl(systemRoot: string | undefined, folder: string, temp: string): string {
-  const file = join(temp, "acl");
+function savedDacl(systemRoot: string | undefined, folder: string, scratch: string): string {
+  // A fresh random name for each save, so no account can make the file first.
+  const file = join(scratch, randomBytes(16).toString("hex"));
   runSystemTool(systemRoot, "icacls.exe", [folder, "/save", file]);
   const bytes = readFileSync(file);
   const utf16 = (bytes[0] === 0xff && bytes[1] === 0xfe) || bytes[1] === 0;
   const lines = (utf16 ? bytes.toString("utf16le") : bytes.toString("utf8"))
-    .replace(/^﻿/, "")
+    .replace(/^\uFEFF/, "")
     .split(/\r?\n/)
     .filter((line) => line.trim() !== "");
   // A drive root has no name, so its file holds the access list alone.

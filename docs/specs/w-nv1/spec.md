@@ -35,9 +35,12 @@ assumed here:
 ## Rules
 
 Let P be the folder that holds the store folder, and let the chain be P and every folder above
-it, read both on the path as given and on its canonical real path, since a junction or a short
-8.3 name may lie between them. An entry is "foreign" when it is an allow entry for an untrusted
-SID. relembra refuses when:
+it, on the path as given, never its canonical form. A volume root cannot be renamed, and every
+folder below it can be swapped only with DELETE on it (R1) or DELETE_CHILD on the folder above
+(R2), which the chain's own access lists show. So when they pass, the folders read are the ones
+the ACL steps act on. Reading the canonical path instead would skip a folder on this one (Sol,
+PR #7). A link anywhere on the chain is refused. An entry is "foreign" when it is an allow entry
+for an untrusted SID. relembra refuses when:
 
 | Rule | Where | Foreign entry that applies to the folder itself and grants | Why |
 |---|---|---|---|
@@ -47,7 +50,22 @@ SID. relembra refuses when:
 | R4 | P, entries inherited by subfolders (`CI`), inherit-only included | anything beyond read and execute | the new store folder grants it until the ACL step, long enough to open a handle that keeps it |
 
 A null DACL counts as full control for Everyone. An access list that cannot be read, or that
-holds an ACE type or right this parser does not know, is refused.
+holds an ACE type, right, flag, GUID or shape this parser does not know, is refused. A callback
+entry's condition is skipped as one field, quoted strings included, and the entry counts as
+unconditional.
+
+## Where the access lists are written
+
+`icacls /save` needs a file, and the check trusts what the file says. The file goes in a scratch
+folder under TEMP that is first made the user's (`/setowner`), then given an ACL for the user
+alone (`/inheritance:r /grant:r`), checked on stdout to hold exactly one entry. Each save then
+gets a fresh random name. Under Bun, mkdtemp already gives the folder an owner-only ACL; under
+Node it inherits TEMP's, and these steps close that window. A handle another account kept from
+the window cannot open the files, which inherit the user-only ACL, nor make one first, since
+each name is random. Remaining condition: TEMP, and every folder above it, must keep other
+accounts from deleting or renaming their entries and must not be owned by another account. The
+default `%LOCALAPPDATA%\Temp` under the profile meets it. TEMP's chain is not read: it would
+have to be read through files in TEMP, which the same account could forge.
 
 ## Acceptance
 

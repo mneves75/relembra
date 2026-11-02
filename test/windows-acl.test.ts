@@ -4,7 +4,12 @@
  * Windows tests in sqlite-windows-acl.test.ts read real access lists with icacls.
  */
 import { describe, expect, test } from "bun:test";
-import { chainRefusal, parseDacl, trustedAccounts } from "../src/sqlite/windows-acl.js";
+import {
+  chainRefusal,
+  parseDacl,
+  storeFolderChain,
+  trustedAccounts,
+} from "../src/sqlite/windows-acl.js";
 
 const USER = "S-1-5-21-1-2-3-1001";
 const TRUSTED = trustedAccounts(USER);
@@ -77,6 +82,32 @@ describe("parseDacl reads an SDDL access list", () => {
   test("a null DACL and an empty one differ", () => {
     expect(parseDacl("D:NO_ACCESS_CONTROL")).toBeNull();
     expect(parseDacl("D:P")).toEqual([]);
+  });
+
+  test("a parenthesis inside a condition's quoted string does not end the entry", () => {
+    // Sol's review of PR #7: counted naively, the first entry swallows the Users grant.
+    const sddl = 'D:(XA;;FR;;;SY;(@User.Title=="("))(A;;FA;;;BU)(XA;;FR;;;SY;(@User.Title==")"))';
+    expect(parseDacl(sddl)?.map((ace) => ace.sid)).toEqual([
+      "S-1-5-18",
+      "S-1-5-32-545",
+      "S-1-5-18",
+    ]);
+    expect(chainRefusal(chain(sddl), TRUSTED)).toMatch(/\(S-1-5-32-545\)/);
+    expect(parseDacl('D:(XA;;FR;;;SY;(@User.Title==";)("))')).toHaveLength(1);
+  });
+
+  test("quotes outside a condition, and a condition on a plain entry, are refused", () => {
+    for (const sddl of [
+      'D:(A;;FR;"(;;;SY)(A;;FA;;;BU)',
+      "D:(A;;FR;;;SY;(@User.Title==1))",
+      "D:(XA;;FR;;;SY;@User.Title==1)",
+      'D:(XA;;FR;;;SY;(@User.Title=="x)',
+      "D:(A;;FR;not-a-guid;;SY)",
+    ]) {
+      expect(() => parseDacl(sddl)).toThrow();
+    }
+    // A callback entry without a condition is an allow like any other.
+    expect(parseDacl("D:(XA;;FA;;;BU)")?.[0]?.sid).toBe("S-1-5-32-545");
   });
 
   test("an unknown right, ACE type or shape is refused, never skipped", () => {
@@ -157,5 +188,25 @@ describe("chainRefusal applies the four rules", () => {
 
   test("OWNER RIGHTS is another account: the owner is not read", () => {
     expect(chainRefusal(chain(PROFILE, "D:(A;;WD;;;OW)"), TRUSTED)).toMatch(/\(S-1-3-4\)/);
+  });
+});
+
+describe("storeFolderChain is the path as given, never its canonical form", () => {
+  test("every folder from the store folder's parent to the root, short names kept", () => {
+    // Sol's review of PR #7: reading the canonical path instead skips what lies on this one.
+    expect(storeFolderChain("C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\x\\home")).toEqual([
+      "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\x",
+      "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp",
+      "C:\\Users\\RUNNER~1\\AppData\\Local",
+      "C:\\Users\\RUNNER~1\\AppData",
+      "C:\\Users\\RUNNER~1",
+      "C:\\Users",
+      "C:\\",
+    ]);
+  });
+
+  test("a store folder at a drive root has no chain", () => {
+    expect(storeFolderChain("D:\\")).toEqual([]);
+    expect(storeFolderChain("D:\\home")).toEqual(["D:\\"]);
   });
 });
