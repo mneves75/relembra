@@ -1,0 +1,10 @@
+# The Bun that builds every release binary: one canary, by its immutable npm package
+# (@oven/bun-<platform>@<version>) and npm's sha512 integrity, so every platform is built by the
+# same revision. scripts/bun-toolchain.sh downloads, checks and unpacks it.
+version 1.4.4-canary.20261029.1
+revision 1.4.4-canary.1+da867c60b
+darwin-aarch64 sha512-dfhnbTwtbjme43X1KTtZ/U/pXeKx7L5GunsPfJ/83imaHNmQFddsCg6DvAlvM9f64UX6Vx7e/q8bwMvX85C/+g==
+linux-x64 sha512-fs1Yta+8YNs62dxxBGjCccg3tu1sn2xw8SqWx9KaNM/KkEeVp+NWcylDJQs6JFPndE1jA8PIOmmxXvzpnhvkdg==
+linux-aarch64 sha512-wdsFsIb7HCnGHu90SHCK5GFQDhm7GeKahWHJoYwIpRzDw3DBVr6jED7vVmTLWK6YMJjpZz1/7omVeJ/uU9gdOw==
+windows-x64 sha512-APMIvCsv+dckccAqvii/8V4HEMadAIZIcIEVZZTYcS8OKMdfaD2hgUAk8AGScB8zL/3IUCAy05nFyLAGIRzgKg==
+windows-aarch64 sha512-fueVZ65A5h/sJfkABrFIquI2KnHv3Xsw3idoLUGZI3eW/FWs9Vi+5Ay0Pn6uQf5fKJmi3yICV/aoXoJs3Idi9g==

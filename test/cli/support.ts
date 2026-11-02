@@ -24,7 +24,7 @@ function resolveBinary(): string | undefined {
     encoding: "utf8",
     timeout: 300_000,
   });
-  const path = join(ROOT, "bin", "relembra");
+  const path = join(ROOT, "bin", process.platform === "win32" ? "relembra.exe" : "relembra");
   if (built.status !== 0) {
     if (REQUIRE) throw new Error(`the CLI build failed:\n${built.stdout}\n${built.stderr}`);
     return undefined;
