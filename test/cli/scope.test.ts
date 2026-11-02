@@ -205,7 +205,7 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
   cliTest(
     "the OS user part is the uid: USER, set, changed or unset, does not move the scope",
     () => {
-      // USERNAME is Windows' variable; there the user part is the account name, never read from it.
+      // USERNAME is Windows' variable; there the user part is the SID, never read from it.
       for (const env of [
         { USER: "alice" },
         { USER: "" },

@@ -2,8 +2,9 @@ import { test } from "bun:test";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
-import { tmpdir, userInfo } from "node:os";
+import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { windowsSid } from "../platform-support.js";
 
 export const ROOT = join(import.meta.dir, "..", "..");
 const { RELEMBRA_BINARY, RELEMBRA_REQUIRE_BINARY, CI, PATH, TMPDIR } = process.env;
@@ -69,12 +70,10 @@ export function posixCliTest(
 
 /**
  * The OS user part of a scope: the uid (see src/cli/scope.ts on why not the name), and on Windows,
- * which has none, the lowercased account name.
+ * which has none, the logon account's SID.
  */
 export const USER =
-  process.platform === "win32"
-    ? `user-${userInfo().username.toLowerCase()}`
-    : `uid-${process.getuid?.()}`;
+  process.platform === "win32" ? `sid-${windowsSid()}` : `uid-${process.getuid?.()}`;
 
 /** The first 16 hex characters of the sha256 of a project key (docs/CLI.md, Scope). */
 export const hash16 = (key: string) => createHash("sha256").update(key).digest("hex").slice(0, 16);

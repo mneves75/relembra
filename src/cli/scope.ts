@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { findGuardViolation } from "../guard.js";
 import { MAX_SCOPE_BYTES, utf8Bytes } from "../render.js";
+import { windowsUserSid } from "../sqlite/database.js";
 import { CliError } from "./errors.js";
 import type { SessionScopes } from "./wake.js";
 
@@ -40,31 +41,22 @@ export function osUser(env: CliEnv): string {
 }
 
 /**
- * Windows has no uid: the user is `user-<name>`, the account name lowercased, since Windows
- * compares account names without case. The name comes from the logon token, through whoami, not
- * from os.userInfo(): Bun reads that from %USERNAME% on Windows (seen on the hosted runners), which
- * the hook's `env -i` clears and any caller can set. An account whoami cannot name is refused,
- * never mapped to a shared scope. The logon account cannot change while the process runs, so
- * whoami runs once: the policy builds a principal for every operation.
+ * Windows has no uid: the user is `sid-<SID>`, the logon account's security identifier, which,
+ * like a uid, is one per account (`PC\alex` and `CORP\alex` differ) and survives a rename. It
+ * comes from the process token through whoami, never from os.userInfo(): Bun reads that from
+ * %USERNAME% on Windows (seen on the hosted runners), which the hook's `env -i` clears and any
+ * caller can set. An account whoami cannot name is refused, never mapped to a shared scope. The
+ * account cannot change while the process runs, so whoami runs once: the policy builds a principal
+ * for every operation.
  */
 let windowsAccount: string | undefined;
 function windowsUser(systemRoot: string | undefined): string {
   if (windowsAccount !== undefined) return windowsAccount;
-  const root = systemRoot === undefined || systemRoot === "" ? "C:\\Windows" : systemRoot;
-  const system32 = join(root, "System32");
-  const run = spawnSync(join(system32, "whoami.exe"), [], {
-    encoding: "utf8",
-    shell: false,
-    windowsHide: true,
-    timeout: 10_000,
-  });
-  // `domain\account`, one line.
-  const printed = run.status === 0 ? run.stdout.trim() : "";
-  const name = printed.slice(printed.lastIndexOf("\\") + 1).toLowerCase();
-  if (name === "" || name === "unknown") {
+  try {
+    windowsAccount = `sid-${windowsUserSid(systemRoot)}`;
+  } catch {
     throw new CliError("no-scope", "no scope: the OS did not name the user; set RELEMBRA_SCOPE");
   }
-  windowsAccount = `user-${name}`;
   return windowsAccount;
 }
 

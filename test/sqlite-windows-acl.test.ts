@@ -1,84 +1,114 @@
 /**
  * Windows has no file modes, so a new store's folder gets an ACL of its own (src/sqlite/database.ts,
  * restrictFolderToOwner): only the user, SYSTEM and Administrators, nothing inherited. Read back
- * with icacls. Runs on Windows only; elsewhere the mode checks in sqlite.test.ts cover the store.
+ * with icacls. The ACL tests run on Windows only; elsewhere the mode checks in sqlite.test.ts
+ * cover the store.
+ *
+ * Bun's mkdirSync and mkdtempSync give a folder an explicit owner-only ACL, so a folder they make
+ * would pass these tests with or without relembra's ACL. The tests use a parent that grants
+ * Everyone read to everything made in it, and folders made by cmd, which inherit that grant.
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createOwnerOnly } from "../src/sqlite/database.js";
+import { createOwnerOnly, windowsSystem32 } from "../src/sqlite/database.js";
+import { windowsSid, windowsTool } from "./platform-support.js";
 
 const WINDOWS = process.platform === "win32";
+const EVERYONE_READS = "*S-1-1-0:(OI)(CI)R";
 const dirs: string[] = [];
 
 afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-/** icacls's listing for a path. */
-function acl(path: string): string {
-  const system32 = join(process.env["SystemRoot"] ?? "C:\\Windows", "System32");
-  const run = spawnSync(join(system32, "icacls.exe"), [path], { encoding: "utf8" });
-  if (run.status !== 0) throw new Error(`icacls: ${run.stderr || run.stdout}`);
-  return run.stdout;
+const acl = (path: string) => windowsTool("icacls.exe", [path]);
+
+/** The grant lines icacls lists for `path`, the path itself removed. */
+const grants = (path: string) =>
+  acl(path)
+    .split(/\r?\n/)
+    .map((line) => line.replace(path, "").trim())
+    .filter((line) => line.includes(":("));
+
+/** A temporary folder whose ACL lets Everyone read whatever is made in it. */
+function leakyParent(): string {
+  const parent = mkdtempSync(join(tmpdir(), "relembra-acl-"));
+  dirs.push(parent);
+  windowsTool("icacls.exe", [parent, "/grant", EVERYONE_READS]);
+  return parent;
 }
 
-/** The user's SID, as whoami prints it. */
-function sid(): string {
-  const system32 = join(process.env["SystemRoot"] ?? "C:\\Windows", "System32");
-  const run = spawnSync(join(system32, "whoami.exe"), ["/user", "/fo", "csv", "/nh"], {
-    encoding: "utf8",
-  });
-  return /"(S-1-[0-9-]+)"\s*$/.exec(run.stdout)?.[1] ?? "";
+/** A folder made by cmd, so it inherits its parent's ACL as any program's folder would. */
+function plainFolder(path: string): string {
+  windowsTool("cmd.exe", ["/d", "/c", "mkdir", path]);
+  return path;
 }
+
+/** The store's folder and file grant the user, SYSTEM and Administrators, and nobody else. */
+function expectOwnerOnly(home: string, store: string) {
+  const folder = grants(home);
+  expect(folder.join("\n")).not.toMatch(/Everyone|Authenticated Users|BUILTIN\\Users|\(I\)/);
+  expect(folder).toHaveLength(3);
+  const file = grants(store);
+  expect(file.join("\n")).not.toContain("Everyone");
+  expect(file).toHaveLength(3);
+  expect(file.every((line) => line.includes("(I)"))).toBe(true);
+}
+
+describe("the System32 folder whoami and icacls run from", () => {
+  test("SystemRoot names it when it is a drive path", () => {
+    expect(windowsSystem32("D:\\Win")).toBe("D:\\Win\\System32");
+  });
+
+  test("an unset, empty or relative SystemRoot is C:\\Windows, never the working directory", () => {
+    for (const root of [undefined, "", "Windows", ".\\Windows", "\\Windows"]) {
+      expect({ root, system32: windowsSystem32(root) }).toEqual({
+        root,
+        system32: "C:\\Windows\\System32",
+      });
+    }
+  });
+});
 
 describe.skipIf(!WINDOWS)("Windows store ACL", () => {
-  test("a plain folder made where the store makes its own inherits its ACL (positive control)", () => {
-    // mkdtemp gives its folder an explicit ACL, so the control is a folder made inside one, as
-    // createOwnerOnly makes the store's folder below.
-    const parent = mkdtempSync(join(tmpdir(), "relembra-acl-plain-"));
-    dirs.push(parent);
-    const plain = join(parent, "home");
-    mkdirSync(plain);
-    expect(acl(plain)).toContain("(I)");
+  test("positive control: a folder made in the leaky parent inherits Everyone's read", () => {
+    const home = plainFolder(join(leakyParent(), "home"));
+    expect(acl(home)).toMatch(/Everyone:\(I\)/);
   });
 
-  test("a new store's folder and file grant only the user, SYSTEM and Administrators", () => {
-    const parent = mkdtempSync(join(tmpdir(), "relembra-acl-"));
-    dirs.push(parent);
-    const home = join(parent, "home");
+  test("a store in a folder that inherited Everyone's read grants only the three", () => {
+    const home = plainFolder(join(leakyParent(), "home"));
     const store = join(home, "relembra.db");
     createOwnerOnly(store);
-    const folder = acl(home);
-    expect(folder).not.toContain("(I)");
-    const user = sid();
-    expect(user).toMatch(/^S-1-5-21-/);
-    // icacls prints names; /save would print SIDs, but names are what a person audits. The three
-    // grants, and nothing else, are on the folder: one line each, plus the summary line.
-    const grants = folder
-      .split(/\r?\n/)
-      .map((line) => line.replace(home, "").trim())
-      .filter((line) => line.includes(":("));
-    expect(grants).toHaveLength(3);
-    expect(folder).not.toMatch(/Everyone|Authenticated Users|BUILTIN\\Users/);
-    // The store file inherits exactly those three.
-    const file = acl(store)
-      .split(/\r?\n/)
-      .map((line) => line.replace(store, "").trim())
-      .filter((line) => line.includes(":("));
-    expect(file).toHaveLength(3);
-    expect(file.every((line) => line.includes("(I)"))).toBe(true);
+    expectOwnerOnly(home, store);
+    expect(windowsSid()).toMatch(/^S-1-5-21-/);
+  });
+
+  test("an explicit grant to Everyone on an existing home is dropped before the store exists", () => {
+    const home = plainFolder(join(leakyParent(), "home"));
+    windowsTool("icacls.exe", [home, "/grant", EVERYONE_READS]);
+    // Positive control: the grant is explicit, so dropping inheritance alone would keep it.
+    expect(acl(home)).toMatch(/Everyone:\(OI\)/);
+    const store = join(home, "relembra.db");
+    createOwnerOnly(store);
+    expectOwnerOnly(home, store);
+  });
+
+  test("a home relembra makes itself, in the leaky parent, grants only the three", () => {
+    const home = join(leakyParent(), "home");
+    const store = join(home, "relembra.db");
+    createOwnerOnly(store);
+    expectOwnerOnly(home, store);
   });
 
   test("an existing store's folder is left as it is", () => {
-    const parent = mkdtempSync(join(tmpdir(), "relembra-acl-again-"));
-    dirs.push(parent);
-    const store = join(parent, "relembra.db");
+    const home = plainFolder(join(leakyParent(), "home"));
+    const store = join(home, "relembra.db");
     createOwnerOnly(store);
-    const before = acl(parent);
+    const before = acl(home);
     createOwnerOnly(store);
-    expect(acl(parent)).toBe(before);
+    expect(acl(home)).toBe(before);
   });
 });

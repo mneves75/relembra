@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, win32 } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 import { StoreBusyError } from "../errors.js";
@@ -91,30 +91,55 @@ export function createOwnerOnly(path: string): void {
 }
 
 /**
+ * Windows' System32 folder under `systemRoot` (%SystemRoot%). An empty or relative value falls
+ * back to `C:\Windows`: a relative executable path would be resolved against the working
+ * directory, which may be a repository's.
+ */
+export function windowsSystem32(systemRoot: string | undefined): string {
+  const root =
+    systemRoot !== undefined && win32.isAbsolute(systemRoot) && /^[A-Za-z]:/.test(systemRoot)
+      ? systemRoot
+      : "C:\\Windows";
+  return win32.join(root, "System32");
+}
+
+/** Runs a System32 tool; any failure is thrown with its output. */
+function runSystemTool(systemRoot: string | undefined, exe: string, args: string[]): string {
+  const result = spawnSync(win32.join(windowsSystem32(systemRoot), exe), args, {
+    encoding: "utf8",
+    shell: false,
+    windowsHide: true,
+    timeout: 10_000,
+  });
+  if (result.status !== 0) {
+    throw new Error(`${exe} failed (exit ${result.status}): ${result.stderr || result.stdout}`);
+  }
+  return result.stdout;
+}
+
+/** The logon account's SID, from the process token as whoami prints it. Thrown when none. */
+export function windowsUserSid(systemRoot: string | undefined): string {
+  // `"HOST\user","S-1-5-21-..."`: the SID is the last quoted field.
+  const printed = runSystemTool(systemRoot, "whoami.exe", ["/user", "/fo", "csv", "/nh"]);
+  const sid = /"(S-1-[0-9-]+)"\s*$/.exec(printed)?.[1];
+  if (sid === undefined) throw new Error("whoami did not print the user's SID");
+  return sid;
+}
+
+/**
  * Windows: replaces the folder's ACL with full control for the current user, SYSTEM and the
- * Administrators group only, inherited by everything in it, and drops what it inherited. Accounts
- * are named by SID (whoami prints the user's), so no account name or system language is
- * involved. Any failure is thrown: a store is never created in a folder others may read.
+ * Administrators group only, inherited by everything in it. `/reset` first drops every explicit
+ * grant a folder that already existed carried, then `/inheritance:r` drops what it inherited, so
+ * the three grants are the whole ACL. Accounts are named by SID, so no account name or system
+ * language is involved. Any failure is thrown: a store is never created in a folder others may
+ * read.
  */
 export function restrictFolderToOwner(dir: string): void {
-  const system32 = join(process.env["SystemRoot"] ?? "C:\\Windows", "System32");
-  const run = (exe: string, args: string[]) => {
-    const result = spawnSync(join(system32, exe), args, {
-      encoding: "utf8",
-      shell: false,
-      windowsHide: true,
-      timeout: 10_000,
-    });
-    if (result.status !== 0) {
-      throw new Error(`${exe} failed (exit ${result.status}): ${result.stderr || result.stdout}`);
-    }
-    return result.stdout;
-  };
-  // `"HOST\user","S-1-5-21-..."`: the SID is the last quoted field.
-  const sid = /"(S-1-[0-9-]+)"\s*$/.exec(run("whoami.exe", ["/user", "/fo", "csv", "/nh"]))?.[1];
-  if (sid === undefined) throw new Error("whoami did not print the user's SID");
+  const systemRoot = process.env["SystemRoot"];
+  const sid = windowsUserSid(systemRoot);
   const grant = (who: string) => ["/grant:r", `*${who}:(OI)(CI)F`];
-  run("icacls.exe", [
+  runSystemTool(systemRoot, "icacls.exe", [dir, "/reset"]);
+  runSystemTool(systemRoot, "icacls.exe", [
     dir,
     "/inheritance:r",
     ...grant(sid),
