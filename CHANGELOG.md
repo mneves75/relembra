@@ -16,8 +16,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
   A link on the path is refused too. This replaces the 1.0.0-beta.2 limit "protected only when no
   other account can change its folder or the folder's parent". A store under a shared or
-  world-writable folder is now refused when it is created; existing stores are untouched. Folder
-  owners are still not read ([docs/CLI.md](docs/CLI.md#windows)).
+  world-writable folder is now refused when it is created; existing stores are untouched. Not
+  checked: folder owners, and `TEMP`, where the access lists are written. `TEMP` must give other
+  accounts no access to what is made in it, as the default under the profile does
+  ([docs/CLI.md](docs/CLI.md#windows)).
 
 ## [1.0.0-beta.2] - 2026-11-02
 

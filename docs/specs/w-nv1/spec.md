@@ -57,15 +57,27 @@ unconditional.
 ## Where the access lists are written
 
 `icacls /save` needs a file, and the check trusts what the file says. The file goes in a scratch
-folder under TEMP that is first made the user's (`/setowner`), then given an ACL for the user
-alone (`/inheritance:r /grant:r`), checked on stdout to hold exactly one entry. Each save then
-gets a fresh random name. Under Bun, mkdtemp already gives the folder an owner-only ACL; under
-Node it inherits TEMP's, and these steps close that window. A handle another account kept from
-the window cannot open the files, which inherit the user-only ACL, nor make one first, since
-each name is random. Remaining condition: TEMP, and every folder above it, must keep other
-accounts from deleting or renaming their entries and must not be owned by another account. The
-default `%LOCALAPPDATA%\Temp` under the profile meets it. TEMP's chain is not read: it would
-have to be read through files in TEMP, which the same account could forge.
+folder under TEMP that gets the store folder's own ACL: owned by the user (`/setowner`), full
+control for the user, SYSTEM and Administrators only (`/inheritance:r /grant:r`), and checked on
+stdout to hold exactly those entries. Each save gets a fresh random name. Bun's mkdtemp already
+gives the folder those three entries, explicit. Node's gives it TEMP's inherited ACL until these
+steps.
+
+**Remaining condition: TEMP is trusted.** These steps act on the folder after it exists, so
+TEMP, and every folder above it, must meet three conditions. The default `%LOCALAPPDATA%\Temp`
+under the profile meets all three; the owner accepted this residual on 2026-11-02.
+
+1. **TEMP gives other accounts no inherited access to folders made in it.** Sol, round 2 of
+   PR #7: a handle opened before the steps keeps its access, and FILE_WRITE_ATTRIBUTES is enough
+   to turn the empty folder into a junction to one that account controls, so it could forge the
+   saved files.
+2. **It does not let other accounts delete or rename its entries.**
+3. **It is not owned by another account.**
+
+TEMP's chain is not read: it would have to be read through files in TEMP, which the same
+account could forge. Creating the folder already private, in one step, needs CreateDirectoryW
+with a security descriptor, so experimental FFI in both runtimes; it was the rejected
+alternative.
 
 ## Acceptance
 

@@ -244,31 +244,32 @@ function checkFolderChain(systemRoot: string | undefined, dir: string, sid: stri
 }
 
 /**
- * A folder under TEMP that only the user can open, for the `icacls /save` files the chain check
- * trusts. TEMP may let another account write in it: Node's mkdtemp gives the folder TEMP's
- * inherited ACL (Bun's gives it an owner-only one), so the folder is made the user's, and its ACL
- * replaced by the user alone, read back on stdout, which no other account can change. A folder
- * another account swapped in keeps that account's own entries, so it holds more than one, or it
- * refuses `/setowner`. A handle another account kept from before cannot open the files, which
- * inherit the user-only ACL, nor make one first, since each has a random name. TEMP must still
- * keep other accounts from deleting or renaming its entries; the default, under the profile, does.
+ * A folder under TEMP for the `icacls /save` files the chain check trusts, with the store
+ * folder's own ACL: owned by the user, and full control for the user, SYSTEM and Administrators
+ * only, read back on stdout. Bun's mkdtemp already gives it those three entries, explicit; Node's
+ * gives it TEMP's inherited ACL until these steps. Each file gets a random name, so no account can
+ * make one first. The steps act on the folder's path after it exists, so TEMP is trusted for what
+ * they cannot see (docs/specs/w-nv1/spec.md): it must give other accounts no inherited access to
+ * folders made in it (a handle opened before these steps keeps its access, and could turn the
+ * folder into a junction), must not let them delete or rename its entries, and must not be theirs.
+ * The default, under the user's profile, meets that.
  */
 function privateScratch(systemRoot: string | undefined, sid: string): string {
   const scratch = mkdtempSync(join(tmpdir(), "relembra-acl-"));
   try {
+    const accounts = storeFolderAccounts(sid);
     runSystemTool(systemRoot, "icacls.exe", [scratch, "/setowner", `*${sid}`]);
     runSystemTool(systemRoot, "icacls.exe", [
       scratch,
       "/inheritance:r",
-      "/grant:r",
-      `*${sid}:(OI)(CI)F`,
+      ...accounts.flatMap((who) => ["/grant:r", `*${who}:(OI)(CI)F`]),
     ]);
     const entries = runSystemTool(systemRoot, "icacls.exe", [scratch])
       .split(/\r?\n/)
       .filter((line) => line.includes(":("));
-    if (entries.length !== 1) {
+    if (entries.length !== accounts.length) {
       throw new Error(
-        `${scratch} grants another account access (${entries.length} entries, not 1); no store is created: point TEMP at a folder only you can change`,
+        `${scratch} grants another account access (${entries.length} entries, not ${accounts.length}); no store is created: point TEMP at a folder only you can change`,
       );
     }
     return scratch;
