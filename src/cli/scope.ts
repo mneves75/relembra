@@ -45,19 +45,16 @@ export function osUser(env: CliEnv): string {
  * like a uid, is one per account (`PC\alex` and `CORP\alex` differ) and survives a rename. It
  * comes from the process token through whoami, never from os.userInfo(): Bun reads that from
  * %USERNAME% on Windows (seen on the hosted runners), which the hook's `env -i` clears and any
- * caller can set. An account whoami cannot name is refused, never mapped to a shared scope. The
- * account cannot change while the process runs, so whoami runs once: the policy builds a principal
- * for every operation.
+ * caller can set. An account whoami cannot name is refused, never mapped to a shared scope.
+ * windowsUserSid runs whoami once per process, though the policy builds a principal for every
+ * operation.
  */
-let windowsAccount: string | undefined;
 function windowsUser(systemRoot: string | undefined): string {
-  if (windowsAccount !== undefined) return windowsAccount;
   try {
-    windowsAccount = `sid-${windowsUserSid(systemRoot)}`;
+    return `sid-${windowsUserSid(systemRoot)}`;
   } catch {
     throw new CliError("no-scope", "no scope: the OS did not name the user; set RELEMBRA_SCOPE");
   }
-  return windowsAccount;
 }
 
 /** The store file: RELEMBRA_HOME/relembra.db, RELEMBRA_HOME defaulting to ~/.relembra. */

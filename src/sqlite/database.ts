@@ -129,12 +129,20 @@ function runSystemTool(systemRoot: string | undefined, exe: string, args: string
   return result.stdout;
 }
 
-/** The logon account's SID, from the process token as whoami prints it. Thrown when none. */
+let userSid: string | undefined;
+
+/**
+ * The logon account's SID, from the process token as whoami prints it. Thrown when none. The
+ * account cannot change while the process runs, so whoami runs once: the CLI's scope and a new
+ * store's ACL both ask.
+ */
 export function windowsUserSid(systemRoot: string | undefined): string {
+  if (userSid !== undefined) return userSid;
   // `"HOST\user","S-1-5-21-..."`: the SID is the last quoted field.
   const printed = runSystemTool(systemRoot, "whoami.exe", ["/user", "/fo", "csv", "/nh"]);
   const sid = /"(S-1-[0-9-]+)"\s*$/.exec(printed)?.[1];
   if (sid === undefined) throw new Error("whoami did not print the user's SID");
+  userSid = sid;
   return sid;
 }
 
