@@ -98,8 +98,10 @@ export function resolveScopes(env: CliEnv, cwd: string): SessionScopes | undefin
   return global === undefined || global === session ? { session } : { session, global };
 }
 
+const WINDOWS = process.platform === "win32";
+
 /** Git's file name: Windows runs only files named .exe. */
-const GIT = process.platform === "win32" ? "git.exe" : "git";
+const GIT = WINDOWS ? "git.exe" : "git";
 
 /** Git gets this long to answer each question before the scope is refused. */
 const GIT_TIMEOUT_MS = 2_000;
@@ -131,13 +133,16 @@ function hostGit(env: CliEnv, cwd: string): { git: string; path: string } {
     }
     if (dirname(dir) === dir) break;
   }
-  const inside = (dir: string) => fences.some((f) => dir === f || dir.startsWith(`${f}${sep}`));
+  // Windows paths ignore case, so a fence compared by bytes would let C:\REPO\bin past C:\repo.
+  const fold = (path: string) => (WINDOWS ? path.toLowerCase() : path);
+  const inside = (dir: string) =>
+    fences.some((f) => fold(dir) === fold(f) || fold(dir).startsWith(fold(`${f}${sep}`)));
   const entries = (env.PATH ?? "")
     .split(delimiter)
     .filter((entry) => isAbsolute(entry) && !inside(safeRealpath(entry)));
   for (const entry of entries) {
     try {
-      const candidate = realpathSync(join(entry, GIT));
+      const candidate = realpath(join(entry, GIT));
       if (inside(candidate)) continue;
       if (statSync(candidate).isFile()) {
         accessSync(candidate, constants.X_OK);
@@ -326,9 +331,17 @@ function localKey(path: string, base: () => string): string {
   return `file:${safeRealpath(absolute).replace(/(?<=.)\/+$/, "")}`;
 }
 
+/**
+ * The real path. On Windows the native call, which also gives the canonical case and long names,
+ * so one folder reached as C:\Repo and c:\repo is one project and one fence.
+ */
+function realpath(path: string): string {
+  return WINDOWS ? realpathSync.native(path) : realpathSync(path);
+}
+
 function safeRealpath(path: string): string {
   try {
-    return realpathSync(path);
+    return realpath(path);
   } catch {
     return resolve(path);
   }

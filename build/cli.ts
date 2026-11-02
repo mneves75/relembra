@@ -14,8 +14,9 @@ const BIN = join(ROOT, "bin");
 /** Windows runs only files named .exe; Bun would add the suffix to a bare --outfile anyway. */
 const NAME = process.platform === "win32" ? "relembra.exe" : "relembra";
 const OUT = join(BIN, NAME);
-const STAMP = `${OUT}.stamp`;
-const SUMS = `${OUT}.sha256`;
+// The same two names on every platform; the sha256 line names the binary's own file name.
+const STAMP = join(BIN, "relembra.stamp");
+const SUMS = join(BIN, "relembra.sha256");
 
 /**
  * --compile --aot --trim: the build §4.6 names. The executable must not read configuration from

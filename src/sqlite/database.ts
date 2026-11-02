@@ -1,5 +1,6 @@
+import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 import { StoreBusyError } from "../errors.js";
@@ -77,6 +78,9 @@ export const OWNER_MODES = process.platform !== "win32";
 export function createOwnerOnly(path: string): void {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   if (isSymbolicLink(path)) throw new StoreFileTypeError(path);
+  // Windows ignores the modes: before a new store's first byte, its folder gets an ACL of its own,
+  // so the store and the -wal and -shm files SQLite makes beside it inherit owner-only access.
+  if (!OWNER_MODES && !existsSync(path)) restrictFolderToOwner(dirname(path));
   try {
     // O_EXCL never follows a link, so a link made since the check fails here with EEXIST.
     closeSync(openSync(path, "wx", 0o600));
@@ -84,6 +88,39 @@ export function createOwnerOnly(path: string): void {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
   }
   checkOwnerOnly(path);
+}
+
+/**
+ * Windows: replaces the folder's ACL with full control for the current user, SYSTEM and the
+ * Administrators group only, inherited by everything in it, and drops what it inherited. Accounts
+ * are named by SID (whoami prints the user's), so no account name or system language is
+ * involved. Any failure is thrown: a store is never created in a folder others may read.
+ */
+export function restrictFolderToOwner(dir: string): void {
+  const system32 = join(process.env["SystemRoot"] ?? "C:\\Windows", "System32");
+  const run = (exe: string, args: string[]) => {
+    const result = spawnSync(join(system32, exe), args, {
+      encoding: "utf8",
+      shell: false,
+      windowsHide: true,
+      timeout: 10_000,
+    });
+    if (result.status !== 0) {
+      throw new Error(`${exe} failed (exit ${result.status}): ${result.stderr || result.stdout}`);
+    }
+    return result.stdout;
+  };
+  // `"HOST\user","S-1-5-21-..."`: the SID is the last quoted field.
+  const sid = /"(S-1-[0-9-]+)"\s*$/.exec(run("whoami.exe", ["/user", "/fo", "csv", "/nh"]))?.[1];
+  if (sid === undefined) throw new Error("whoami did not print the user's SID");
+  const grant = (who: string) => ["/grant:r", `*${who}:(OI)(CI)F`];
+  run("icacls.exe", [
+    dir,
+    "/inheritance:r",
+    ...grant(sid),
+    ...grant("S-1-5-18"), // SYSTEM
+    ...grant("S-1-5-32-544"), // Administrators
+  ]);
 }
 
 /**
