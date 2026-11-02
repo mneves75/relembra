@@ -81,15 +81,15 @@ export function createOwnerOnly(path: string): void {
   // Windows ignores the modes: before a new store's first byte, its folder gets an ACL of its own,
   // so the store and the -wal and -shm files SQLite makes beside it inherit owner-only access.
   if (!OWNER_MODES && !existsSync(path)) {
+    restrictFolderToOwner(dirname(path));
     // A sidecar without its store was put there by someone: it keeps its own ACL, and Windows
     // opens a file by its full path whatever the folder grants, so SQLite would write into a file
-    // another account can read.
+    // another account can read. Checked after the ACL, when no other account can add one.
     for (const sidecar of [`${path}-wal`, `${path}-shm`, `${path}-journal`]) {
       if (existsSync(sidecar)) {
         throw new Error(`${sidecar} exists without its store; no store is created beside it`);
       }
     }
-    restrictFolderToOwner(dirname(path));
   }
   try {
     // O_EXCL never follows a link, so a link made since the check fails here with EEXIST.
