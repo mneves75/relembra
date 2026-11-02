@@ -675,14 +675,22 @@ The release binaries `relembra-windows-x64.exe` and `relembra-windows-arm64.exe`
   is refused, since it keeps its own ACL, and so is a store folder that is a junction or symbolic
   link, whose target `icacls` would change. If `whoami` or `icacls` fails, no store is created.
 - **Where the store is safe.** These steps work on the folder's path, so they protect the store
-  only when no other account can change the folder or the folder that holds it. An account that
-  could change the folder's ACL or owner before the store existed can keep a handle that widens it
-  again, and one that may rename entries in the parent folder can swap the folder for its own
-  after the ACL is set. The default, under your profile, has no such account: only you, SYSTEM and
-  Administrators can change your profile. Point `RELEMBRA_HOME` at a folder of your own inside a
-  folder only you can change, never in a shared or world-writable place. An existing store's ACL
-  is not read again on every open, since that would cost a process per command: a store folder
-  made by another tool, or whose ACL was widened later, is not detected.
+  only when no other account can change that path. Before them, relembra reads the access list of
+  every folder from the one that holds the store folder up to the drive root (`icacls /save`, by
+  SID), and no store is created when an account other than you, SYSTEM, Administrators or
+  TrustedInstaller may rename, delete or re-permission one of those folders, or delete what one
+  holds. The same applies when such an account may make folders in the folder that holds the store
+  folder, or may get more than read access to a folder made there: it could make the store folder
+  first, or open it before its ACL is set and keep that handle. A link anywhere on the path is
+  refused too. The error names the folder and the account. The default, under your profile,
+  passes: only you, SYSTEM and Administrators can change your profile. A folder in a shared or
+  world-writable place, such as `D:\data` under a drive root's default access list, is refused.
+  Owners are not read, since no tool that comes with Windows prints one as a SID: a folder on the
+  path that another account owns, but whose access list does not name that account, is not
+  detected. These checks run only when relembra creates a store, one `icacls` per folder on the
+  path. An existing store's ACL is not read again on every open, since that would cost a process
+  per command: a store folder made by another tool, or whose ACL was widened later, is not
+  detected.
 - **Hook.** `relembra init` prints the same session hook as elsewhere, a `sh` command line under
   `/usr/bin/env -i`. Claude Code runs hook commands in Git Bash on Windows
   (<https://code.claude.com/docs/en/hooks>, read 2026-11-02), which has `/usr/bin/env`; without

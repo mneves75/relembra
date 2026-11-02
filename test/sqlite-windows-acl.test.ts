@@ -183,6 +183,63 @@ describe.skipIf(!WINDOWS)("Windows store ACL", () => {
     expect(acl(target)).toBe(before);
   });
 
+  // The path to the store folder (docs/specs/w-nv1/spec.md): BUILTIN\Users stands in for another
+  // account. Each grant is read back first, so a refusal is the rule's and not an empty ACL's.
+  const USERS = "*S-1-5-32-545";
+  const refusedFor = (folder: string, grant: string, shown: RegExp) => {
+    windowsTool("icacls.exe", [folder, "/grant", `${USERS}:${grant}`]);
+    expect(acl(folder)).toMatch(shown);
+  };
+
+  test("R1: a folder above the store folder that another account may re-permission is refused", () => {
+    const above = leakyParent();
+    const parent = plainFolder(join(above, "parent"));
+    refusedFor(above, "(WDAC)", /BUILTIN\\Users:\(WDAC\)/);
+    const store = join(parent, "home", "relembra.db");
+    expect(() => createOwnerOnly(store)).toThrow(
+      /\(S-1-5-32-545\) rename, delete or re-permission it/,
+    );
+    expect(existsSync(store)).toBe(false);
+  });
+
+  test("R2: a folder above the store folder whose entries another account may delete is refused", () => {
+    const above = leakyParent();
+    const parent = plainFolder(join(above, "parent"));
+    refusedFor(above, "(DC)", /BUILTIN\\Users:\(DC\)/);
+    const store = join(parent, "home", "relembra.db");
+    expect(() => createOwnerOnly(store)).toThrow(
+      /\(S-1-5-32-545\) rename or delete the folders in it/,
+    );
+    expect(existsSync(store)).toBe(false);
+  });
+
+  test("R3: a parent where another account may make folders is refused", () => {
+    const parent = leakyParent();
+    refusedFor(parent, "(AD)", /BUILTIN\\Users:\(AD\)/);
+    const store = join(parent, "home", "relembra.db");
+    expect(() => createOwnerOnly(store)).toThrow(/\(S-1-5-32-545\) create the store folder first/);
+    expect(existsSync(store)).toBe(false);
+  });
+
+  test("R4: a parent that gives another account write on new folders is refused", () => {
+    const parent = leakyParent();
+    refusedFor(parent, "(OI)(CI)(IO)(M)", /BUILTIN\\Users:\(OI\)\(CI\)\(IO\)\(M\)/);
+    const store = join(parent, "home", "relembra.db");
+    expect(() => createOwnerOnly(store)).toThrow(/\(S-1-5-32-545\) open the new store folder/);
+    expect(existsSync(store)).toBe(false);
+  });
+
+  test("a junction above the store folder is refused, its target untouched", () => {
+    const parent = leakyParent();
+    const target = plainFolder(join(parent, "target"));
+    const link = join(parent, "link");
+    windowsTool("cmd.exe", ["/d", "/c", "mklink", "/J", link, target]);
+    expect(lstatSync(link).isSymbolicLink()).toBe(true);
+    const store = join(link, "home", "relembra.db");
+    expect(() => createOwnerOnly(store)).toThrow(/link is a link/);
+    expect(existsSync(join(target, "home", "relembra.db"))).toBe(false);
+  });
+
   test("a sidecar without its store is refused before the store's first byte", () => {
     for (const suffix of ["-wal", "-shm", "-journal"]) {
       const home = plainFolder(join(leakyParent(), "home"));

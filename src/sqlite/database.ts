@@ -1,6 +1,17 @@
 import { spawnSync } from "node:child_process";
-import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync } from "node:fs";
-import { dirname, win32 } from "node:path";
+import {
+  closeSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, win32 } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 import { StoreBusyError } from "../errors.js";
@@ -9,6 +20,7 @@ import { MIGRATIONS, migrate, SchemaTooNewError, schemaVersion } from "./migrati
 export { StoreBusyError };
 
 import { walImage } from "./wal-image.js";
+import { type ChainFolder, chainRefusal, trustedAccounts } from "./windows-acl.js";
 
 /** Thrown when an existing store file, or its -wal or -shm file, grants group or others access. */
 export class StoreFileModeError extends Error {
@@ -165,6 +177,7 @@ export function restrictFolderToOwner(dir: string): void {
     throw new Error(`${dir} is a link; no store is created in it`);
   const systemRoot = process.env["SystemRoot"];
   const sid = windowsUserSid(systemRoot);
+  checkFolderChain(systemRoot, dir, sid);
   const accounts = storeFolderAccounts(sid);
   runSystemTool(systemRoot, "icacls.exe", [dir, "/setowner", `*${sid}`]);
   runSystemTool(systemRoot, "icacls.exe", [
@@ -181,6 +194,72 @@ export function restrictFolderToOwner(dir: string): void {
       `${dir} grants another account access (${entries.length} entries, not ${accounts.length}); no store is created in it: remove those grants or use another folder`,
     );
   }
+}
+
+/**
+ * Windows: refuses a store folder whose path another account could change (docs/specs/w-nv1/spec.md).
+ * The ACL steps work on the folder's path, so they hold only while no other account can rename,
+ * delete or re-permission a folder above it, make the store folder first, or open it before its
+ * ACL is set. Every folder from the store folder's parent up to the drive root is read as SDDL
+ * with `icacls /save`, which names accounts by SID, and judged by chainRefusal. A link on the
+ * path is refused first: icacls would read its target, and whoever may change the link may point
+ * it elsewhere. Owners are not read, since no stock tool prints one as a SID: an ancestor another
+ * account owns, whose access list does not name that account, is not detected.
+ */
+function checkFolderChain(systemRoot: string | undefined, dir: string, sid: string): void {
+  const parent = win32.dirname(win32.resolve(dir));
+  if (parent === win32.resolve(dir)) return;
+  for (let folder = parent; ; folder = win32.dirname(folder)) {
+    if (lstatSync(folder).isSymbolicLink()) {
+      throw new Error(
+        `${folder} is a link; no store is created under it: use a path without links`,
+      );
+    }
+    if (win32.dirname(folder) === folder) break;
+  }
+  const chain: ChainFolder[] = [];
+  const temp = mkdtempSync(join(tmpdir(), "relembra-acl-"));
+  try {
+    // With no link on the path, the real path names the same folders, written in full: a short
+    // 8.3 name is resolved, so no folder is read twice.
+    let folder = realpathSync.native(parent);
+    for (let holdsStoreFolder = true; ; holdsStoreFolder = false) {
+      chain.push({ path: folder, dacl: savedDacl(systemRoot, folder, temp), holdsStoreFolder });
+      const up = win32.dirname(folder);
+      if (up === folder) break;
+      folder = up;
+    }
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+  const refusal = chainRefusal(chain, trustedAccounts(sid));
+  if (refusal !== undefined) {
+    throw new Error(
+      `${refusal}; no store is created under it: remove that grant or keep the store in a folder only you can change, such as your profile`,
+    );
+  }
+}
+
+/**
+ * A folder's access list as SDDL. `icacls <folder> /save <file>` writes the folder's name on one
+ * line and its access list on the next, in UTF-16 or the console's encoding.
+ */
+function savedDacl(systemRoot: string | undefined, folder: string, temp: string): string {
+  const file = join(temp, "acl");
+  runSystemTool(systemRoot, "icacls.exe", [folder, "/save", file]);
+  const bytes = readFileSync(file);
+  const utf16 = (bytes[0] === 0xff && bytes[1] === 0xfe) || bytes[1] === 0;
+  const lines = (utf16 ? bytes.toString("utf16le") : bytes.toString("utf8"))
+    .replace(/^﻿/, "")
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== "");
+  const dacl = lines[1];
+  if (lines.length !== 2 || dacl === undefined) {
+    throw new Error(
+      `icacls /save did not write one access list for ${folder}: ${lines.join(" | ")}`,
+    );
+  }
+  return dacl.trim();
 }
 
 /**

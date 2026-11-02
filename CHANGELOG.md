@@ -3,6 +3,22 @@
 All notable changes to relembra. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Security
+
+- Windows: before a new store's folder is secured by path, relembra reads the access list of
+  every folder from its parent up to the drive root (`icacls /save`, by SID). No store is created
+  when another account may:
+  - rename, delete or re-permission one of those folders, or delete what one holds;
+  - make folders in the store folder's parent;
+  - get more than read access to a new folder there.
+
+  A link on the path is refused too. This replaces the 1.0.0-beta.2 limit "protected only when no
+  other account can change its folder or the folder's parent". A store under a shared or
+  world-writable folder is now refused when it is created; existing stores are untouched. Folder
+  owners are still not read ([docs/CLI.md](docs/CLI.md#windows)).
+
 ## [1.0.0-beta.2] - 2026-11-02
 
 The CLI for Linux and Windows. The library, the store schemas and the export format are
