@@ -13,7 +13,8 @@ is the library's host: it decides the scope and the principal, never the agent c
 - **Scope.** `RELEMBRA_SCOPE` when the host sets it. Otherwise
   `uid-<uid>/<name>-<hash>`, from the git repository containing the working directory:
   - `<uid>` is the OS user id. Not the user name: Bun's `os.userInfo().username` reads `$USER`
-    and answers `unknown` without it, which would split one user's memory in two.
+    and answers `unknown` without it, which would split one user's memory in two. Windows has
+    no uid: there the part is `user-<account name>` ([Windows](#windows)).
   - `<name>` is for people reading the scope only: the last segment of the normalized `origin`
     URL when there is one (so renaming the folder does not change the scope), else the
     repository's folder name: the folder holding `.git`, or the git directory itself, without a
@@ -628,9 +629,15 @@ refused, by line and rule, never their text. Text: one `key: value` line each.
 
 `bun run build:cli` runs `build/cli.ts`: `bun build --compile --aot --trim
 --no-compile-autoload-dotenv --no-compile-autoload-bunfig` for the native target, writing
-`bin/relembra` and `bin/relembra.sha256` (`sha256sum` format). It skips the build when the sources,
-the script and the Bun version are unchanged; `--force` rebuilds. No fallback build exists: the AOT
-build runs on the targets built so far (IMPLEMENTATION-PLAN §4.6).
+`bin/relembra` (`bin/relembra.exe` on Windows) and `bin/relembra.sha256` (`sha256sum` format). It
+skips the build when the sources, the script and the Bun version are unchanged; `--force`
+rebuilds. No fallback build exists (IMPLEMENTATION-PLAN §4.6).
+
+`--aot` builds only for the platform it runs on, so every release binary is built on its own
+platform: macOS arm64 locally, Linux x64 and arm64 and Windows x64 and arm64 in the hosted CI's
+`cli` job. All of them use one Bun canary, pinned in `build/bun-toolchain.txt` by its immutable npm
+package and that package's sha512; `scripts/bun-toolchain.sh <platform> <dir>` downloads, checks
+and unpacks it.
 
 ## Install
 
@@ -641,5 +648,35 @@ missing line or a malformed hash is refused with exit 1, and nothing is installe
 So is a directory or a symlink at `<dest-dir>/relembra` (`mv` would put the file inside the
 directory, or leave a link's target in place); only a regular file there is replaced. The check
 and the move are not atomic: a process running as the same user could swap the path between
-them, the same-user limit stated under Trust.
-Downloading release binaries waits for releases, which need the owner's go (ticket 11).
+them, the same-user limit stated under Trust. `install.sh` serves macOS and Linux; Windows is
+installed by hand (below).
+
+## Windows
+
+The release binaries `relembra-windows-x64.exe` and `relembra-windows-arm64.exe` run on Windows
+10 and 11. What differs from macOS and Linux:
+
+- **Scope.** Windows has no uid, so the OS user part is `user-<account name>`, lowercased
+  because Windows account names ignore case. If the runtime cannot name the account, the scope
+  is refused (`no-scope`) rather than shared. Folders are compared by their canonical real path,
+  case-folded, so `C:\Repo` and `c:\repo` are one project.
+- **Store protection.** Windows files have no modes, so the mode checks do not apply. Instead,
+  before a new store's first byte, its folder (`%USERPROFILE%\.relembra`, or `RELEMBRA_HOME`)
+  gets an ACL of its own: full control for the current user's SID, SYSTEM and Administrators,
+  inheritance removed. The store and SQLite's `-wal` and `-shm` files inherit it. If `whoami` or
+  `icacls` fails, no store is created. An existing store's ACL is not read again on every open,
+  since that would cost a process per command: a store folder made by another tool, or whose ACL
+  was widened later, is not detected. Keep `RELEMBRA_HOME` a folder of its own.
+- **Hook.** `relembra init` prints the same session hook as elsewhere, a `sh` command line under
+  `/usr/bin/env -i`. Claude Code runs hook commands in Git Bash on Windows
+  (<https://code.claude.com/docs/en/hooks>, read 2026-11-02), which has `/usr/bin/env`; without
+  Git Bash, Claude Code falls back to PowerShell, where this command does not run. Install Git for
+  Windows.
+- **Install.** Check the binary against `SHA256SUMS`, then put it on `PATH` as `relembra.exe`:
+
+  ```powershell
+  (Get-FileHash relembra-windows-x64.exe -Algorithm SHA256).Hash.ToLower()
+  Select-String relembra-windows-x64.exe SHA256SUMS   # the two hashes must be equal
+  New-Item -ItemType Directory -Force "$HOME\.local\bin" | Out-Null
+  Copy-Item relembra-windows-x64.exe "$HOME\.local\bin\relembra.exe"
+  ```

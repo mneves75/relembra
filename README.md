@@ -25,7 +25,7 @@ and storage (an adapter). relembra enforces the rules:
 - **Measured.** An evaluation harness with leak, scope, retrieval and wake-coverage gates, plus
   controls that must fail. Results: [docs/eval/](docs/eval/).
 
-Version: 1.0.0-beta.1, a beta ([changelog](CHANGELOG.md),
+Version: 1.0.0-beta.2, a beta ([changelog](CHANGELOG.md),
 [releases](https://github.com/mneves75/relembra/releases)). Release procedure:
 [docs/RELEASE.md](docs/RELEASE.md).
 Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -203,23 +203,36 @@ scope. Outside a repository it is the scope itself. The wake gives each of the t
 its budget and passes the room one leaves unused to the other, so neither can crowd the other
 out. Set `RELEMBRA_SCOPE` to the global scope to change what it holds.
 
-Each [GitHub release](https://github.com/mneves75/relembra/releases) carries the macOS arm64
-binary `relembra-darwin-arm64`, `SHA256SUMS` and the library archive npm serves. Download the
-binary and checksum file, then install them with `install.sh` from a checkout of the same tag:
+Each [GitHub release](https://github.com/mneves75/relembra/releases) carries a native binary
+per platform, `SHA256SUMS` and the library archive npm serves:
+
+| Platform | Binary |
+|---|---|
+| macOS arm64 | `relembra-darwin-arm64` |
+| Linux x64 (glibc) | `relembra-linux-x64` |
+| Linux arm64 (glibc) | `relembra-linux-arm64` |
+| Windows x64 | `relembra-windows-x64.exe` |
+| Windows arm64 | `relembra-windows-arm64.exe` |
+
+On macOS and Linux, download the binary and checksum file, then install them with `install.sh`
+from a checkout of the same tag:
 
 ```sh
-sh install.sh relembra-darwin-arm64 SHA256SUMS  # verifies the checksum, installs to ~/.local/bin
+sh install.sh relembra-linux-x64 SHA256SUMS  # verifies the checksum, installs to ~/.local/bin
 ```
+
+On Windows, check the hash with `Get-FileHash` and copy the binary onto `PATH` as
+`relembra.exe`; the session hook needs Git Bash ([docs/CLI.md](docs/CLI.md#windows)).
 
 Before replacing an installed executable, retain a backup and its hash. Verify installed bytes
 against the release checksum and export metadata from a disposable store
-(`relembra: "1.0.0-beta.1"`); there is no `--version` flag. The [release procedure](docs/RELEASE.md) covers isolated checks and
+(`relembra: "1.0.0-beta.2"`); there is no `--version` flag. The [release procedure](docs/RELEASE.md) covers isolated checks and
 rollback without opening a live memory store. After verification, `relembra init` prints the
 session hook for your agent.
 
-On other platforms, build it from a clone with an AOT-capable Bun using `bun run build:cli`
-(writes `bin/relembra` and `bin/relembra.sha256`) and install that pair the same way. A local Mac
-check does not attest another platform's binary.
+To build it yourself, run `bun run build:cli` from a clone with the pinned Bun
+(`build/bun-toolchain.txt`); it writes `bin/relembra` (`relembra.exe` on Windows) and
+`bin/relembra.sha256`.
 
 Commands, flags, exit codes and the JSON envelope: [docs/CLI.md](docs/CLI.md).
 

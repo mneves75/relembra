@@ -2,7 +2,8 @@
 
 A release is a SemVer version in `package.json` and `src/version.ts` (`scripts/pack-check.ts`
 refuses a mismatch), a tag `v<version>`, the retained package archive published to npm, and a
-GitHub release carrying the macOS arm64 CLI binary, `SHA256SUMS` and the same archive. A
+GitHub release carrying the CLI binaries (macOS arm64, Linux x64 and arm64, Windows x64 and
+arm64), `SHA256SUMS` and the same archive. A
 prerelease (`1.0.0-beta.1`) publishes under the npm dist-tag `beta`, never `latest`, and its
 GitHub release is marked as a prerelease. The evidence record `docs/eval/release-<version>.md`
 establishes which steps have completed; this document only describes them.
@@ -85,6 +86,27 @@ prerequisites. Bind that commit to the tested native Mac binary, published as
 record asset names and hashes beside the gate/benchmark hashes. Renaming the binary must preserve
 its bytes; the checksum entry must name the release asset.
 
+`--aot` cannot cross-compile, so the other binaries come from the hosted CI run of the push to
+`main` that made the final commit: its `cli` job builds each platform natively with the Bun
+pinned in `build/bun-toolchain.txt`, and `bun-linux` and `bun-native` run the suite against
+those exact binaries. Every job of that run must pass. Download the artifacts into an empty
+directory, check each against the `relembra.sha256` beside it, and rename without changing bytes:
+
+| Artifact | Release asset |
+|---|---|
+| `relembra-cli-linux-x64/relembra` | `relembra-linux-x64` |
+| `relembra-cli-linux-aarch64/relembra` | `relembra-linux-arm64` |
+| `relembra-cli-windows-x64/relembra.exe` | `relembra-windows-x64.exe` |
+| `relembra-cli-windows-aarch64/relembra.exe` | `relembra-windows-arm64.exe` |
+
+```sh
+gh run download <run-id> --dir <empty-dir> --pattern 'relembra-cli-*'
+```
+
+Record the run id, its commit (which must be the final commit), the Bun revision each job
+printed, and every binary's sha256 in the evidence record. The macOS artifact of that run is a
+second build, not the release binary: the release ships the locally gated one.
+
 ## Publication
 
 Before publishing, check that no `refs/tags/v<version>` exists yet, peeled ref included
@@ -92,12 +114,13 @@ Before publishing, check that no `refs/tags/v<version>` exists yet, peeled ref i
 
 1. Tag the final commit (`git tag -a v<version>`) and push the tag.
 2. Create the GitHub release as a draft with every asset attached, then publish it.
-   `SHA256SUMS` must list the binary and the retained archive. With immutable releases enabled
+   `SHA256SUMS` must list every binary and the retained archive. With immutable releases enabled
    on the repository, the published release's assets and tag can no longer change:
 
    ```sh
    gh release create v<version> --verify-tag --draft --prerelease --title v<version> \
-     --notes-file <notes> relembra-darwin-arm64 SHA256SUMS relembra-<version>.tgz
+     --notes-file <notes> relembra-darwin-arm64 relembra-linux-x64 relembra-linux-arm64 \
+     relembra-windows-x64.exe relembra-windows-arm64.exe SHA256SUMS relembra-<version>.tgz
    gh release edit v<version> --draft=false
    ```
 
