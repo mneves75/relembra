@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  appendFileSync,
   copyFileSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -42,6 +42,17 @@ function build(): { status: number | null; out: string } {
     timeout: TIMEOUT,
   });
   return { status: run.status, out: `${run.stdout}${run.stderr}` };
+}
+
+/**
+ * Changes the binary's bytes by writing a new file and renaming it into place, as an update does.
+ * Writing into the file itself fails on Linux with ETXTBSY while the probe that just ran it has not
+ * fully released it.
+ */
+function changeBinary(): void {
+  const next = `${bin()}.next`;
+  writeFileSync(next, Buffer.concat([readFileSync(bin()), Buffer.from("x")]), { mode: 0o755 });
+  renameSync(next, bin());
 }
 
 /** A real build: exit 0, a sha256 file in `sha256sum` format that matches, a binary that runs. */
@@ -92,7 +103,7 @@ describe.skipIf(SKIP)("the CLI build cache", () => {
     "a binary changed after the build is rebuilt",
     () => {
       expectBuilt(build());
-      appendFileSync(bin(), "x");
+      changeBinary();
       expectBuilt(build());
     },
     TIMEOUT,
@@ -122,7 +133,7 @@ describe.skipIf(SKIP)("the CLI build cache", () => {
     "a binary replaced together with a matching sha256 file is rebuilt",
     () => {
       expectBuilt(build());
-      appendFileSync(bin(), "x");
+      changeBinary();
       writeFileSync(sums(), `${sha256(bin())}  relembra\n`);
       expectBuilt(build());
     },

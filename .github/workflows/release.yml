@@ -1,0 +1,46 @@
+name: release
+
+# When a GitHub release is published, stage its retained package archive on npm through
+# trusted publishing (OIDC, no stored token). Staging publishes nothing: the owner approves the
+# staged version with `npm stage approve`, which asks for their two-factor key. The npm trust
+# configuration allows this file to stage only, never to publish (docs/RELEASE.md, "Publication").
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+jobs:
+  stage:
+    name: stage on npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # download the release's assets
+      id-token: write # npm trusted publishing
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        # Its bundled npm (11.20.0) has `npm stage` and trusted publishing. No cache: nothing
+        # is installed, and a release job should not restore one.
+        with:
+          node-version: "26.12.1"
+          package-manager-cache: false
+      - run: npm --version
+      - name: Download the release's archive and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release download "$TAG" --dir "$RUNNER_TEMP/release" --pattern 'relembra-*.tgz' --pattern SHA256SUMS
+      - name: Check the archive against SHA256SUMS and the publish rules
+        id: plan
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: node scripts/stage-release.ts "$TAG" "$RUNNER_TEMP/release" >> "$GITHUB_OUTPUT"
+      - name: Stage it on npm
+        env:
+          TARBALL: ${{ steps.plan.outputs.tarball }}
+          DIST_TAG: ${{ steps.plan.outputs.dist-tag }}
+        run: npm stage publish "$TARBALL" --tag "$DIST_TAG" --access public

@@ -3,8 +3,6 @@
 All notable changes to relembra. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
-
 ## [1.0.0-beta.1] - 2026-11-01
 
 The first public release, a beta: on npm under the `beta` dist-tag (`npm install relembra@beta`),
@@ -66,7 +64,13 @@ Postgres schema 3, export format 2).
   over 20,000 memories); a pre-push hook; hosted CI on every push to `main` and pull request.
 - A bilingual landing page (`site/`, pt-BR and English, light and dark, with a Motion switch
   that defaults to the system's reduced-motion setting) whose demos run the real library in the
-  browser.
+  browser. `?lang=en` or `?lang=pt-BR` in the URL chooses the language.
+- Releases reach npm through trusted publishing: publishing a GitHub release stages its retained
+  archive on npm, after checking it against the release's `SHA256SUMS`, and the owner approves
+  the staged version with their two-factor key. No npm token is stored anywhere.
+- The site deploys to GitHub Pages from a manually run workflow with OIDC
+  (`actions/deploy-pages`), so no stored token can change it. `scripts/site/assemble.sh` builds
+  what ships from a commit's `site/` and the checked video.
 
 ### Security
 
@@ -75,5 +79,4 @@ table of `docs/specs/IMPLEMENTATION-PLAN.md`. Known residuals are documented in 
 (import id existence) and `docs/CLI.md` (same-user trust model). Report vulnerabilities as
 [SECURITY.md](SECURITY.md) describes.
 
-[Unreleased]: https://github.com/mneves75/relembra/compare/v1.0.0-beta.1...HEAD
 [1.0.0-beta.1]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.1

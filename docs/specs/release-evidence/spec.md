@@ -63,7 +63,7 @@ reports stay unchanged, and contended baseline timings support no optimization/s
   Eval: zero leaks/label violations/superseded results/failed requests, complete scope denial,
   hit@5 and wake coverage >=0.9. Exercise affected flows with valid and invalid inputs.
 - Independent Standards and Spec review on fixed diff, adversarial challenge, security deploy
-  gate on exact final tree, fresh independent `mneves-verify`. Preserve failed evidence.
+  gate on exact final tree, fresh independent verification. Preserve failed evidence.
 - Recheck tags, bump version constants/package/changelog/README/operational/agent docs; keep
   CLAUDE.md as pointer. Small verified commits, gitleaks before push, hooks enabled.
 - Merge after acceptance; revalidate final commit identity. Annotated v0.4.0 tag and private
@@ -111,7 +111,7 @@ reports so evidence can be committed without invalidating the code it measures.
    raw nearest-rank warm find p95 <=50 ms on both runtimes, binary/package before/after hashes
    and all failure logs. Record candidate SHA/input digest and evidence hashes. Compare baseline
    and candidate only within recorded load limits; claim no unmeasured performance savings.
-10. Run the full exact-tree security deploy gate and fresh independent `mneves-verify` against
+10. Run the full exact-tree security deploy gate and fresh independent verification against
     this contract, including real disposable CLI positive/invalid-input controls.
 11. Recheck origin/tags, merge only after acceptance, verify unchanged measured inputs and
     tested artifact hashes at merged main using all inputs in `scripts/evidence.ts`, including

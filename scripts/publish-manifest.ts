@@ -5,7 +5,7 @@
  */
 export const REPOSITORY_URL = "git+https://github.com/mneves75/relembra.git";
 
-interface Manifest {
+export interface Manifest {
   readonly private?: unknown;
   readonly version?: unknown;
   readonly tag?: unknown;

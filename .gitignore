@@ -6,5 +6,5 @@ bin/
 *.db-wal
 *.db-shm
 coverage/
-# the explainer video ships only on gh-pages (scripts/site/publish.sh)
+# the explainer video is kept on gh-pages (scripts/site/assemble.sh); a copy here is for local preview
 /site/assets/video/
