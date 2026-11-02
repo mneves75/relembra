@@ -147,6 +147,9 @@ export function windowsUserSid(systemRoot: string | undefined): string {
  * is never created in a folder others may read.
  */
 export function restrictFolderToOwner(dir: string): void {
+  // icacls follows a junction or symbolic link: the owner and ACL of its target would change.
+  if (lstatSync(dir).isSymbolicLink())
+    throw new Error(`${dir} is a link; no store is created in it`);
   const systemRoot = process.env["SystemRoot"];
   const sid = windowsUserSid(systemRoot);
   const grant = (who: string) => ["/grant:r", `*${who}:(OI)(CI)F`];

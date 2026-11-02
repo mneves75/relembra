@@ -124,6 +124,20 @@ describe.skipIf(!WINDOWS)("Windows store ACL", () => {
     expectOwnerOnly(home, store);
   }, 30_000);
 
+  test("a store folder that is a junction is refused, its target untouched", () => {
+    const parent = leakyParent();
+    const target = plainFolder(join(parent, "target"));
+    const home = join(parent, "home");
+    windowsTool("cmd.exe", ["/d", "/c", "mklink", "/J", home, target]);
+    // Positive control: the runtime sees the junction as a link.
+    expect(lstatSync(home).isSymbolicLink()).toBe(true);
+    const before = acl(target);
+    const store = join(home, "relembra.db");
+    expect(() => createOwnerOnly(store)).toThrow(/is a link/);
+    expect(existsSync(join(target, "relembra.db"))).toBe(false);
+    expect(acl(target)).toBe(before);
+  });
+
   test("a sidecar without its store is refused before the store's first byte", () => {
     for (const suffix of ["-wal", "-shm", "-journal"]) {
       const home = plainFolder(join(leakyParent(), "home"));
