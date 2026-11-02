@@ -55,6 +55,7 @@ const INPUT_FILES = [
   "tsconfig.json",
   "tsconfig.build.json",
   "biome.json",
+  ".gitattributes",
   ".gitignore",
   ".gitleaksignore",
   ".gitleaks.toml",
