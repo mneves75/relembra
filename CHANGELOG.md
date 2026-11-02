@@ -3,7 +3,10 @@
 All notable changes to relembra. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.0-beta.3] - 2026-11-02
+
+Windows store protection checks the store folder's whole path. The library, the store schemas
+and the export format are otherwise unchanged from 1.0.0-beta.2.
 
 ### Security
 
@@ -137,5 +140,6 @@ table of `docs/specs/IMPLEMENTATION-PLAN.md`. Known residuals are documented in 
 (import id existence) and `docs/CLI.md` (same-user trust model). Report vulnerabilities as
 [SECURITY.md](SECURITY.md) describes.
 
+[1.0.0-beta.3]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.3
 [1.0.0-beta.2]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.2
 [1.0.0-beta.1]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.1
