@@ -671,8 +671,12 @@ The release binaries `relembra-windows-x64.exe` and `relembra-windows-arm64.exe`
   inherited. The store and SQLite's `-wal` and `-shm` files inherit it. The folder becomes
   yours first, since a folder's owner can always rewrite its ACL: if you may not take ownership of
   a folder another account made, no store is created. A `-wal`, `-shm` or `-journal` file already
-  there without its store is refused, since it keeps its own ACL. If `whoami` or `icacls` fails,
-  no store is created. An existing store's ACL is not read again on every open, since that would
+  there without its store is refused, since it keeps its own ACL, and so is a store folder that is
+  a junction or symbolic link, whose target `icacls` would change. If `whoami` or `icacls` fails,
+  no store is created. Taking ownership does not close a handle the former owner already holds:
+  an account that owned the folder, or could change its ACL, before the store existed can widen
+  it again. A folder under your own profile, or one relembra makes, has no such account. An
+  existing store's ACL is not read again on every open, since that would
   cost a process per command: a store folder made by another tool, or whose ACL was widened later,
   is not detected. Keep `RELEMBRA_HOME` a folder of its own.
 - **Hook.** `relembra init` prints the same session hook as elsewhere, a `sh` command line under

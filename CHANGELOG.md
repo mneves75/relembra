@@ -20,8 +20,10 @@ unchanged from 1.0.0-beta.1.
     identifier as `whoami /user` prints it, one per account like a uid, never `%USERNAME%`.
   - A new store's folder gets an owner-only ACL (the user's SID, SYSTEM, Administrators, and no
     other grant, explicit or inherited), in place of the POSIX mode checks Windows cannot apply.
-    The user takes ownership of the folder first (or no store is created), and a sidecar left
-    there without its store is refused.
+    The user takes ownership of the folder first (or no store is created); a sidecar left there
+    without its store, and a folder that is a junction or link, are refused. Known limit: an
+    account that could change a pre-existing folder's ACL before the store existed keeps a handle
+    that can widen it again ([docs/CLI.md](docs/CLI.md#windows)).
   - git is found as `git.exe`, and paths are compared case-blind by their canonical real path.
   - A local origin is keyed by its real path written with forward slashes, a drive path
     (`C:\…`) is local as git reads it, and a `file:///C:/…` URL names `C:/…`, so the project name

@@ -122,7 +122,8 @@ describe.skipIf(!WINDOWS)("Windows store ACL", () => {
     createOwnerOnly(store);
     expect(ownerOf(home)).toBe(windowsSid());
     expectOwnerOnly(home, store);
-  }, 30_000);
+    // Windows PowerShell starts slowly on the arm runner, and the test runs it twice.
+  }, 120_000);
 
   test("a store folder that is a junction is refused, its target untouched", () => {
     const parent = leakyParent();

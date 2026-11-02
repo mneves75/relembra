@@ -84,9 +84,11 @@ export function createOwnerOnly(path: string): void {
     restrictFolderToOwner(dirname(path));
     // A sidecar without its store was put there by someone: it keeps its own ACL, and Windows
     // opens a file by its full path whatever the folder grants, so SQLite would write into a file
-    // another account can read. Checked after the ACL, when no other account can add one.
+    // another account can read. Checked after the ACL, when no other account can add one. A
+    // sidecar beside a store that exists by now belongs to another process that created the
+    // store first (its folder got the same three grants), so it is no plant.
     for (const sidecar of [`${path}-wal`, `${path}-shm`, `${path}-journal`]) {
-      if (hasEntry(sidecar)) {
+      if (hasEntry(sidecar) && !hasEntry(path)) {
         throw new Error(`${sidecar} exists without its store; no store is created beside it`);
       }
     }
