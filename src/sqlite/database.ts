@@ -80,7 +80,17 @@ export function createOwnerOnly(path: string): void {
   if (isSymbolicLink(path)) throw new StoreFileTypeError(path);
   // Windows ignores the modes: before a new store's first byte, its folder gets an ACL of its own,
   // so the store and the -wal and -shm files SQLite makes beside it inherit owner-only access.
-  if (!OWNER_MODES && !existsSync(path)) restrictFolderToOwner(dirname(path));
+  if (!OWNER_MODES && !existsSync(path)) {
+    // A sidecar without its store was put there by someone: it keeps its own ACL, and Windows
+    // opens a file by its full path whatever the folder grants, so SQLite would write into a file
+    // another account can read.
+    for (const sidecar of [`${path}-wal`, `${path}-shm`, `${path}-journal`]) {
+      if (existsSync(sidecar)) {
+        throw new Error(`${sidecar} exists without its store; no store is created beside it`);
+      }
+    }
+    restrictFolderToOwner(dirname(path));
+  }
   try {
     // O_EXCL never follows a link, so a link made since the check fails here with EEXIST.
     closeSync(openSync(path, "wx", 0o600));
@@ -91,16 +101,19 @@ export function createOwnerOnly(path: string): void {
 }
 
 /**
- * Windows' System32 folder under `systemRoot` (%SystemRoot%). An empty or relative value falls
- * back to `C:\Windows`: a relative executable path would be resolved against the working
- * directory, which may be a repository's.
+ * The Windows folder, `systemRoot` (%SystemRoot%) when it is a drive path. An empty or relative
+ * value falls back to `C:\Windows`: a relative executable path would be resolved against the
+ * working directory, which may be a repository's.
  */
+function windowsRoot(systemRoot: string | undefined): string {
+  return systemRoot !== undefined && win32.isAbsolute(systemRoot) && /^[A-Za-z]:/.test(systemRoot)
+    ? systemRoot
+    : "C:\\Windows";
+}
+
+/** Windows' System32 folder, under windowsRoot. */
 export function windowsSystem32(systemRoot: string | undefined): string {
-  const root =
-    systemRoot !== undefined && win32.isAbsolute(systemRoot) && /^[A-Za-z]:/.test(systemRoot)
-      ? systemRoot
-      : "C:\\Windows";
-  return win32.join(root, "System32");
+  return win32.join(windowsRoot(systemRoot), "System32");
 }
 
 /** Runs a System32 tool; any failure is thrown with its output. */
@@ -127,16 +140,56 @@ export function windowsUserSid(systemRoot: string | undefined): string {
 }
 
 /**
- * Windows: replaces the folder's ACL with full control for the current user, SYSTEM and the
- * Administrators group only, inherited by everything in it. `/reset` first drops every explicit
- * grant a folder that already existed carried, then `/inheritance:r` drops what it inherited, so
- * the three grants are the whole ACL. Accounts are named by SID, so no account name or system
+ * The SID of `path`'s owner, from Windows PowerShell's Get-Acl, which names it by SID whatever the
+ * system language. The path reaches the script as an environment variable, never as script text.
+ */
+function windowsOwnerSid(systemRoot: string | undefined, path: string): string {
+  const script =
+    "(Get-Acl -LiteralPath $env:RELEMBRA_ACL_PATH).GetOwner([Security.Principal.SecurityIdentifier]).Value";
+  const powershell = win32.join(
+    windowsSystem32(systemRoot),
+    "WindowsPowerShell",
+    "v1.0",
+    "powershell.exe",
+  );
+  const result = spawnSync(
+    powershell,
+    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+    {
+      encoding: "utf8",
+      shell: false,
+      windowsHide: true,
+      timeout: 30_000,
+      // Only what the script needs: a hook already runs with an emptied environment.
+      env: { SystemRoot: windowsRoot(systemRoot), RELEMBRA_ACL_PATH: path },
+    },
+  );
+  const owner = result.status === 0 ? result.stdout.trim() : "";
+  if (!/^S-1-[0-9-]+$/.test(owner)) {
+    throw new Error(
+      `Get-Acl did not name the owner of ${path} (exit ${result.status}): ${result.stderr}`,
+    );
+  }
+  return owner;
+}
+
+/**
+ * Windows: refuses a folder another account owns, then replaces its ACL with full control for the
+ * current user, SYSTEM and the Administrators group only, inherited by everything in it. `/reset`
+ * first drops every explicit grant a folder that already existed carried, then `/inheritance:r`
+ * drops what it inherited, so the three grants are the whole ACL. Accounts are named by SID, so no account name or system
  * language is involved. Any failure is thrown: a store is never created in a folder others may
  * read.
  */
 export function restrictFolderToOwner(dir: string): void {
   const systemRoot = process.env["SystemRoot"];
   const sid = windowsUserSid(systemRoot);
+  // A folder's owner may always rewrite its ACL, so a folder another account owns would give that
+  // account its access back after any grant here: refused, never taken over.
+  const owner = windowsOwnerSid(systemRoot, dir);
+  if (![sid, "S-1-5-18", "S-1-5-32-544"].includes(owner)) {
+    throw new Error(`${dir} is owned by ${owner}, another account; no store is created in it`);
+  }
   const grant = (who: string) => ["/grant:r", `*${who}:(OI)(CI)F`];
   runSystemTool(systemRoot, "icacls.exe", [dir, "/reset"]);
   runSystemTool(systemRoot, "icacls.exe", [

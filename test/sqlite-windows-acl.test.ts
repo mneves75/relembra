@@ -9,7 +9,7 @@
  * Everyone read to everything made in it, and folders made by cmd, which inherit that grant.
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createOwnerOnly, windowsSystem32 } from "../src/sqlite/database.js";
@@ -39,6 +39,15 @@ function leakyParent(): string {
   windowsTool("icacls.exe", [parent, "/grant", EVERYONE_READS]);
   return parent;
 }
+
+/** The SID of `path`'s owner, through Windows PowerShell (the paths here hold no quote). */
+const ownerOf = (path: string) =>
+  windowsTool(join("WindowsPowerShell", "v1.0", "powershell.exe"), [
+    "-NoProfile",
+    "-NonInteractive",
+    "-Command",
+    `(Get-Acl -LiteralPath '${path}').GetOwner([Security.Principal.SecurityIdentifier]).Value`,
+  ]).trim();
 
 /** A folder made by cmd, so it inherits its parent's ACL as any program's folder would. */
 function plainFolder(path: string): string {
@@ -101,6 +110,29 @@ describe.skipIf(!WINDOWS)("Windows store ACL", () => {
     const store = join(home, "relembra.db");
     createOwnerOnly(store);
     expectOwnerOnly(home, store);
+  });
+
+  test("a folder another account owns is refused, untouched, before the store's first byte", () => {
+    const home = plainFolder(join(leakyParent(), "home"));
+    // BUILTIN\Users stands in for another account: an owner may always rewrite the ACL.
+    windowsTool("icacls.exe", [home, "/setowner", "*S-1-5-32-545"]);
+    // Positive control: the owner really changed.
+    expect(ownerOf(home)).toBe("S-1-5-32-545");
+    const before = acl(home);
+    const store = join(home, "relembra.db");
+    expect(() => createOwnerOnly(store)).toThrow(/owned by S-1-5-32-545/);
+    expect(existsSync(store)).toBe(false);
+    expect(acl(home)).toBe(before);
+  });
+
+  test("a sidecar without its store is refused before the store's first byte", () => {
+    for (const suffix of ["-wal", "-shm", "-journal"]) {
+      const home = plainFolder(join(leakyParent(), "home"));
+      const store = join(home, "relembra.db");
+      writeFileSync(`${store}${suffix}`, "");
+      expect(() => createOwnerOnly(store)).toThrow(/exists without its store/);
+      expect(existsSync(store)).toBe(false);
+    }
   });
 
   test("an existing store's folder is left as it is", () => {
