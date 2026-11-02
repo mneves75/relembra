@@ -1,6 +1,17 @@
 import { spawnSync } from "node:child_process";
-import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync } from "node:fs";
-import { dirname, win32 } from "node:path";
+import { randomBytes } from "node:crypto";
+import {
+  closeSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, win32 } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 import { StoreBusyError } from "../errors.js";
@@ -9,6 +20,12 @@ import { MIGRATIONS, migrate, SchemaTooNewError, schemaVersion } from "./migrati
 export { StoreBusyError };
 
 import { walImage } from "./wal-image.js";
+import {
+  type ChainFolder,
+  chainRefusal,
+  storeFolderChain,
+  trustedAccounts,
+} from "./windows-acl.js";
 
 /** Thrown when an existing store file, or its -wal or -shm file, grants group or others access. */
 export class StoreFileModeError extends Error {
@@ -165,6 +182,7 @@ export function restrictFolderToOwner(dir: string): void {
     throw new Error(`${dir} is a link; no store is created in it`);
   const systemRoot = process.env["SystemRoot"];
   const sid = windowsUserSid(systemRoot);
+  checkFolderChain(systemRoot, dir, sid);
   const accounts = storeFolderAccounts(sid);
   runSystemTool(systemRoot, "icacls.exe", [dir, "/setowner", `*${sid}`]);
   runSystemTool(systemRoot, "icacls.exe", [
@@ -181,6 +199,109 @@ export function restrictFolderToOwner(dir: string): void {
       `${dir} grants another account access (${entries.length} entries, not ${accounts.length}); no store is created in it: remove those grants or use another folder`,
     );
   }
+}
+
+/**
+ * Windows: refuses a store folder whose path another account could change (docs/specs/w-nv1/spec.md).
+ * The ACL steps work on the folder's path, so they hold only while no other account can rename,
+ * delete or re-permission a folder above it, make the store folder first, or open it before its
+ * ACL is set. Every folder from the store folder's parent up to the drive root, on the path as
+ * given (storeFolderChain), is read as SDDL with `icacls /save`, which names accounts by SID, and
+ * judged by chainRefusal. A link on the path is refused: icacls would read its target, and whoever
+ * may change the link may point it elsewhere. Owners are not read, since no stock tool prints one
+ * as a SID: an ancestor another account owns, whose access list does not name that account, is
+ * not detected.
+ */
+function checkFolderChain(systemRoot: string | undefined, dir: string, sid: string): void {
+  const folders = storeFolderChain(dir);
+  for (const folder of folders) {
+    if (lstatSync(folder).isSymbolicLink()) {
+      throw new Error(
+        `${folder} is a link; no store is created under it: use a path without links`,
+      );
+    }
+  }
+  if (folders.length === 0) return;
+  const chain: ChainFolder[] = [];
+  const scratch = privateScratch(systemRoot, sid);
+  try {
+    for (const [index, folder] of folders.entries()) {
+      chain.push({
+        path: folder,
+        dacl: savedDacl(systemRoot, folder, scratch),
+        holdsStoreFolder: index === 0,
+      });
+    }
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+  const refusal = chainRefusal(chain, trustedAccounts(sid));
+  if (refusal !== undefined) {
+    throw new Error(
+      `${refusal}; no store is created under it: remove that grant or keep the store in a folder only you can change, such as your profile`,
+    );
+  }
+}
+
+/**
+ * A folder under TEMP for the `icacls /save` files the chain check trusts, with the store
+ * folder's own ACL: owned by the user, and full control for the user, SYSTEM and Administrators
+ * only, read back on stdout. Bun's mkdtemp already gives it those three entries, explicit; Node's
+ * gives it TEMP's inherited ACL until these steps. Each file gets a random name, so no account can
+ * make one first. The steps act on the folder's path after it exists, so TEMP is trusted for what
+ * they cannot see (docs/specs/w-nv1/spec.md): it must give other accounts no inherited access to
+ * folders made in it (a handle opened before these steps keeps its access, and could turn the
+ * folder into a junction), must not let them delete or rename its entries, and must not be theirs.
+ * The default, under the user's profile, meets that.
+ */
+function privateScratch(systemRoot: string | undefined, sid: string): string {
+  const scratch = mkdtempSync(join(tmpdir(), "relembra-acl-"));
+  try {
+    const accounts = storeFolderAccounts(sid);
+    runSystemTool(systemRoot, "icacls.exe", [scratch, "/setowner", `*${sid}`]);
+    runSystemTool(systemRoot, "icacls.exe", [
+      scratch,
+      "/inheritance:r",
+      ...accounts.flatMap((who) => ["/grant:r", `*${who}:(OI)(CI)F`]),
+    ]);
+    const entries = runSystemTool(systemRoot, "icacls.exe", [scratch])
+      .split(/\r?\n/)
+      .filter((line) => line.includes(":("));
+    if (entries.length !== accounts.length) {
+      throw new Error(
+        `${scratch} grants another account access (${entries.length} entries, not ${accounts.length}); no store is created: point TEMP at a folder only you can change`,
+      );
+    }
+    return scratch;
+  } catch (error) {
+    rmSync(scratch, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+/**
+ * A folder's access list as SDDL. `icacls <folder> /save <file>` writes the folder's name on one
+ * line (none for a drive root) and its access list on the next, in UTF-16 or the console's
+ * encoding; parseDacl drops the SACL that follows it on that line.
+ */
+function savedDacl(systemRoot: string | undefined, folder: string, scratch: string): string {
+  // A fresh random name for each save, so no account can make the file first.
+  const file = join(scratch, randomBytes(16).toString("hex"));
+  runSystemTool(systemRoot, "icacls.exe", [folder, "/save", file]);
+  const bytes = readFileSync(file);
+  const utf16 = (bytes[0] === 0xff && bytes[1] === 0xfe) || bytes[1] === 0;
+  const lines = (utf16 ? bytes.toString("utf16le") : bytes.toString("utf8"))
+    .replace(/^\uFEFF/, "")
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== "");
+  // A drive root has no name, so its file holds the access list alone.
+  const dacl = lines.at(-1);
+  if (lines.length > 2 || dacl === undefined || !dacl.startsWith("D:")) {
+    throw new Error(
+      `icacls /save did not write one access list for ${folder}: ${lines.join(" | ")}`,
+    );
+  }
+  return dacl.trim();
 }
 
 /**
