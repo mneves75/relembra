@@ -43,13 +43,16 @@ function leakyParent(): string {
 /**
  * The owner of the folder `name` in `parent`, as `dir /q` names it (`BUILTIN\Users`). Windows
  * PowerShell's Get-Acl hung at times on the arm runner (run 41391564103), so no test runs it.
- * `dir /q` cuts a long owner name to its column, so a caller compares by prefix.
+ * `dir /q` cuts a long owner name to its column, which then runs into the folder's name with no
+ * space (run 41392460250), so the owner is what lies between `<DIR>` and the name, and a caller
+ * compares it by prefix.
  */
 function ownerOf(parent: string, name: string): string {
-  const line = windowsTool("cmd.exe", ["/d", "/c", "dir", "/q", "/a:d", parent])
+  const listing = windowsTool("cmd.exe", ["/d", "/c", "dir", "/q", "/a:d", parent]);
+  const line = listing
     .split(/\r?\n/)
-    .find((entry) => entry.includes("<DIR>") && entry.endsWith(` ${name}`));
-  if (line === undefined) throw new Error(`dir /q did not list ${name}`);
+    .find((entry) => entry.includes("<DIR>") && entry.endsWith(name));
+  if (line === undefined) throw new Error(`dir /q did not list ${name}:\n${listing}`);
   return line.slice(line.indexOf("<DIR>") + "<DIR>".length, -name.length).trim();
 }
 
