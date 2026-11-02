@@ -205,6 +205,10 @@ function isTorn(error: unknown): boolean {
 function readOnlySchemaVersion(path: string, busyTimeoutMs: number): number {
   const deadline = Date.now() + busyTimeoutMs;
   for (let delay = 1; ; delay = Math.min(delay * 2, 32)) {
+    // A -wal without its -shm: only a writer could rebuild the index, so the version comes from
+    // the image straight away. A read-only connection would refuse it on POSIX, but on Windows it
+    // creates the -shm or answers SQLITE_PROTOCOL.
+    if (existsSync(`${path}-wal`) && !existsSync(`${path}-shm`)) return imageSchemaVersion(path);
     const sidecars = existsSync(`${path}-wal`) || existsSync(`${path}-shm`);
     const parameters = sidecars ? "mode=ro&readonly_shm=1" : "mode=ro&immutable=1";
     let db: DatabaseSync | undefined;
