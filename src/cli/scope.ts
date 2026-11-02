@@ -274,6 +274,9 @@ export function normalizeRemote(url: string, base: () => string): string {
     host = split?.[1] ?? hostPort;
     port = split?.[2] ?? "";
     if (port === DEFAULT_PORTS[name]) port = "";
+  } else if (WINDOWS && /^[A-Za-z]:[\\/]/.test(rest)) {
+    // A drive path, which git on Windows reads as local, never as an scp-like host "C".
+    return localKey(rest, base);
   } else {
     // scp-like `[user@]host:path`, as git reads it: a colon before any slash.
     const scp = /^(?:[^@/]+@)?(\[[^\]]*\]|[^/:]+):(.*)$/.exec(rest);
@@ -323,12 +326,18 @@ function filePath(afterScheme: string): string {
       "unsupported-path",
     );
   }
-  return path;
+  // On Windows a drive path is written /C:/x in the URL; the path is C:/x.
+  return WINDOWS && /^\/[A-Za-z]:\//.test(path) ? path.slice(1) : path;
 }
 
+/**
+ * The key of a local origin: `file:` and its real path, with forward slashes on Windows too, so
+ * the project name beside the hash is the last folder, never the whole path.
+ */
 function localKey(path: string, base: () => string): string {
   const absolute = isAbsolute(path) ? path : resolve(base(), path);
-  return `file:${safeRealpath(absolute).replace(/(?<=.)\/+$/, "")}`;
+  const real = safeRealpath(absolute);
+  return `file:${(WINDOWS ? real.replaceAll("\\", "/") : real).replace(/(?<=.)\/+$/, "")}`;
 }
 
 /**

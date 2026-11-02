@@ -20,6 +20,9 @@ unchanged from 1.0.0-beta.1.
   - A new store's folder gets an owner-only ACL (the user's SID, SYSTEM, Administrators), in
     place of the POSIX mode checks Windows cannot apply.
   - git is found as `git.exe`, and paths are compared case-blind by their canonical real path.
+  - A local origin is keyed by its real path written with forward slashes, a drive path
+    (`C:\…`) is local as git reads it, and a `file:///C:/…` URL names `C:/…`, so the project name
+    beside the hash is the upstream's folder, never the whole path.
   - The session hook runs in Git Bash, as Claude Code does on Windows.
   - Not yet on Windows: owner trust, which needs `/dev/tty` (those actions are refused as
     `no-tty`), and the release tooling (gate, benchmarks, `install.sh`), which stays on macOS and
