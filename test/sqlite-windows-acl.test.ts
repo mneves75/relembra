@@ -40,14 +40,18 @@ function leakyParent(): string {
   return parent;
 }
 
-/** The SID of `path`'s owner, through Windows PowerShell (the paths here hold no quote). */
-const ownerOf = (path: string) =>
-  windowsTool(join("WindowsPowerShell", "v1.0", "powershell.exe"), [
-    "-NoProfile",
-    "-NonInteractive",
-    "-Command",
-    `(Get-Acl -LiteralPath '${path}').GetOwner([Security.Principal.SecurityIdentifier]).Value`,
-  ]).trim();
+/**
+ * The owner of the folder `name` in `parent`, as `dir /q` names it (`BUILTIN\Users`). Windows
+ * PowerShell's Get-Acl hung at times on the arm runner (run 41391564103), so no test runs it.
+ * `dir /q` cuts a long owner name to its column, so a caller compares by prefix.
+ */
+function ownerOf(parent: string, name: string): string {
+  const line = windowsTool("cmd.exe", ["/d", "/c", "dir", "/q", "/a:d", parent])
+    .split(/\r?\n/)
+    .find((entry) => entry.includes("<DIR>") && entry.endsWith(` ${name}`));
+  if (line === undefined) throw new Error(`dir /q did not list ${name}`);
+  return line.slice(line.indexOf("<DIR>") + "<DIR>".length, -name.length).trim();
+}
 
 /** A folder made by cmd, so it inherits its parent's ACL as any program's folder would. */
 function plainFolder(path: string): string {
@@ -113,17 +117,25 @@ describe.skipIf(!WINDOWS)("Windows store ACL", () => {
   });
 
   test("a folder another account owns becomes the user's before the grants", () => {
-    const home = plainFolder(join(leakyParent(), "home"));
+    const parent = leakyParent();
+    const home = plainFolder(join(parent, "home"));
     // BUILTIN\Users stands in for another account: an owner may always rewrite the ACL.
     windowsTool("icacls.exe", [home, "/setowner", "*S-1-5-32-545"]);
     // Positive control: the owner really changed.
-    expect(ownerOf(home)).toBe("S-1-5-32-545");
+    expect(ownerOf(parent, "home")).toBe("BUILTIN\\Users");
     const store = join(home, "relembra.db");
     createOwnerOnly(store);
-    expect(ownerOf(home)).toBe(windowsSid());
+    const owner = ownerOf(parent, "home");
+    // whoami prints the account as `HOST\user`, the name dir /q shows, perhaps cut short.
+    const account = windowsTool("whoami.exe", []).trim();
+    expect({
+      owner,
+      named: owner.includes("\\"),
+      account,
+      isAccount: account.toLowerCase().startsWith(owner.toLowerCase()),
+    }).toEqual({ owner, named: true, account, isAccount: true });
     expectOwnerOnly(home, store);
-    // Windows PowerShell starts slowly on the arm runner, and the test runs it twice.
-  }, 120_000);
+  });
 
   test("a store folder that is a junction is refused, its target untouched", () => {
     const parent = leakyParent();
