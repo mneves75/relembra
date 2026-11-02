@@ -667,18 +667,22 @@ The release binaries `relembra-windows-x64.exe` and `relembra-windows-arm64.exe`
 - **Store protection.** Windows files have no modes, so the mode checks do not apply. Instead,
   before a new store's first byte, its folder (`%USERPROFILE%\.relembra`, or `RELEMBRA_HOME`)
   gets an ACL of its own: full control for the current user's SID, SYSTEM and Administrators,
-  and nothing else. A folder that already existed loses what it inherited; one that grants anyone
-  else access explicitly is refused, and no store is created until you remove that grant. The store and SQLite's `-wal` and `-shm` files inherit it. The folder becomes
+  and nothing else. The store and SQLite's `-wal` and `-shm` files inherit it. The folder becomes
   yours first, since a folder's owner can always rewrite its ACL: if you may not take ownership of
-  a folder another account made, no store is created. A `-wal`, `-shm` or `-journal` file already
-  there without its store is refused, since it keeps its own ACL, and so is a store folder that is
-  a junction or symbolic link, whose target `icacls` would change. If `whoami` or `icacls` fails,
-  no store is created. Taking ownership does not close a handle the former owner already holds:
-  an account that owned the folder, or could change its ACL, before the store existed can widen
-  it again. A folder under your own profile, or one relembra makes, has no such account. An
-  existing store's ACL is not read again on every open, since that would
-  cost a process per command: a store folder made by another tool, or whose ACL was widened later,
-  is not detected. Keep `RELEMBRA_HOME` a folder of its own.
+  a folder another account made, no store is created. A folder that already existed loses what it
+  inherited; one that grants anyone else access explicitly is refused, and no store is created
+  until you remove that grant. A `-wal`, `-shm` or `-journal` file already there without its store
+  is refused, since it keeps its own ACL, and so is a store folder that is a junction or symbolic
+  link, whose target `icacls` would change. If `whoami` or `icacls` fails, no store is created.
+- **Where the store is safe.** These steps work on the folder's path, so they protect the store
+  only when no other account can change the folder or the folder that holds it. An account that
+  could change the folder's ACL or owner before the store existed can keep a handle that widens it
+  again, and one that may rename entries in the parent folder can swap the folder for its own
+  after the ACL is set. The default, under your profile, has no such account: only you, SYSTEM and
+  Administrators can change your profile. Point `RELEMBRA_HOME` at a folder of your own inside a
+  folder only you can change, never in a shared or world-writable place. An existing store's ACL
+  is not read again on every open, since that would cost a process per command: a store folder
+  made by another tool, or whose ACL was widened later, is not detected.
 - **Hook.** `relembra init` prints the same session hook as elsewhere, a `sh` command line under
   `/usr/bin/env -i`. Claude Code runs hook commands in Git Bash on Windows
   (<https://code.claude.com/docs/en/hooks>, read 2026-11-02), which has `/usr/bin/env`; without
