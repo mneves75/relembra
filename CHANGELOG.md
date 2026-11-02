@@ -16,7 +16,8 @@ unchanged from 1.0.0-beta.1.
   npm package and sha512 (`build/bun-toolchain.txt`, `scripts/bun-toolchain.sh`): the revision
   that built 1.0.0-beta.1.
 - Windows support ([docs/CLI.md](docs/CLI.md#windows)):
-  - The scope's user part is `user-<account name>`, since Windows has no uid.
+  - The scope's user part is `user-<account name>`, since Windows has no uid: the logon account
+    as `whoami` prints it, never `%USERNAME%`.
   - A new store's folder gets an owner-only ACL (the user's SID, SYSTEM, Administrators), in
     place of the POSIX mode checks Windows cannot apply.
   - git is found as `git.exe`, and paths are compared case-blind by their canonical real path.

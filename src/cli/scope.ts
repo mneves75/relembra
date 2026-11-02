@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { accessSync, constants, existsSync, realpathSync, statSync } from "node:fs";
-import { homedir, userInfo } from "node:os";
+import { homedir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { findGuardViolation } from "../guard.js";
 import { MAX_SCOPE_BYTES, utf8Bytes } from "../render.js";
@@ -39,16 +39,22 @@ export function osUser(): string {
 
 /**
  * Windows has no uid: the user is `user-<name>`, the account name lowercased, since Windows
- * compares account names without case. A runtime that cannot name the account ("unknown" or
- * empty) is refused, never mapped to a shared scope.
+ * compares account names without case. The name comes from the logon token, through whoami, not
+ * from os.userInfo(): Bun reads that from %USERNAME% on Windows (seen on the hosted runners), which
+ * the hook's `env -i` clears and any caller can set. An account whoami cannot name is refused,
+ * never mapped to a shared scope.
  */
 function windowsUser(): string {
-  let name: string;
-  try {
-    name = userInfo().username.toLowerCase();
-  } catch {
-    name = "";
-  }
+  const system32 = join(process.env["SystemRoot"] ?? "C:\\Windows", "System32");
+  const run = spawnSync(join(system32, "whoami.exe"), [], {
+    encoding: "utf8",
+    shell: false,
+    windowsHide: true,
+    timeout: 10_000,
+  });
+  // `domain\account`, one line.
+  const printed = run.status === 0 ? run.stdout.trim() : "";
+  const name = printed.slice(printed.lastIndexOf("\\") + 1).toLowerCase();
   if (name === "" || name === "unknown") {
     throw new CliError("no-scope", "no scope: the OS did not name the user; set RELEMBRA_SCOPE");
   }

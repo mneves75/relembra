@@ -657,9 +657,10 @@ The release binaries `relembra-windows-x64.exe` and `relembra-windows-arm64.exe`
 10 and 11. What differs from macOS and Linux:
 
 - **Scope.** Windows has no uid, so the OS user part is `user-<account name>`, lowercased
-  because Windows account names ignore case. If the runtime cannot name the account, the scope
-  is refused (`no-scope`) rather than shared. Folders are compared by their canonical real path,
-  case-folded, so `C:\Repo` and `c:\repo` are one project.
+  because Windows account names ignore case. The name is the logon account as `whoami` prints it,
+  never `%USERNAME%`, which a caller can set and the hook's `env -i` clears. If `whoami` cannot
+  name the account, the scope is refused (`no-scope`) rather than shared. Folders are compared
+  by their canonical real path, case-folded, so `C:\Repo` and `c:\repo` are one project.
 - **Store protection.** Windows files have no modes, so the mode checks do not apply. Instead,
   before a new store's first byte, its folder (`%USERPROFILE%\.relembra`, or `RELEMBRA_HOME`)
   gets an ACL of its own: full control for the current user's SID, SYSTEM and Administrators,
