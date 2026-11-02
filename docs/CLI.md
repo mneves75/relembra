@@ -241,6 +241,7 @@ A token starting with `-` before `--` is a flag. Put text that starts with `-` a
 | `PATH` | Passed to git, to find it |
 | `HOME` | Passed to git, for the user's `~/.gitconfig`; also the default store's home |
 | `XDG_CONFIG_HOME` | Passed to git, for the user's git configuration there |
+| `SystemRoot` | Windows only: the Windows folder, whose `System32\whoami.exe` names the user; default `C:\Windows` |
 
 An empty variable counts as unset. Nothing else in the environment is read, and git gets nothing
 else from it.
@@ -478,7 +479,7 @@ Register it in `.claude/settings.json` or `~/.claude/settings.json` for Claude C
         "hooks": [
           {
             "type": "command",
-            "command": "/usr/bin/env -i RELEMBRA_HOME=\"$RELEMBRA_HOME\" RELEMBRA_SCOPE=\"$RELEMBRA_SCOPE\" RELEMBRA_GLOBAL_SCOPE=\"$RELEMBRA_GLOBAL_SCOPE\" RELEMBRA_AGENT=\"$RELEMBRA_AGENT\" RELEMBRA_HARNESS=\"$RELEMBRA_HARNESS\" RELEMBRA_MODEL=\"$RELEMBRA_MODEL\" PATH=\"$PATH\" HOME=\"$HOME\" XDG_CONFIG_HOME=\"$XDG_CONFIG_HOME\" /path/to/relembra hook"
+            "command": "/usr/bin/env -i RELEMBRA_HOME=\"$RELEMBRA_HOME\" RELEMBRA_SCOPE=\"$RELEMBRA_SCOPE\" RELEMBRA_GLOBAL_SCOPE=\"$RELEMBRA_GLOBAL_SCOPE\" RELEMBRA_AGENT=\"$RELEMBRA_AGENT\" RELEMBRA_HARNESS=\"$RELEMBRA_HARNESS\" RELEMBRA_MODEL=\"$RELEMBRA_MODEL\" PATH=\"$PATH\" HOME=\"$HOME\" XDG_CONFIG_HOME=\"$XDG_CONFIG_HOME\" SystemRoot=\"$SystemRoot\" /path/to/relembra hook"
           }
         ]
       }
@@ -657,9 +658,10 @@ The release binaries `relembra-windows-x64.exe` and `relembra-windows-arm64.exe`
 10 and 11. What differs from macOS and Linux:
 
 - **Scope.** Windows has no uid, so the OS user part is `user-<account name>`, lowercased
-  because Windows account names ignore case. The name is the logon account as `whoami` prints it,
-  never `%USERNAME%`, which a caller can set and the hook's `env -i` clears. If `whoami` cannot
-  name the account, the scope is refused (`no-scope`) rather than shared. Folders are compared
+  because Windows account names ignore case. The name is the logon account as
+  `%SystemRoot%\System32\whoami.exe` prints it, never `%USERNAME%`, which a caller can set and
+  the hook's `env -i` clears. If `whoami` cannot name the account, the scope is refused
+  (`no-scope`) rather than shared. Folders are compared
   by their canonical real path, case-folded, so `C:\Repo` and `c:\repo` are one project.
 - **Store protection.** Windows files have no modes, so the mode checks do not apply. Instead,
   before a new store's first byte, its folder (`%USERPROFILE%\.relembra`, or `RELEMBRA_HOME`)

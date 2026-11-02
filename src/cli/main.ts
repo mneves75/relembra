@@ -76,10 +76,10 @@ const MAX_AGE_DAYS = 36_500;
 const MAX_SOURCES = 100;
 
 /** Reads the session's scope and the global one; writes, pins and owns the session's only. */
-function principalFor(scopes: SessionScopes, trustCeiling: Trust): Principal {
+function principalFor(env: CliEnv, scopes: SessionScopes, trustCeiling: Trust): Principal {
   const scope = scopes.session;
   return {
-    id: osUser(),
+    id: osUser(env),
     readable: scopes.global === undefined ? [scope] : [scope, scopes.global],
     writable: [scope],
     promotable: [],
@@ -96,8 +96,8 @@ function principalFor(scopes: SessionScopes, trustCeiling: Trust): Principal {
  * (`denied:above-ceiling`), as it would be without the owner's confirmation. Export needs
  * ownership only, not trust.
  */
-function transferPrincipal(scope: string): Principal {
-  return principalFor({ session: scope }, "agent");
+function transferPrincipal(env: CliEnv, scope: string): Principal {
+  return principalFor(env, { session: scope }, "agent");
 }
 
 function provenanceFrom(context: Context): NoteProvenance {
@@ -253,7 +253,7 @@ function hookCommand(): string {
  * with harness `mcp` by default. Log lines go to stderr; stdout carries protocol messages only.
  */
 async function serveStdio(env: CliEnv, scopes: SessionScopes, store: SqliteStore): Promise<void> {
-  const principal = principalFor(scopes, "agent");
+  const principal = principalFor(env, scopes, "agent");
   const egress = identityEgress;
   const relembra = createRelembra<null>({ store, policy: () => principal, egress });
   const pick = (variable: string | undefined, fallback: string) =>
@@ -327,7 +327,7 @@ async function runStoreCommand(
     });
   const relembra: Relembra<null> = createRelembra<null>({
     store,
-    policy: () => principalFor(scopes, ceiling),
+    policy: () => principalFor(context.env, scopes, ceiling),
     ...(maxAgeDays === undefined ? {} : { retention: [{ scope, maxAgeDays }] }),
   });
 
@@ -475,7 +475,7 @@ async function runStoreCommand(
     case "check":
       return check(scope, store, path);
     case "export": {
-      const jsonl = await exportJsonl(store, transferPrincipal(scope), { scope });
+      const jsonl = await exportJsonl(store, transferPrincipal(context.env, scope), { scope });
       const [header, ...events] = jsonl
         .split("\n")
         .slice(0, -1)
@@ -491,7 +491,7 @@ async function runStoreCommand(
         optmem === undefined
           ? await importJsonl(
               store,
-              transferPrincipal(scope),
+              transferPrincipal(context.env, scope),
               readImportFile(context, first as string),
             )
           : await importFromOptmem(context, scope, store, optmem);
@@ -540,7 +540,7 @@ async function importFromOptmem(
   }
   const log = readRegularFile(join(real, "LOG.txt"), "the OptMem log");
   const { agent, harness, model, host } = provenanceFrom(context);
-  return importOptmem(store, transferPrincipal(scope), {
+  return importOptmem(store, transferPrincipal(context.env, scope), {
     scope,
     store: createHash("sha256").update(real).digest("hex").slice(0, 16),
     log,
@@ -863,6 +863,7 @@ if (import.meta.main) {
     PATH,
     HOME,
     XDG_CONFIG_HOME,
+    SystemRoot,
   } = process.env;
   const env: CliEnv = {
     RELEMBRA_HOME,
@@ -876,6 +877,7 @@ if (import.meta.main) {
     PATH,
     HOME,
     XDG_CONFIG_HOME,
+    SystemRoot,
   };
   const code = await main(process.argv.slice(2), env, process.cwd(), process.execArgv);
   process.exitCode = code;

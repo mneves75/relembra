@@ -136,6 +136,7 @@ export const ENV_VARS = [
   "PATH",
   "HOME",
   "XDG_CONFIG_HOME",
+  "SystemRoot",
 ] as const;
 
 export function usageText(): string {

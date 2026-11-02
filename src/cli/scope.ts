@@ -23,6 +23,8 @@ export interface CliEnv {
   readonly PATH?: string | undefined;
   readonly HOME?: string | undefined;
   readonly XDG_CONFIG_HOME?: string | undefined;
+  /** Windows only: the Windows folder, whose System32 holds whoami.exe; default `C:\Windows`. */
+  readonly SystemRoot?: string | undefined;
 }
 
 /**
@@ -30,8 +32,8 @@ export interface CliEnv {
  * answers "unknown" when it is unset (measured on Bun 1.4.4; Node asks getpwuid), so a hook run
  * without USER would land in a second scope. The uid is the same in every environment.
  */
-export function osUser(): string {
-  if (process.platform === "win32") return windowsUser();
+export function osUser(env: CliEnv): string {
+  if (process.platform === "win32") return windowsUser(env.SystemRoot);
   const uid = process.getuid?.();
   if (uid === undefined) throw new CliError("no-scope", "this platform has no OS user id");
   return `uid-${uid}`;
@@ -42,10 +44,14 @@ export function osUser(): string {
  * compares account names without case. The name comes from the logon token, through whoami, not
  * from os.userInfo(): Bun reads that from %USERNAME% on Windows (seen on the hosted runners), which
  * the hook's `env -i` clears and any caller can set. An account whoami cannot name is refused,
- * never mapped to a shared scope.
+ * never mapped to a shared scope. The logon account cannot change while the process runs, so
+ * whoami runs once: the policy builds a principal for every operation.
  */
-function windowsUser(): string {
-  const system32 = join(process.env["SystemRoot"] ?? "C:\\Windows", "System32");
+let windowsAccount: string | undefined;
+function windowsUser(systemRoot: string | undefined): string {
+  if (windowsAccount !== undefined) return windowsAccount;
+  const root = systemRoot === undefined || systemRoot === "" ? "C:\\Windows" : systemRoot;
+  const system32 = join(root, "System32");
   const run = spawnSync(join(system32, "whoami.exe"), [], {
     encoding: "utf8",
     shell: false,
@@ -58,7 +64,8 @@ function windowsUser(): string {
   if (name === "" || name === "unknown") {
     throw new CliError("no-scope", "no scope: the OS did not name the user; set RELEMBRA_SCOPE");
   }
-  return `user-${name}`;
+  windowsAccount = `user-${name}`;
+  return windowsAccount;
 }
 
 /** The store file: RELEMBRA_HOME/relembra.db, RELEMBRA_HOME defaulting to ~/.relembra. */
@@ -90,7 +97,7 @@ export function resolveScope(env: CliEnv, cwd: string): string | undefined {
   const found = gitProject(env, cwd);
   if (found === undefined) return global;
   const hash = createHash("sha256").update(found.key).digest("hex").slice(0, 16);
-  return checkScope(`${osUser()}/${found.name}-${hash}`);
+  return checkScope(`${osUser(env)}/${found.name}-${hash}`);
 }
 
 /**
