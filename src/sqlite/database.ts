@@ -177,9 +177,9 @@ function windowsOwnerSid(systemRoot: string | undefined, path: string): string {
  * Windows: refuses a folder another account owns, then replaces its ACL with full control for the
  * current user, SYSTEM and the Administrators group only, inherited by everything in it. `/reset`
  * first drops every explicit grant a folder that already existed carried, then `/inheritance:r`
- * drops what it inherited, so the three grants are the whole ACL. Accounts are named by SID, so no account name or system
- * language is involved. Any failure is thrown: a store is never created in a folder others may
- * read.
+ * drops what it inherited, so the three grants are the whole ACL. Accounts are named by SID, so
+ * no account name or system language is involved. Any failure is thrown: a store is never created
+ * in a folder others may read.
  */
 export function restrictFolderToOwner(dir: string): void {
   const systemRoot = process.env["SystemRoot"];
