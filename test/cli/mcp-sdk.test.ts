@@ -28,22 +28,6 @@ function fakeServer(env: Record<string, string>): StdioClientTransport {
   });
 }
 
-/** "exited" once `pid` is gone, within 5 s; otherwise it is killed and "running" is answered. */
-async function exitOf(pid: number): Promise<"exited" | "running"> {
-  const alive = () => {
-    try {
-      process.kill(pid, 0);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-  for (let waited = 0; waited < 5_000 && alive(); waited += 50) await Bun.sleep(50);
-  if (!alive()) return "exited";
-  process.kill(pid, "SIGKILL");
-  return "running";
-}
-
 describe("relembra mcp ends with its client", () => {
   cliTest(
     "stdin ending while the server waits on it ends the server, exit 0",
@@ -86,7 +70,6 @@ describe("a stdio round trip through the official MCP client, pinned to 2026-07-
       });
       const mcp = client();
       await mcp.connect(transport);
-      const pid = transport.pid;
       // What reached the client, so a call that never settles names its last answers.
       const received: string[] = [];
       const deliver = transport.onmessage;
@@ -136,7 +119,9 @@ describe("a stdio round trip through the official MCP client, pinned to 2026-07-
         const after = await mcp.callTool({ name: "find", arguments: { query: "round trip" } });
         expect(text(after)).toBe("<find>\n</find>");
 
-        // An argument the tool does not take is a -32602 error, which the client rejects.
+        // An argument the tool does not take is a -32602 error, which the client rejects. Settled
+        // here, not through expect().rejects: that form never ended on the Windows runners, though
+        // this same call rejects at once there.
         const outcome = await Promise.race([
           mcp.callTool({ name: "note", arguments: { text: "x", scope: "y" } }).then(
             () => "resolved",
@@ -151,12 +136,8 @@ describe("a stdio round trip through the official MCP client, pinned to 2026-07-
           stderr: settled ? "" : stderr.slice(-500),
         }).toEqual({ outcome: "rejected", received: [], stderr: "" });
       } finally {
-        // The SDK's close ends stdin, then waits for the child's close event before it signals.
-        // Under Bun on the Windows runners that wait never ended though every call was answered,
-        // so it is bounded here and the server's own exit is checked below.
-        await Promise.race([mcp.close(), Bun.sleep(10_000)]);
+        await mcp.close();
       }
-      expect(pid === null ? "no pid" : await exitOf(pid)).toBe("exited");
       expect(ok(box, ["recall", "--retracted"]).memories).toHaveLength(1);
       expect(stderr).not.toContain("{");
     },
