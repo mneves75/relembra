@@ -155,9 +155,9 @@ export function windowsUserSid(systemRoot: string | undefined): string {
  * that never widens access: another process may already have made the store here (two first
  * opens at once), and a step that restored the parent's grants, as `/reset` does, would let the
  * store inherit them for a moment. An explicit grant to anyone else is refused, not dropped: the
- * ACL is read back and must hold the three grants alone. Accounts are named by SID, so no account
- * name or system language is involved. Any failure is thrown: a store is never created in a
- * folder others may read.
+ * ACL is read back and must hold one entry per account in storeFolderAccounts, and no other.
+ * Accounts are named by SID, so no account name or system language is involved. Any failure is
+ * thrown: a store is never created in a folder others may read.
  */
 export function restrictFolderToOwner(dir: string): void {
   // icacls follows a junction or symbolic link: the owner and ACL of its target would change.
@@ -165,24 +165,31 @@ export function restrictFolderToOwner(dir: string): void {
     throw new Error(`${dir} is a link; no store is created in it`);
   const systemRoot = process.env["SystemRoot"];
   const sid = windowsUserSid(systemRoot);
-  const grant = (who: string) => ["/grant:r", `*${who}:(OI)(CI)F`];
+  const accounts = storeFolderAccounts(sid);
   runSystemTool(systemRoot, "icacls.exe", [dir, "/setowner", `*${sid}`]);
   runSystemTool(systemRoot, "icacls.exe", [
     dir,
     "/inheritance:r",
-    ...grant(sid),
-    ...grant("S-1-5-18"), // SYSTEM
-    ...grant("S-1-5-32-544"), // Administrators
+    ...accounts.flatMap((who) => ["/grant:r", `*${who}:(OI)(CI)F`]),
   ]);
   // icacls prints one `name:(flags)` entry per line; the path, on the first, holds no `:(`.
   const entries = runSystemTool(systemRoot, "icacls.exe", [dir])
     .split(/\r?\n/)
     .filter((line) => line.includes(":("));
-  if (entries.length !== 3) {
+  if (entries.length !== accounts.length) {
     throw new Error(
-      `${dir} grants another account access (${entries.length} entries, not 3); no store is created in it: remove those grants or use another folder`,
+      `${dir} grants another account access (${entries.length} entries, not ${accounts.length}); no store is created in it: remove those grants or use another folder`,
     );
   }
+}
+
+/**
+ * The accounts a store folder grants full control: the user, SYSTEM and Administrators, each once.
+ * A process running as LocalSystem is SYSTEM itself, so its folder holds two entries; counting
+ * three would let a foreign grant pass as the third.
+ */
+export function storeFolderAccounts(userSid: string): string[] {
+  return [...new Set([userSid, "S-1-5-18", "S-1-5-32-544"])];
 }
 
 /**

@@ -12,7 +12,12 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, lstatSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createOwnerOnly, restrictFolderToOwner, windowsSystem32 } from "../src/sqlite/database.js";
+import {
+  createOwnerOnly,
+  restrictFolderToOwner,
+  storeFolderAccounts,
+  windowsSystem32,
+} from "../src/sqlite/database.js";
 import { windowsSid, windowsTool } from "./platform-support.js";
 
 const WINDOWS = process.platform === "win32";
@@ -85,6 +90,20 @@ describe("the System32 folder whoami and icacls run from", () => {
         system32: "C:\\Windows\\System32",
       });
     }
+  });
+});
+
+describe("the accounts a store folder grants", () => {
+  test("a user's folder grants the user, SYSTEM and Administrators", () => {
+    expect(storeFolderAccounts("S-1-5-21-1-2-3-1001")).toEqual([
+      "S-1-5-21-1-2-3-1001",
+      "S-1-5-18",
+      "S-1-5-32-544",
+    ]);
+  });
+
+  test("LocalSystem is SYSTEM: two accounts, so a foreign grant cannot pass as a third", () => {
+    expect(storeFolderAccounts("S-1-5-18")).toEqual(["S-1-5-18", "S-1-5-32-544"]);
   });
 });
 
