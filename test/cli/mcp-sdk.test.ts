@@ -28,6 +28,46 @@ function fakeServer(env: Record<string, string>): StdioClientTransport {
   });
 }
 
+/** "exited" once `pid` is gone, within 5 s; otherwise it is killed and "running" is answered. */
+async function exitOf(pid: number): Promise<"exited" | "running"> {
+  const alive = () => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  for (let waited = 0; waited < 5_000 && alive(); waited += 50) await Bun.sleep(50);
+  if (!alive()) return "exited";
+  process.kill(pid, "SIGKILL");
+  return "running";
+}
+
+describe("relembra mcp ends with its client", () => {
+  cliTest(
+    "stdin ending while the server waits on it ends the server, exit 0",
+    async () => {
+      ok(box, ["init"]);
+      const server = Bun.spawn([BINARY, "mcp"], {
+        cwd: box.repo,
+        env: sandboxEnv(box),
+        stdin: "pipe",
+        stdout: "ignore",
+        stderr: "ignore",
+      });
+      // By now the server waits on stdin: the end arrives on a pipe it reads, as a client closes it.
+      await Bun.sleep(500);
+      expect(server.exitCode).toBeNull();
+      server.stdin.end();
+      const code = await Promise.race([server.exited, Bun.sleep(10_000).then(() => "running")]);
+      if (code === "running") server.kill("SIGKILL");
+      expect(code).toBe(0);
+    },
+    30_000,
+  );
+});
+
 describe("a stdio round trip through the official MCP client, pinned to 2026-07-28", () => {
   cliTest(
     "discover, list, note, find, brief, wake and retract over the real binary",
@@ -44,21 +84,10 @@ describe("a stdio round trip through the official MCP client, pinned to 2026-07-
       transport.stderr?.on("data", (chunk) => {
         stderr += chunk;
       });
-      // Diagnostic: on the Windows runners this test timed out with no failing step, so each step
-      // is logged there until the stalled one is known.
-      const step = (name: string) => {
-        if (process.platform === "win32") console.warn(`mcp-sdk step: ${name}`);
-      };
       const mcp = client();
-      const callTool = mcp.callTool.bind(mcp);
-      mcp.callTool = ((params, ...rest) => {
-        step(`callTool ${params.name}`);
-        return callTool(params, ...rest);
-      }) as typeof mcp.callTool;
-      step("connect");
       await mcp.connect(transport);
+      const pid = transport.pid;
       try {
-        step("listTools");
         const { tools } = await mcp.listTools();
         expect(tools.map((tool) => tool.name)).toEqual([
           "note",
@@ -104,10 +133,12 @@ describe("a stdio round trip through the official MCP client, pinned to 2026-07-
           mcp.callTool({ name: "note", arguments: { text: "x", scope: "y" } }),
         ).rejects.toThrow();
       } finally {
-        step("close");
-        await mcp.close();
-        step("closed");
+        // The SDK's close ends stdin, then waits for the child's close event before it signals.
+        // Under Bun on the Windows runners that wait never ended though every call was answered,
+        // so it is bounded here and the server's own exit is checked below.
+        await Promise.race([mcp.close(), Bun.sleep(10_000)]);
       }
+      expect(pid === null ? "no pid" : await exitOf(pid)).toBe("exited");
       expect(ok(box, ["recall", "--retracted"]).memories).toHaveLength(1);
       expect(stderr).not.toContain("{");
     },
