@@ -91,7 +91,7 @@ describe.skipIf(SKIP)("the CLI build cache", () => {
       expectBuilt(build());
       const before = [sha256(bin()), readFileSync(sums(), "utf8"), readFileSync(stamp(), "utf8")];
       const result = build();
-      expect(result.out).toContain("bin/relembra is up to date");
+      expect(result.out).toContain(`bin/${NAME} is up to date`);
       expect(result.status).toBe(0);
       expect([sha256(bin()), readFileSync(sums(), "utf8"), readFileSync(stamp(), "utf8")]).toEqual(
         before,
