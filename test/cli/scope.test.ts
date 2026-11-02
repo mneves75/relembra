@@ -21,6 +21,7 @@ import {
   gitInit,
   hash16,
   ok,
+  posixCliTest,
   refused,
   run,
   sandbox,
@@ -34,6 +35,12 @@ beforeAll(() => {
 });
 afterAll(() => box.remove());
 
+const WINDOWS = process.platform === "win32";
+/** A path as relembra writes it in a local origin's key: forward slashes on Windows too. */
+const keyPath = (path: string) => (WINDOWS ? path.replaceAll("\\", "/") : path);
+/** A raw, unencoded file URL for `path` (on Windows file:///C:/x), naming `host` if given. */
+const rawFileUrl = (path: string, host = "") =>
+  `file://${host}${WINDOWS ? `/${keyPath(path)}` : path}`;
 const OTHER = "someone-else/other-repo";
 const scopesIn = (env: Record<string, string> = {}, cwd = box.repo) =>
   new Set(
@@ -198,18 +205,26 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
   cliTest(
     "the OS user part is the uid: USER, set, changed or unset, does not move the scope",
     () => {
-      for (const env of [{ USER: "alice" }, { USER: "" }, { USER: undefined, LOGNAME: "bob" }]) {
+      // USERNAME is Windows' variable; there the user part is the SID, never read from it.
+      for (const env of [
+        { USER: "alice" },
+        { USER: "" },
+        { USER: undefined, LOGNAME: "bob" },
+        { USERNAME: "carol" },
+      ]) {
         expect(ok(box, ["check"], { env }).scope).toBe(box.scope);
       }
-      expect(box.scope.startsWith(`uid-${process.getuid?.()}/`)).toBe(true);
+      expect(box.scope.startsWith(`${USER}/`)).toBe(true);
     },
   );
 
   cliTest(
     "Bun runtime options from the environment are refused: BUN_OPTIONS could move the cwd",
     () => {
-      const other = join(dirname(box.repo), "bun-options-target");
-      gitInit(other);
+      const target = join(dirname(box.repo), "bun-options-target");
+      gitInit(target);
+      // Bun's option parser reads a backslash as an escape, so a Windows path goes with slashes.
+      const other = keyPath(target);
       // Sol's repro: --cwd through BUN_OPTIONS answered with the other repository's scope.
       refused(box, ["check"], 2, "unsafe-runtime-env", { env: { BUN_OPTIONS: `--cwd ${other}` } });
       refused(box, ["note", "x"], 2, "unsafe-runtime-env", { env: { BUN_OPTIONS: "--smol" } });
@@ -345,40 +360,44 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
     ).toContain("<wake>");
   });
 
-  cliTest("a relative, empty or in-repository PATH entry never runs a repository's own git", () => {
-    const repo = join(dirname(box.repo), "path-repo");
-    gitInit(repo);
-    const realGit = Bun.which("git") as string;
-    const marker = join(box.home, "fake-git-ran");
-    const fake = `#!/bin/sh\necho ran >> '${marker}'\nexec '${realGit}' "$@"\n`;
-    for (const dir of [repo, join(repo, "bin")]) {
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, "git"), fake);
-      chmodSync(join(dir, "git"), 0o755);
-    }
-    const hostPath = `${dirname(realGit)}:/usr/bin:/bin`;
-    // Sol's repro: PATH=.:… ran ./git from the repository, twice per call.
-    for (const path of [
-      `.:${hostPath}`,
-      `:${hostPath}`,
-      `bin:${hostPath}`,
-      `${join(repo, "bin")}:${hostPath}`,
-    ]) {
-      expect({ path, scope: ok(box, ["check"], { cwd: repo, env: { PATH: path } }).scope }).toEqual(
-        {
+  posixCliTest(
+    "a relative, empty or in-repository PATH entry never runs a repository's own git",
+    () => {
+      const repo = join(dirname(box.repo), "path-repo");
+      gitInit(repo);
+      const realGit = Bun.which("git") as string;
+      const marker = join(box.home, "fake-git-ran");
+      const fake = `#!/bin/sh\necho ran >> '${marker}'\nexec '${realGit}' "$@"\n`;
+      for (const dir of [repo, join(repo, "bin")]) {
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, "git"), fake);
+        chmodSync(join(dir, "git"), 0o755);
+      }
+      const hostPath = `${dirname(realGit)}:/usr/bin:/bin`;
+      // Sol's repro: PATH=.:… ran ./git from the repository, twice per call.
+      for (const path of [
+        `.:${hostPath}`,
+        `:${hostPath}`,
+        `bin:${hostPath}`,
+        `${join(repo, "bin")}:${hostPath}`,
+      ]) {
+        expect({
+          path,
+          scope: ok(box, ["check"], { cwd: repo, env: { PATH: path } }).scope,
+        }).toEqual({
           path,
           scope: scopeFor(repo),
-        },
-      );
-      run(box, ["hook"], { cwd: repo, env: { PATH: path } });
-    }
-    expect(existsSync(marker)).toBe(false);
-    // Positive control: the fake git does run, and leaves its mark, when invoked.
-    spawnSync(join(repo, "git"), ["--version"]);
-    expect(readFileSync(marker, "utf8")).toBe("ran\n");
-  });
+        });
+        run(box, ["hook"], { cwd: repo, env: { PATH: path } });
+      }
+      expect(existsSync(marker)).toBe(false);
+      // Positive control: the fake git does run, and leaves its mark, when invoked.
+      spawnSync(join(repo, "git"), ["--version"]);
+      expect(readFileSync(marker, "utf8")).toBe("ran\n");
+    },
+  );
 
-  cliTest("a git on an outside PATH entry that links into the repository never runs", () => {
+  posixCliTest("a git on an outside PATH entry that links into the repository never runs", () => {
     const repo = join(dirname(box.repo), "symlink-repo");
     gitInit(repo);
     const realGit = Bun.which("git") as string;
@@ -402,34 +421,37 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
     expect(readFileSync(marker, "utf8")).toBe("ran\n");
   });
 
-  cliTest("an origin is git's output less its newline: a trailing space is significant", () => {
-    const base = join(dirname(box.repo), "spaced-origin");
-    const plain = join(base, "upstream");
-    const spaced = join(base, "upstream ");
-    gitInit(plain, "--bare");
-    gitInit(spaced, "--bare");
-    const clone = (name: string, origin: string) => {
-      const dir = join(base, name);
-      gitInit(dir);
-      git(dir, "remote", "add", "origin", origin);
-      return ok(box, ["check"], { cwd: dir }).scope;
-    };
-    // Sol's repro: trimming made both origins `file:<base>/upstream`, one scope.
-    const toPlain = clone("to-plain", plain);
-    expect(clone("to-spaced", spaced)).not.toBe(toPlain);
-    // Positive control: another clone of the same origin shares the scope.
-    expect(clone("to-plain-again", plain)).toBe(toPlain);
-    // Sol's round-4 repro: the same two as raw file URLs; URL parsing dropped the trailing space.
-    const byUrl = clone("url-to-plain", `file://${plain}`);
-    expect(clone("url-to-spaced", `file://${spaced}`)).not.toBe(byUrl);
-    // Positive controls: a file URL is its path, and so is its percent-encoded form.
-    expect(byUrl).toBe(toPlain);
-    expect(clone("encoded-to-spaced", pathToFileURL(spaced).href)).toBe(
-      clone("to-spaced-2", spaced),
-    );
-  });
+  posixCliTest(
+    "an origin is git's output less its newline: a trailing space is significant",
+    () => {
+      const base = join(dirname(box.repo), "spaced-origin");
+      const plain = join(base, "upstream");
+      const spaced = join(base, "upstream ");
+      gitInit(plain, "--bare");
+      gitInit(spaced, "--bare");
+      const clone = (name: string, origin: string) => {
+        const dir = join(base, name);
+        gitInit(dir);
+        git(dir, "remote", "add", "origin", origin);
+        return ok(box, ["check"], { cwd: dir }).scope;
+      };
+      // Sol's repro: trimming made both origins `file:<base>/upstream`, one scope.
+      const toPlain = clone("to-plain", plain);
+      expect(clone("to-spaced", spaced)).not.toBe(toPlain);
+      // Positive control: another clone of the same origin shares the scope.
+      expect(clone("to-plain-again", plain)).toBe(toPlain);
+      // Sol's round-4 repro: the same two as raw file URLs; URL parsing dropped the trailing space.
+      const byUrl = clone("url-to-plain", `file://${plain}`);
+      expect(clone("url-to-spaced", `file://${spaced}`)).not.toBe(byUrl);
+      // Positive controls: a file URL is its path, and so is its percent-encoded form.
+      expect(byUrl).toBe(toPlain);
+      expect(clone("encoded-to-spaced", pathToFileURL(spaced).href)).toBe(
+        clone("to-spaced-2", spaced),
+      );
+    },
+  );
 
-  cliTest("a path git prints with a newline is refused, never cut at the newline", () => {
+  posixCliTest("a path git prints with a newline is refused, never cut at the newline", () => {
     const base = join(dirname(box.repo), "newlines");
     const one = join(base, "newline\none");
     const two = join(base, "newline\ntwo");
@@ -459,7 +481,7 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
     const separate = ok(box, ["check"], { cwd: checkout }).scope;
     expect(separate).not.toBe(ok(box, ["check"], { cwd: ordinary }).scope);
     expect(separate).toBe(
-      `${USER}/up-${hash16(`origin:file:${join(base, "checkouts", "up.git")}`)}`,
+      `${USER}/up-${hash16(`origin:file:${keyPath(join(base, "checkouts", "up.git"))}`)}`,
     );
   });
 
@@ -494,18 +516,20 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
     };
     const rule = (doc: ReturnType<typeof scopeOf>) =>
       doc?.ok === false ? `${doc.error.code}/${doc.error.rule}` : "ok";
-    expect(rule(scopeOf("other-host", `file://elsewhere${upstream}`))).toBe(
+    expect(rule(scopeOf("other-host", rawFileUrl(upstream, "elsewhere")))).toBe(
       "no-scope/unsupported-origin",
     );
-    expect(rule(scopeOf("encoded-slash", `file://${base}%2Fup.git`))).toBe(
+    expect(rule(scopeOf("encoded-slash", `${rawFileUrl(base)}%2Fup.git`))).toBe(
       "no-scope/unsupported-origin",
     );
-    expect(rule(scopeOf("bad-escape", `file://${base}/up%ZZ.git`))).toBe(
+    expect(rule(scopeOf("bad-escape", `${rawFileUrl(base)}/up%ZZ.git`))).toBe(
       "no-scope/unsupported-origin",
     );
-    expect(rule(scopeOf("control", `file://${base}/up%0A.git`))).toBe("no-scope/unsupported-path");
+    expect(rule(scopeOf("control", `${rawFileUrl(base)}/up%0A.git`))).toBe(
+      "no-scope/unsupported-path",
+    );
     // Positive control: a localhost host is this machine, the same project as the bare path.
-    const local = scopeOf("localhost", `file://localhost${upstream}`);
+    const local = scopeOf("localhost", rawFileUrl(upstream, "localhost"));
     const byPath = scopeOf("by-path", upstream);
     expect(rule(local)).toBe("ok");
     expect(local?.ok === true && local.data.scope).toBe(byPath?.ok === true && byPath.data.scope);

@@ -26,6 +26,7 @@ import { dirname, join } from "node:path";
 import { RELEASE } from "../bench/acceptance.js";
 import type { Snapshot } from "../scripts/evidence.js";
 import { benchProblems } from "../scripts/gate-manifest.js";
+import { NO_RELEASE_TOOLING } from "./platform-support.js";
 
 const ROOT = join(import.meta.dir, "..");
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), "relembra-gate-")));
@@ -330,7 +331,7 @@ const step = (m: Manifest, name: string) => m.steps.find((s) => s.name === name)
 const calls = (dir: string) =>
   existsSync(join(dir, "calls.log")) ? readFileSync(join(dir, "calls.log"), "utf8") : "";
 
-describe("scripts/ci.sh", () => {
+describe.skipIf(NO_RELEASE_TOOLING)("scripts/ci.sh", () => {
   test("every required step passes: the manifest says so, with the candidate and its artifacts", () => {
     const { dir, root } = fixture();
     // Set but empty is no override and no skip.
@@ -548,7 +549,7 @@ describe("scripts/ci.sh", () => {
   }, 60_000);
 });
 
-describe("scripts/gate-manifest.ts", () => {
+describe.skipIf(NO_RELEASE_TOOLING)("scripts/gate-manifest.ts", () => {
   const manifestCli = (...args: string[]) =>
     spawnSync(process.execPath, [join(ROOT, "scripts", "gate-manifest.ts"), ...args], {
       encoding: "utf8",
@@ -737,7 +738,7 @@ describe("scripts/gate-manifest.ts", () => {
   });
 });
 
-describe("benchProblems", () => {
+describe.skipIf(NO_RELEASE_TOOLING)("benchProblems", () => {
   const runtime = (path: string) => ({
     path,
     version: "1",
@@ -798,7 +799,7 @@ describe("benchProblems", () => {
   });
 });
 
-describe("scripts/check-release.sh", () => {
+describe.skipIf(NO_RELEASE_TOOLING)("scripts/check-release.sh", () => {
   const releases = (root: string) =>
     readdirSync(join(root, ".scratch", "release"))
       .sort()

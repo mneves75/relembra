@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { openSqliteStore } from "relembra/sqlite";
 import { MEMORY_SCOPE } from "./pi-durable-support.js";
+import { selfKilled } from "./platform-support.js";
 import { tempDir } from "./sqlite-support.js";
 
 const CHILD = join(import.meta.dir, "pi-durable-crash-child.ts");
@@ -63,7 +64,10 @@ describe("pi-durable crash between the memory commit and the journal ack", () =>
   async function crashAndResume(enforcement: "op-id" | "none") {
     const committedOut = join(dir.path, "committed.json");
     const killed = await child("commit-and-die", enforcement, committedOut);
-    expect(killed.signal, killed.stderr).toBe("SIGKILL");
+    expect(
+      selfKilled({ status: killed.code, signal: killed.signal, stderr: killed.stderr }),
+      killed.stderr,
+    ).toBe(true);
     const committed: Committed = JSON.parse(readFileSync(committedOut, "utf8"));
     // Positive control: the memory committed before the kill.
     expect(await stored()).toEqual([committed]);

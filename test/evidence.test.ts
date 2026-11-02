@@ -12,6 +12,7 @@ import {
   snapshot,
   snapshotProblems,
 } from "../scripts/evidence.js";
+import { NO_RELEASE_TOOLING } from "./platform-support.js";
 
 const ROOT = join(import.meta.dir, "..");
 const EVIDENCE = join(ROOT, "scripts", "evidence.ts");
@@ -63,7 +64,7 @@ function fixture(files: Record<string, string> = {}): string {
   return root;
 }
 
-describe("inputIdentity", () => {
+describe.skipIf(NO_RELEASE_TOOLING)("inputIdentity", () => {
   test("a committed checkout is available and clean, named by its commit and its input bytes", () => {
     const root = fixture();
     const identity = inputIdentity(root);
@@ -202,7 +203,7 @@ describe("inputIdentity", () => {
   });
 });
 
-describe("runtimeIdentity", () => {
+describe.skipIf(NO_RELEASE_TOOLING)("runtimeIdentity", () => {
   test("names the Bun and Node that actually run, with their executables' sha256", () => {
     const identity = runtimeIdentity();
     expect(identity.errors).toEqual([]);
@@ -220,7 +221,7 @@ describe("runtimeIdentity", () => {
   });
 });
 
-describe("snapshotProblems", () => {
+describe.skipIf(NO_RELEASE_TOOLING)("snapshotProblems", () => {
   test("rejects any snapshot not available and clean, whatever its lists say", () => {
     const good = snapshot(fixture());
     expect(snapshotProblems(good)).toEqual([]);
@@ -235,7 +236,7 @@ describe("snapshotProblems", () => {
   });
 });
 
-describe("identityChanges", () => {
+describe.skipIf(NO_RELEASE_TOOLING)("identityChanges", () => {
   test("names every input and runtime difference between two snapshots, and none for equal ones", () => {
     const root = fixture();
     const before = snapshot(root);
@@ -261,7 +262,7 @@ describe("identityChanges", () => {
   });
 });
 
-describe("scripts/evidence.ts", () => {
+describe.skipIf(NO_RELEASE_TOOLING)("scripts/evidence.ts", () => {
   /** This process's environment without any runtime override, so the controls start clean. */
   const cleanEnv = Object.fromEntries(
     Object.entries(process.env).filter(([name]) => !isRuntimeOverride(name)),

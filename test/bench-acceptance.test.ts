@@ -18,6 +18,7 @@ import { type Attempt, RELEASE, strictOptionErrors, strictVerdict } from "../ben
 import { buildStore, percentiles, storeIntegrity } from "../bench/eval-latency.js";
 import { bulkCorpus, DEFAULT_SEED } from "../eval/generate.js";
 import { isRuntimeOverride, type Runtime, type Snapshot } from "../scripts/evidence.js";
+import { NO_RELEASE_TOOLING } from "./platform-support.js";
 
 const ROOT = join(import.meta.dir, "..");
 const scratch = mkdtempSync(join(tmpdir(), "relembra-bench-acceptance-"));
@@ -388,7 +389,7 @@ test("the pinned corpus digest is the one the pinned seed generates", () => {
   expect(createHash("sha256").update(text).digest("hex")).toBe(RELEASE.corpusSha256);
 });
 
-describe("bench/eval-latency.ts --check", () => {
+describe.skipIf(NO_RELEASE_TOOLING)("bench/eval-latency.ts --check", () => {
   /** This process's environment without runtime overrides, which would fail every run here. */
   const cleanEnv = Object.fromEntries(
     Object.entries(process.env).filter(([name]) => !isRuntimeOverride(name)),

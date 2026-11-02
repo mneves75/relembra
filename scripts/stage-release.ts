@@ -15,7 +15,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { type Manifest, publishProblems } from "./publish-manifest.ts";
 
 export interface StageInput {
@@ -94,8 +94,11 @@ function main(tag: string | undefined, dir: string | undefined): number {
   const archive = archiveName(tag);
   const path = archive === undefined ? undefined : join(dir, archive);
   const present = path !== undefined && existsSync(path);
+  // tar reads the archive by its bare name in its folder: GNU tar takes "C:\..." for host:path.
   const entries = present
-    ? execFileSync("tar", ["-tzf", path], { encoding: "utf8" }).split("\n").filter(Boolean)
+    ? execFileSync("tar", ["-tzf", basename(path)], { cwd: dir, encoding: "utf8" })
+        .split("\n")
+        .filter(Boolean)
     : [];
   // Only a canonical layout has exactly one member that tar can extract as the manifest.
   const readable = present && layoutProblem(entries) === undefined;
@@ -108,7 +111,10 @@ function main(tag: string | undefined, dir: string | undefined): number {
       : undefined,
     manifest: readable
       ? JSON.parse(
-          execFileSync("tar", ["-xzOf", path, "package/package.json"], { encoding: "utf8" }),
+          execFileSync("tar", ["-xzOf", basename(path), "package/package.json"], {
+            cwd: dir,
+            encoding: "utf8",
+          }),
         )
       : {},
   });

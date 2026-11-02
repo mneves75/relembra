@@ -8,7 +8,17 @@ import { afterAll, describe, expect } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { dirname } from "node:path";
 import { call, lines, mcp, toolText } from "./mcp-support.js";
-import { cliTest, ok, refused, run, type Sandbox, sandbox, sandboxEnv } from "./support.js";
+import {
+  cliTest,
+  HOOK_SHELL,
+  hookSilence,
+  ok,
+  refused,
+  run,
+  type Sandbox,
+  sandbox,
+  sandboxEnv,
+} from "./support.js";
 
 const G = "team/global-rules";
 const boxes: Sandbox[] = [];
@@ -179,13 +189,14 @@ describe("RELEMBRA_GLOBAL_SCOPE: the session also reads the global scope", () =>
     expect(command).toContain('RELEMBRA_GLOBAL_SCOPE="$RELEMBRA_GLOBAL_SCOPE"');
     ok(box, ["note", "A rule every project should see."], { env: IN_G });
     const viaHarness = (extra: Record<string, string>) => {
-      const result = spawnSync("/bin/sh", ["-c", command], {
+      const result = spawnSync(HOOK_SHELL, ["-c", command], {
         cwd: box.repo,
         env: sandboxEnv(box, extra),
         encoding: "utf8",
         timeout: 30_000,
       });
       expect(result.status).toBe(0);
+      expect(hookSilence(box, command, result.stdout, extra)).toBe("printed");
       return JSON.parse(result.stdout).hookSpecificOutput.additionalContext as string;
     };
     expect(viaHarness(WITH_G)).toContain("A rule every project should see.");
@@ -198,8 +209,9 @@ describe("wake and hook reserve room for each scope; unused room passes to the o
     const box = ready();
     ok(box, ["note", "Project fact: the harbor build listens on port 4100."]);
     const newestPin = fill(box, IN_G, "Global");
-    // Control: g alone overflows the default budget, so its wake ends in an index.
-    expect(ok(box, ["wake"], { env: IN_G }).text).toContain("<index ");
+    // Control: g alone overflows the default budget: its oldest covered memory is not shown in
+    // full. (Whether an index line follows depends on the room the last full line leaves.)
+    expect(ok(box, ["wake"], { env: IN_G }).text).not.toContain("Global rule 5:");
     const context = hookContext(box, WITH_G);
     expect(bytes(context)).toBeLessThanOrEqual(DEFAULT_BUDGET);
     const [project, glob] = frames(context);
@@ -218,7 +230,8 @@ describe("wake and hook reserve room for each scope; unused room passes to the o
     const box = ready();
     ok(box, ["note", "Global fact: every commit message says why."], { env: IN_G });
     const newestPin = fill(box, {}, "Project");
-    expect(ok(box, ["wake"]).text).toContain("<index ");
+    // Control: the project alone overflows the default budget, as g does above.
+    expect(ok(box, ["wake"]).text).not.toContain("Project rule 5:");
     const context = hookContext(box, WITH_G);
     expect(bytes(context)).toBeLessThanOrEqual(DEFAULT_BUDGET);
     const [mine, glob] = frames(context);

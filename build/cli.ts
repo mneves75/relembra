@@ -11,9 +11,12 @@ import { join, relative } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
 const BIN = join(ROOT, "bin");
-const OUT = join(BIN, "relembra");
-const STAMP = `${OUT}.stamp`;
-const SUMS = `${OUT}.sha256`;
+/** Windows runs only files named .exe; Bun would add the suffix to a bare --outfile anyway. */
+const NAME = process.platform === "win32" ? "relembra.exe" : "relembra";
+const OUT = join(BIN, NAME);
+// The same two names on every platform; the sha256 line names the binary's own file name.
+const STAMP = join(BIN, "relembra.stamp");
+const SUMS = join(BIN, "relembra.sha256");
 
 /**
  * --compile --aot --trim: the build §4.6 names. The executable must not read configuration from
@@ -65,7 +68,7 @@ function sha256(path: string): string {
 
 /** bin/relembra.sha256: one `sha256sum` line, as install.sh checks it. */
 function sumsOf(digest: string): string {
-  return `${digest}  relembra\n`;
+  return `${digest}  ${NAME}\n`;
 }
 
 /**
@@ -86,7 +89,7 @@ function main(): number {
       readFileSync(STAMP, "utf8") === stampOf(inputs, digest) &&
       readFileSync(SUMS, "utf8") === sumsOf(digest)
     ) {
-      console.log(`bin/relembra is up to date (${process.platform}-${process.arch})`);
+      console.log(`bin/${NAME} is up to date (${process.platform}-${process.arch})`);
       return 0;
     }
   }
@@ -112,7 +115,7 @@ function main(): number {
   const digest = sha256(OUT);
   writeFileSync(SUMS, sumsOf(digest));
   writeFileSync(STAMP, stampOf(inputs, digest));
-  console.log(`built bin/relembra for ${process.platform}-${process.arch}, sha256 ${digest}`);
+  console.log(`built bin/${NAME} for ${process.platform}-${process.arch}, sha256 ${digest}`);
   return 0;
 }
 

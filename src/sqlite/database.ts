@@ -1,5 +1,6 @@
+import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, win32 } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 import { StoreBusyError } from "../errors.js";
@@ -66,6 +67,9 @@ export function checkBusyTimeout(busyTimeoutMs: number): number {
   return busyTimeoutMs;
 }
 
+/** Whether file modes say who may read a file: every platform but Windows. */
+export const OWNER_MODES = process.platform !== "win32";
+
 /**
  * Creates missing directories as 0700 and a missing file as 0600, then checks the files with
  * checkOwnerOnly. A symbolic link at the path is refused before anything is created, so no file
@@ -74,6 +78,21 @@ export function checkBusyTimeout(busyTimeoutMs: number): number {
 export function createOwnerOnly(path: string): void {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   if (isSymbolicLink(path)) throw new StoreFileTypeError(path);
+  // Windows ignores the modes: before a new store's first byte, its folder gets an ACL of its own,
+  // so the store and the -wal and -shm files SQLite makes beside it inherit owner-only access.
+  if (!OWNER_MODES && !existsSync(path)) {
+    restrictFolderToOwner(dirname(path));
+    // A sidecar without its store was put there by someone: it keeps its own ACL, and Windows
+    // opens a file by its full path whatever the folder grants, so SQLite would write into a file
+    // another account can read. Checked after the ACL, when no other account can add one. A
+    // sidecar beside a store that exists by now belongs to another process that created the
+    // store first (its folder got the same three grants), so it is no plant.
+    for (const sidecar of [`${path}-wal`, `${path}-shm`, `${path}-journal`]) {
+      if (hasEntry(sidecar) && !hasEntry(path)) {
+        throw new Error(`${sidecar} exists without its store; no store is created beside it`);
+      }
+    }
+  }
   try {
     // O_EXCL never follows a link, so a link made since the check fails here with EEXIST.
     closeSync(openSync(path, "wx", 0o600));
@@ -81,6 +100,96 @@ export function createOwnerOnly(path: string): void {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
   }
   checkOwnerOnly(path);
+}
+
+/**
+ * Windows' System32 folder under `systemRoot` (%SystemRoot%). An empty or relative value falls
+ * back to `C:\Windows`: a relative executable path would be resolved against the working
+ * directory, which may be a repository's.
+ */
+export function windowsSystem32(systemRoot: string | undefined): string {
+  const root =
+    systemRoot !== undefined && win32.isAbsolute(systemRoot) && /^[A-Za-z]:/.test(systemRoot)
+      ? systemRoot
+      : "C:\\Windows";
+  return win32.join(root, "System32");
+}
+
+/** Runs a System32 tool; any failure is thrown with its output. */
+function runSystemTool(systemRoot: string | undefined, exe: string, args: string[]): string {
+  const result = spawnSync(win32.join(windowsSystem32(systemRoot), exe), args, {
+    encoding: "utf8",
+    shell: false,
+    windowsHide: true,
+    timeout: 10_000,
+  });
+  if (result.status !== 0) {
+    throw new Error(`${exe} failed (exit ${result.status}): ${result.stderr || result.stdout}`);
+  }
+  return result.stdout;
+}
+
+let userSid: string | undefined;
+
+/**
+ * The logon account's SID, from the process token as whoami prints it. Thrown when none. The
+ * account cannot change while the process runs, so whoami runs once: the CLI's scope and a new
+ * store's ACL both ask.
+ */
+export function windowsUserSid(systemRoot: string | undefined): string {
+  if (userSid !== undefined) return userSid;
+  // `"HOST\user","S-1-5-21-..."`: the SID is the last quoted field.
+  const printed = runSystemTool(systemRoot, "whoami.exe", ["/user", "/fo", "csv", "/nh"]);
+  const sid = /"(S-1-[0-9-]+)"\s*$/.exec(printed)?.[1];
+  if (sid === undefined) throw new Error("whoami did not print the user's SID");
+  userSid = sid;
+  return sid;
+}
+
+/**
+ * Windows: makes the current user the folder's owner, then replaces its ACL with full control for
+ * the user, SYSTEM and the Administrators group only, inherited by everything in it. An owner may
+ * always rewrite an ACL, so a folder another account made would otherwise give that account its
+ * access back; `/setowner` fails, and no store is created, unless the user may take ownership.
+ * `/inheritance:r` with the three `/grant:r` then drops what the folder inherited, in one change
+ * that never widens access: another process may already have made the store here (two first
+ * opens at once), and a step that restored the parent's grants, as `/reset` does, would let the
+ * store inherit them for a moment. An explicit grant to anyone else is refused, not dropped: the
+ * ACL is read back and must hold one entry per account in storeFolderAccounts, and no other.
+ * Accounts are named by SID, so no account name or system language is involved. Any failure is
+ * thrown: a store is never created in a folder others may read.
+ */
+export function restrictFolderToOwner(dir: string): void {
+  // icacls follows a junction or symbolic link: the owner and ACL of its target would change.
+  if (lstatSync(dir).isSymbolicLink())
+    throw new Error(`${dir} is a link; no store is created in it`);
+  const systemRoot = process.env["SystemRoot"];
+  const sid = windowsUserSid(systemRoot);
+  const accounts = storeFolderAccounts(sid);
+  runSystemTool(systemRoot, "icacls.exe", [dir, "/setowner", `*${sid}`]);
+  runSystemTool(systemRoot, "icacls.exe", [
+    dir,
+    "/inheritance:r",
+    ...accounts.flatMap((who) => ["/grant:r", `*${who}:(OI)(CI)F`]),
+  ]);
+  // icacls prints one `name:(flags)` entry per line; the path, on the first, holds no `:(`.
+  const entries = runSystemTool(systemRoot, "icacls.exe", [dir])
+    .split(/\r?\n/)
+    .filter((line) => line.includes(":("));
+  if (entries.length !== accounts.length) {
+    throw new Error(
+      `${dir} grants another account access (${entries.length} entries, not ${accounts.length}); no store is created in it: remove those grants or use another folder`,
+    );
+  }
+}
+
+/**
+ * The accounts a store folder grants full control: the user, SYSTEM and Administrators, each once.
+ * A process running as LocalSystem is SYSTEM itself, so its folder holds two entries; counting
+ * three would let a foreign grant pass as the third.
+ */
+export function storeFolderAccounts(userSid: string): string[] {
+  return [...new Set([userSid, "S-1-5-18", "S-1-5-32-544"])];
 }
 
 /**
@@ -99,14 +208,30 @@ export function checkOwnerOnly(path: string): void {
       throw error;
     }
     if (!stats.isFile()) throw new StoreFileTypeError(file);
-    const mode = Number(stats.mode) & 0o777;
-    if ((mode & 0o077) !== 0) throw new StoreFileModeError(file, mode);
+    // Windows has no mode bits: Node and Bun report 0o666 for every writable file, whatever its
+    // access control list grants. There the store relies on its folder's ACL, which under the
+    // user profile grants only the user, SYSTEM and Administrators (docs/CLI.md, Windows).
+    if (OWNER_MODES) {
+      const mode = Number(stats.mode) & 0o777;
+      if ((mode & 0o077) !== 0) throw new StoreFileModeError(file, mode);
+    }
   }
 }
 
 function isSymbolicLink(path: string): boolean {
   try {
     return lstatSync(path).isSymbolicLink();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+/** Whether a directory entry exists at `path`: a link counts, even one whose target is missing. */
+function hasEntry(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
     throw error;
@@ -160,6 +285,10 @@ function isTorn(error: unknown): boolean {
 function readOnlySchemaVersion(path: string, busyTimeoutMs: number): number {
   const deadline = Date.now() + busyTimeoutMs;
   for (let delay = 1; ; delay = Math.min(delay * 2, 32)) {
+    // A -wal without its -shm: only a writer could rebuild the index, so the version comes from
+    // the image straight away. A read-only connection would refuse it on POSIX, but on Windows it
+    // creates the -shm or answers SQLITE_PROTOCOL.
+    if (existsSync(`${path}-wal`) && !existsSync(`${path}-shm`)) return imageSchemaVersion(path);
     const sidecars = existsSync(`${path}-wal`) || existsSync(`${path}-shm`);
     const parameters = sidecars ? "mode=ro&readonly_shm=1" : "mode=ro&immutable=1";
     let db: DatabaseSync | undefined;

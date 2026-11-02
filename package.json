@@ -1,6 +1,6 @@
 {
   "name": "relembra",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.2",
   "description": "A curated, scoped, bounded, durable, erasable and measured memory for AI agents.",
   "license": "MIT",
   "author": "mneves75",

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { DatabaseSync, StatementSync } from "node:sqlite";
 import { createRelembra } from "relembra";
 import { openSqliteStore, SchemaTooNewError, StoreUnverifiedError } from "relembra/sqlite";
+import { selfKilled } from "./platform-support.js";
 import { INTERLEAVINGS, openDuringUpgrade } from "./sqlite-race-support.js";
 import { tempDir } from "./sqlite-support.js";
 import { hostPolicy, provenance, SCOPE } from "./support.js";
@@ -102,8 +103,10 @@ describe("sqlite crash and first-open processes", () => {
     DatabaseSync.prototype.close = function (this: DatabaseSync) {
       close.call(this);
       if (before !== undefined) return;
-      const child = spawnSync(process.execPath, [CHILD, "commit-future-and-die", path]);
-      expect(child.signal).toBe("SIGKILL");
+      const child = spawnSync(process.execPath, [CHILD, "commit-future-and-die", path], {
+        encoding: "utf8",
+      });
+      expect(selfKilled(child), child.stderr).toBe(true);
       before = snapshot();
     };
     try {

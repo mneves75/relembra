@@ -26,9 +26,10 @@ if (SKIP) console.warn("build cache test SKIPPED: RELEMBRA_SKIP_BUILD_TOOLCHAIN=
 
 const TIMEOUT = 120_000;
 let root = "";
-const bin = () => join(root, "bin", "relembra");
-const sums = () => `${bin()}.sha256`;
-const stamp = () => `${bin()}.stamp`;
+const NAME = process.platform === "win32" ? "relembra.exe" : "relembra";
+const bin = () => join(root, "bin", NAME);
+const sums = () => join(root, "bin", "relembra.sha256");
+const stamp = () => join(root, "bin", "relembra.stamp");
 const main = () => join(root, "src", "cli", "main.ts");
 
 function sha256(path: string): string {
@@ -59,7 +60,7 @@ function changeBinary(): void {
 function expectBuilt(result: { status: number | null; out: string }): void {
   expect(result.out).toContain("built bin/relembra");
   expect(result.status).toBe(0);
-  expect(readFileSync(sums(), "utf8")).toBe(`${sha256(bin())}  relembra\n`);
+  expect(readFileSync(sums(), "utf8")).toBe(`${sha256(bin())}  ${NAME}\n`);
   expect(spawnSync(bin(), { cwd: root, encoding: "utf8" }).stdout).toBe("probe\n");
 }
 
@@ -90,7 +91,7 @@ describe.skipIf(SKIP)("the CLI build cache", () => {
       expectBuilt(build());
       const before = [sha256(bin()), readFileSync(sums(), "utf8"), readFileSync(stamp(), "utf8")];
       const result = build();
-      expect(result.out).toContain("bin/relembra is up to date");
+      expect(result.out).toContain(`bin/${NAME} is up to date`);
       expect(result.status).toBe(0);
       expect([sha256(bin()), readFileSync(sums(), "utf8"), readFileSync(stamp(), "utf8")]).toEqual(
         before,
@@ -113,7 +114,7 @@ describe.skipIf(SKIP)("the CLI build cache", () => {
     "a sha256 file that does not match the binary is rebuilt",
     () => {
       expectBuilt(build());
-      writeFileSync(sums(), "deadbeef  relembra\n");
+      writeFileSync(sums(), `deadbeef  ${NAME}\n`);
       expectBuilt(build());
     },
     TIMEOUT,
@@ -134,7 +135,7 @@ describe.skipIf(SKIP)("the CLI build cache", () => {
     () => {
       expectBuilt(build());
       changeBinary();
-      writeFileSync(sums(), `${sha256(bin())}  relembra\n`);
+      writeFileSync(sums(), `${sha256(bin())}  ${NAME}\n`);
       expectBuilt(build());
     },
     TIMEOUT,

@@ -218,7 +218,8 @@ describe("export then import reproduces a random store", () => {
         await target.close();
         dir.remove();
       }
-    });
+      // Bun's 5 s default: the first sqlite seed took 5.4 s on a hosted Windows runner.
+    }, 30_000);
   }
 
   test("the corpora exercise every event kind, redacted forms included", async () => {

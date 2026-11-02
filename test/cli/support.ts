@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { windowsSid } from "../platform-support.js";
 
 export const ROOT = join(import.meta.dir, "..", "..");
 const { RELEMBRA_BINARY, RELEMBRA_REQUIRE_BINARY, CI, PATH, TMPDIR } = process.env;
@@ -24,7 +25,7 @@ function resolveBinary(): string | undefined {
     encoding: "utf8",
     timeout: 300_000,
   });
-  const path = join(ROOT, "bin", "relembra");
+  const path = join(ROOT, "bin", process.platform === "win32" ? "relembra.exe" : "relembra");
   if (built.status !== 0) {
     if (REQUIRE) throw new Error(`the CLI build failed:\n${built.stdout}\n${built.stderr}`);
     return undefined;
@@ -54,8 +55,25 @@ export function cliTest(name: string, fn: () => void | Promise<void>, timeoutMs 
   (binary === undefined ? test.skip : test)(name, fn, timeoutMs);
 }
 
-/** The OS user part of a scope: the uid (see src/cli/scope.ts on why not the name). */
-export const USER = `uid-${process.getuid?.()}`;
+/**
+ * A CLI test that needs what only POSIX gives: file modes, or a pseudo-terminal behind /dev/tty.
+ * Skipped on Windows, where test/sqlite-windows-acl.test.ts covers the owner-only store, and owner
+ * trust, with no /dev/tty, is always refused as `no-tty` (docs/CLI.md#windows).
+ */
+export function posixCliTest(
+  name: string,
+  fn: () => void | Promise<void>,
+  timeoutMs = 30_000,
+): void {
+  (binary === undefined || process.platform === "win32" ? test.skip : test)(name, fn, timeoutMs);
+}
+
+/**
+ * The OS user part of a scope: the uid (see src/cli/scope.ts on why not the name), and on Windows,
+ * which has none, the logon account's SID.
+ */
+export const USER =
+  process.platform === "win32" ? `sid-${windowsSid()}` : `uid-${process.getuid?.()}`;
 
 /** The first 16 hex characters of the sha256 of a project key (docs/CLI.md, Scope). */
 export const hash16 = (key: string) => createHash("sha256").update(key).digest("hex").slice(0, 16);
@@ -78,7 +96,10 @@ export interface Sandbox {
 
 /** A temp HOME, RELEMBRA_HOME and git repository, removed by `remove`. */
 export function sandbox(): Sandbox {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "relembra-cli-")));
+  // The long-name real path on Windows (the temp folder can be a short 8.3 name), as the binary
+  // resolves it, so the scope this sandbox expects is the one the binary derives.
+  const real = process.platform === "win32" ? realpathSync.native : realpathSync;
+  const root = real(mkdtempSync(join(tmpdir(), "relembra-cli-")));
   const home = join(root, "home");
   const relembraHome = join(root, "relembra-home");
   const repo = join(root, "work", `repo-${basename(root).slice(-6)}`);
@@ -135,6 +156,29 @@ export type JsonDocument =
 export const exercised = new Set<string>();
 
 /** The sandbox's environment: no RELEMBRA_SCOPE, HOME in the sandbox, plus `extra`. */
+/** The shell a harness runs a hook command in: Claude Code uses Git Bash on Windows. */
+export const HOOK_SHELL = process.platform === "win32" ? "bash" : "/bin/sh";
+
+/**
+ * Why init's hook `command` printed nothing, since the hook fails open: the same command line with
+ * `wake --json` in place of `hook` reports the error the hook swallows. "printed" when it did print.
+ */
+export function hookSilence(
+  box: Sandbox,
+  command: string,
+  printed: string,
+  extra: Record<string, string> = {},
+): string {
+  if (printed !== "") return "printed";
+  const wake = spawnSync(HOOK_SHELL, ["-c", command.replace(/ hook$/, " wake --json")], {
+    cwd: box.repo,
+    env: sandboxEnv(box, extra),
+    encoding: "utf8",
+    timeout: 30_000,
+  });
+  return `silent; wake through the same command: status ${wake.status}\n${wake.stdout}\n${wake.stderr}`;
+}
+
 export function sandboxEnv(
   box: Sandbox,
   extra: Record<string, string | undefined> = {},
@@ -159,10 +203,17 @@ export function sandboxEnv(
 const SETSID = ["-MPOSIX", "-e", "POSIX::setsid(); exec { $ARGV[0] } @ARGV or die $!"];
 /** perl by absolute path, so a test can give the binary a PATH without perl (or git) in it. */
 const PERL = existsSync("/usr/bin/perl") ? "/usr/bin/perl" : "perl";
+/**
+ * The command line that starts the binary with `args`. Windows has no sessions and no /dev/tty, so
+ * there the binary starts directly; elsewhere through setsid, as above.
+ */
+const launch = (args: readonly string[]): [string, string[]] =>
+  process.platform === "win32" ? [BINARY, [...args]] : [PERL, [...SETSID, BINARY, ...args]];
 
 /** Runs the binary in the sandbox: its repo as cwd, a clean environment with no RELEMBRA_SCOPE. */
 export function run(box: Sandbox, args: readonly string[], options: RunOptions = {}): RunResult {
-  const result = spawnSync(PERL, [...SETSID, BINARY, ...args], {
+  const [command, argv] = launch(args);
+  const result = spawnSync(command, argv, {
     cwd: options.cwd ?? box.repo,
     env: sandboxEnv(box, options.env),
     input: options.input ?? "",
@@ -209,7 +260,8 @@ export function runStdinOpen(
 ): Promise<{ status: number | null; stdout: string; elapsedMs: number; killed: boolean }> {
   return new Promise((resolve) => {
     const started = performance.now();
-    const child = spawn(PERL, [...SETSID, BINARY, ...args], {
+    const [command, argv] = launch(args);
+    const child = spawn(command, argv, {
       cwd: box.repo,
       env: sandboxEnv(box),
       stdio: ["pipe", "pipe", "pipe"],

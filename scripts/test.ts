@@ -19,7 +19,13 @@ const postgres = [...TEST_FILES.scanSync(".")]
   .filter((file) => !file.split("/").includes("node_modules"))
   .filter((file) => POSTGRES.test(readFileSync(file, "utf8")))
   .sort();
-const extra = process.argv.slice(2);
+// On Windows each new store runs icacls three times before its first byte (src/sqlite/database.ts,
+// restrictFolderToOwner), so a test that makes several stores outlasts Bun's 5 s default on a
+// loaded hosted runner. A test's own timeout still applies.
+const extra = [
+  ...(process.platform === "win32" ? ["--timeout=20000"] : []),
+  ...process.argv.slice(2),
+];
 
 async function lane(name: string, args: string[]): Promise<number> {
   const began = performance.now();

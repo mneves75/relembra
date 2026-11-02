@@ -19,6 +19,8 @@ import {
   VARYING_HEADER_BYTES,
 } from "../bench/eval-latency.js";
 import { bulkCorpus, DEFAULT_SEED } from "../eval/generate.js";
+import { MIGRATIONS } from "../src/sqlite/migrations.js";
+import { NO_RELEASE_TOOLING } from "./platform-support.js";
 
 const ROOT = join(import.meta.dir, "..");
 const scratch = mkdtempSync(join(tmpdir(), "relembra-eval-bench-"));
@@ -86,7 +88,9 @@ describe("the benchmark store", () => {
     expect(c.sha256).not.toBe(a.sha256);
     expect(c.fileSha256).not.toBe(a.fileSha256);
     // Every byte that differs between the two raw files is one storeSha256 zeroes: the header's
-    // change counter or a migration time (6 bytes inside the schema_version rows).
+    // change counter or a migration time, a 6-byte integer in each schema_version row. How many
+    // of a time's bytes differ depends on how far apart the builds ran: two bytes under 65 s,
+    // with a carry three, as on a slow Windows runner (run 41389502801: 18).
     const fa = readFileSync(join(scratch, "a", "relembra.db"));
     const fb = readFileSync(join(scratch, "b", "relembra.db"));
     expect(fb.length).toBe(fa.length);
@@ -94,7 +98,7 @@ describe("the benchmark store", () => {
       VARYING_HEADER_BYTES.some(([start, end]) => i >= start && i < end);
     const differing: number[] = [];
     for (let i = 0; i < fa.length; i++) if (fa[i] !== fb[i] && !header(i)) differing.push(i);
-    expect(differing.length).toBeLessThanOrEqual(2 * 6);
+    expect(differing.length).toBeLessThanOrEqual(6 * MIGRATIONS.length);
     expect(a.bytes).toBeGreaterThan(0);
     // Only the database file remains once the store is closed.
     expect(readdirSync(join(scratch, "a"))).toEqual(["relembra.db"]);
@@ -127,80 +131,84 @@ test("percentiles are nearest-rank", () => {
   expect(percentiles([7])).toMatchObject({ p50: 7, p95: 7, p99: 7 });
 });
 
-test("a small run measures every surface on both runtimes and writes its record", () => {
-  const out = join(scratch, "bench");
-  // A directory the run did not create, at the name the benchmark once derived and deleted: the
-  // run must leave it alone and remove only what it made.
-  const work = join(scratch, "work");
-  const foreign = join(work, `seed-${DEFAULT_SEED}-n200`);
-  mkdirSync(foreign, { recursive: true });
-  writeFileSync(join(foreign, "keep.txt"), "not the benchmark's\n");
-  const run = spawnSync(
-    process.execPath,
-    [
-      join(ROOT, "bench", "eval-latency.ts"),
-      "--memories",
-      "200",
-      "--warmup",
-      "2",
-      "--warm",
-      "30",
-      "--cold",
-      "30",
-      "--out",
-      out,
-      "--work",
-      work,
-    ],
-    { encoding: "utf8", timeout: 240_000 },
-  );
-  expect(run.stderr).toBe("");
-  expect(run.status).toBe(0);
-  expect(existsSync(join(foreign, "keep.txt"))).toBe(true);
-  expect(readdirSync(work)).toEqual([`seed-${DEFAULT_SEED}-n200`]);
-  // One directory per attempt, dated by the bench process; bun test runs in UTC, so its own
-  // today() can differ.
-  const attempts = readdirSync(out).filter((name) => /^bench-\d{4}-\d{2}-\d{2}-/.test(name));
-  expect(attempts).toHaveLength(1);
-  const base = join(out, attempts[0] as string, "bench");
-  const record = JSON.parse(readFileSync(`${base}.json`, "utf8")) as {
-    store: {
-      sha256: string;
-      identicalRebuild: boolean;
-      unchangedByReads: boolean;
-      integrity: string | null;
+test.skipIf(NO_RELEASE_TOOLING)(
+  "a small run measures every surface on both runtimes and writes its record",
+  () => {
+    const out = join(scratch, "bench");
+    // A directory the run did not create, at the name the benchmark once derived and deleted: the
+    // run must leave it alone and remove only what it made.
+    const work = join(scratch, "work");
+    const foreign = join(work, `seed-${DEFAULT_SEED}-n200`);
+    mkdirSync(foreign, { recursive: true });
+    writeFileSync(join(foreign, "keep.txt"), "not the benchmark's\n");
+    const run = spawnSync(
+      process.execPath,
+      [
+        join(ROOT, "bench", "eval-latency.ts"),
+        "--memories",
+        "200",
+        "--warmup",
+        "2",
+        "--warm",
+        "30",
+        "--cold",
+        "30",
+        "--out",
+        out,
+        "--work",
+        work,
+      ],
+      { encoding: "utf8", timeout: 240_000 },
+    );
+    expect(run.stderr).toBe("");
+    expect(run.status).toBe(0);
+    expect(existsSync(join(foreign, "keep.txt"))).toBe(true);
+    expect(readdirSync(work)).toEqual([`seed-${DEFAULT_SEED}-n200`]);
+    // One directory per attempt, dated by the bench process; bun test runs in UTC, so its own
+    // today() can differ.
+    const attempts = readdirSync(out).filter((name) => /^bench-\d{4}-\d{2}-\d{2}-/.test(name));
+    expect(attempts).toHaveLength(1);
+    const base = join(out, attempts[0] as string, "bench");
+    const record = JSON.parse(readFileSync(`${base}.json`, "utf8")) as {
+      store: {
+        sha256: string;
+        identicalRebuild: boolean;
+        unchangedByReads: boolean;
+        integrity: string | null;
+      };
+      budget: { evaluated: boolean; met: boolean | null };
+      load: { before: { uptime: string }; after: { uptime: string } };
+      results: Record<string, Record<string, Record<string, { runs: number; p95: number }>>>;
+      samples: Record<string, Record<string, Record<string, number[]>>>;
+      identity: {
+        before: { inputs: { available: boolean; commit: string | null } };
+        after: { inputs: { commit: string | null } } | null;
+      };
+      check: unknown;
+      errors: string[];
     };
-    budget: { evaluated: boolean; met: boolean | null };
-    load: { before: { uptime: string }; after: { uptime: string } };
-    results: Record<string, Record<string, Record<string, { runs: number; p95: number }>>>;
-    samples: Record<string, Record<string, Record<string, number[]>>>;
-    identity: {
-      before: { inputs: { available: boolean; commit: string | null } };
-      after: { inputs: { commit: string | null } } | null;
-    };
-    check: unknown;
-    errors: string[];
-  };
-  // Exploratory: recorded with its identity and raw samples, never judged as a release run.
-  expect(record.check).toBeNull();
-  expect(record.errors).toEqual([]);
-  expect(record.identity.before.inputs.available).toBe(true);
-  expect(record.identity.after?.inputs.commit).toBe(record.identity.before.inputs.commit);
-  expect(record.store.identicalRebuild).toBe(true);
-  // Ticket 19's budget is for 20,000 memories on the pinned seed: a small run does not judge it.
-  expect(record.budget).toMatchObject({ evaluated: false, met: null });
-  expect(readFileSync(`${base}.md`, "utf8")).toContain("not evaluated");
-  expect(record.store.unchangedByReads).toBe(true);
-  expect(record.store.integrity).toBe("ok");
-  expect(record.load.before.uptime).toContain("load");
-  for (const runtime of ["bun", "node"]) {
-    for (const mode of ["warm", "cold"]) {
-      for (const op of ["find", "wake", "brief"]) {
-        expect(record.results[runtime]?.[mode]?.[op]?.runs).toBe(30);
-        expect(record.results[runtime]?.[mode]?.[op]?.p95).toBeGreaterThan(0);
-        expect(record.samples[runtime]?.[mode]?.[op]).toHaveLength(30);
+    // Exploratory: recorded with its identity and raw samples, never judged as a release run.
+    expect(record.check).toBeNull();
+    expect(record.errors).toEqual([]);
+    expect(record.identity.before.inputs.available).toBe(true);
+    expect(record.identity.after?.inputs.commit).toBe(record.identity.before.inputs.commit);
+    expect(record.store.identicalRebuild).toBe(true);
+    // Ticket 19's budget is for 20,000 memories on the pinned seed: a small run does not judge it.
+    expect(record.budget).toMatchObject({ evaluated: false, met: null });
+    expect(readFileSync(`${base}.md`, "utf8")).toContain("not evaluated");
+    expect(record.store.unchangedByReads).toBe(true);
+    expect(record.store.integrity).toBe("ok");
+    expect(record.load.before.uptime).toContain("load");
+    for (const runtime of ["bun", "node"]) {
+      for (const mode of ["warm", "cold"]) {
+        for (const op of ["find", "wake", "brief"]) {
+          expect(record.results[runtime]?.[mode]?.[op]?.runs).toBe(30);
+          expect(record.results[runtime]?.[mode]?.[op]?.p95).toBeGreaterThan(0);
+          expect(record.samples[runtime]?.[mode]?.[op]).toHaveLength(30);
+        }
       }
     }
-  }
-  expect(readFileSync(`${base}.md`, "utf8")).toContain(record.store.sha256);
-}, 300_000);
+    expect(readFileSync(`${base}.md`, "utf8")).toContain(record.store.sha256);
+  },
+  300_000,
+);

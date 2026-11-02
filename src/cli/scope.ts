@@ -2,9 +2,10 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { accessSync, constants, existsSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { findGuardViolation } from "../guard.js";
 import { MAX_SCOPE_BYTES, utf8Bytes } from "../render.js";
+import { windowsUserSid } from "../sqlite/database.js";
 import { CliError } from "./errors.js";
 import type { SessionScopes } from "./wake.js";
 
@@ -23,6 +24,8 @@ export interface CliEnv {
   readonly PATH?: string | undefined;
   readonly HOME?: string | undefined;
   readonly XDG_CONFIG_HOME?: string | undefined;
+  /** Windows only: the Windows folder, whose System32 holds whoami.exe; default `C:\Windows`. */
+  readonly SystemRoot?: string | undefined;
 }
 
 /**
@@ -30,10 +33,28 @@ export interface CliEnv {
  * answers "unknown" when it is unset (measured on Bun 1.4.4; Node asks getpwuid), so a hook run
  * without USER would land in a second scope. The uid is the same in every environment.
  */
-export function osUser(): string {
+export function osUser(env: CliEnv): string {
+  if (process.platform === "win32") return windowsUser(env.SystemRoot);
   const uid = process.getuid?.();
   if (uid === undefined) throw new CliError("no-scope", "this platform has no OS user id");
   return `uid-${uid}`;
+}
+
+/**
+ * Windows has no uid: the user is `sid-<SID>`, the logon account's security identifier, which,
+ * like a uid, is one per account (`PC\alex` and `CORP\alex` differ) and survives a rename. It
+ * comes from the process token through whoami, never from os.userInfo(): Bun reads that from
+ * %USERNAME% on Windows (seen on the hosted runners), which the hook's `env -i` clears and any
+ * caller can set. An account whoami cannot name is refused, never mapped to a shared scope.
+ * windowsUserSid runs whoami once per process, though the policy builds a principal for every
+ * operation.
+ */
+function windowsUser(systemRoot: string | undefined): string {
+  try {
+    return `sid-${windowsUserSid(systemRoot)}`;
+  } catch {
+    throw new CliError("no-scope", "no scope: the OS did not name the user; set RELEMBRA_SCOPE");
+  }
 }
 
 /** The store file: RELEMBRA_HOME/relembra.db, RELEMBRA_HOME defaulting to ~/.relembra. */
@@ -65,7 +86,7 @@ export function resolveScope(env: CliEnv, cwd: string): string | undefined {
   const found = gitProject(env, cwd);
   if (found === undefined) return global;
   const hash = createHash("sha256").update(found.key).digest("hex").slice(0, 16);
-  return checkScope(`${osUser()}/${found.name}-${hash}`);
+  return checkScope(`${osUser(env)}/${found.name}-${hash}`);
 }
 
 /**
@@ -78,6 +99,11 @@ export function resolveScopes(env: CliEnv, cwd: string): SessionScopes | undefin
   const global = resolveGlobalScope(env);
   return global === undefined || global === session ? { session } : { session, global };
 }
+
+const WINDOWS = process.platform === "win32";
+
+/** Git's file name: Windows runs only files named .exe. */
+const GIT = WINDOWS ? "git.exe" : "git";
 
 /** Git gets this long to answer each question before the scope is refused. */
 const GIT_TIMEOUT_MS = 2_000;
@@ -109,17 +135,20 @@ function hostGit(env: CliEnv, cwd: string): { git: string; path: string } {
     }
     if (dirname(dir) === dir) break;
   }
-  const inside = (dir: string) => fences.some((f) => dir === f || dir.startsWith(`${f}/`));
+  // Windows paths ignore case, so a fence compared by bytes would let C:\REPO\bin past C:\repo.
+  const fold = (path: string) => (WINDOWS ? path.toLowerCase() : path);
+  const inside = (dir: string) =>
+    fences.some((f) => fold(dir) === fold(f) || fold(dir).startsWith(fold(`${f}${sep}`)));
   const entries = (env.PATH ?? "")
-    .split(":")
+    .split(delimiter)
     .filter((entry) => isAbsolute(entry) && !inside(safeRealpath(entry)));
   for (const entry of entries) {
     try {
-      const candidate = realpathSync(join(entry, "git"));
+      const candidate = realpath(join(entry, GIT));
       if (inside(candidate)) continue;
       if (statSync(candidate).isFile()) {
         accessSync(candidate, constants.X_OK);
-        return { git: candidate, path: entries.join(":") };
+        return { git: candidate, path: entries.join(delimiter) };
       }
     } catch {
       // Not there, or not executable: keep looking.
@@ -247,6 +276,9 @@ export function normalizeRemote(url: string, base: () => string): string {
     host = split?.[1] ?? hostPort;
     port = split?.[2] ?? "";
     if (port === DEFAULT_PORTS[name]) port = "";
+  } else if (WINDOWS && /^[A-Za-z]:[\\/]/.test(rest)) {
+    // A drive path, which git on Windows reads as local, never as an scp-like host "C".
+    return localKey(rest, base);
   } else {
     // scp-like `[user@]host:path`, as git reads it: a colon before any slash.
     const scp = /^(?:[^@/]+@)?(\[[^\]]*\]|[^/:]+):(.*)$/.exec(rest);
@@ -296,17 +328,31 @@ function filePath(afterScheme: string): string {
       "unsupported-path",
     );
   }
-  return path;
+  // On Windows a drive path is written /C:/x in the URL; the path is C:/x.
+  return WINDOWS && /^\/[A-Za-z]:\//.test(path) ? path.slice(1) : path;
 }
 
+/**
+ * The key of a local origin: `file:` and its real path, with forward slashes on Windows too, so
+ * the project name beside the hash is the last folder, never the whole path.
+ */
 function localKey(path: string, base: () => string): string {
   const absolute = isAbsolute(path) ? path : resolve(base(), path);
-  return `file:${safeRealpath(absolute).replace(/(?<=.)\/+$/, "")}`;
+  const real = safeRealpath(absolute);
+  return `file:${(WINDOWS ? real.replaceAll("\\", "/") : real).replace(/(?<=.)\/+$/, "")}`;
+}
+
+/**
+ * The real path. On Windows the native call, which also gives the canonical case and long names,
+ * so one folder reached as C:\Repo and c:\repo is one project and one fence.
+ */
+function realpath(path: string): string {
+  return WINDOWS ? realpathSync.native(path) : realpathSync(path);
 }
 
 function safeRealpath(path: string): string {
   try {
-    return realpathSync(path);
+    return realpath(path);
   } catch {
     return resolve(path);
   }

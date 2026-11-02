@@ -2,6 +2,7 @@ import { afterAll, describe, expect } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { COMMANDS } from "../../src/cli/commands.js";
+import { OWNER_MODES } from "../../src/sqlite/database.js";
 import { cliTest, exercised, exportedText, ok, ROOT, refused, run, sandbox } from "./support.js";
 
 const box = sandbox();
@@ -20,8 +21,10 @@ describe("every command, end to end against the compiled binary", () => {
       const data = ok(box, ["init"]);
       expect(data.scope).toBe(box.scope);
       expect(data.store).toBe(box.store);
-      expect(statSync(box.store).mode & 0o777).toBe(0o600);
-      expect(statSync(box.relembraHome).mode & 0o777).toBe(0o700);
+      if (OWNER_MODES) {
+        expect(statSync(box.store).mode & 0o777).toBe(0o600);
+        expect(statSync(box.relembraHome).mode & 0o777).toBe(0o700);
+      }
       for (const harness of [data.hooks.claudeCode, data.hooks.codex]) {
         const [group] = harness.hooks.SessionStart;
         expect(group.hooks[0].type).toBe("command");

@@ -13,7 +13,8 @@ is the library's host: it decides the scope and the principal, never the agent c
 - **Scope.** `RELEMBRA_SCOPE` when the host sets it. Otherwise
   `uid-<uid>/<name>-<hash>`, from the git repository containing the working directory:
   - `<uid>` is the OS user id. Not the user name: Bun's `os.userInfo().username` reads `$USER`
-    and answers `unknown` without it, which would split one user's memory in two.
+    and answers `unknown` without it, which would split one user's memory in two. Windows has
+    no uid: there the part is `sid-<SID>` ([Windows](#windows)).
   - `<name>` is for people reading the scope only: the last segment of the normalized `origin`
     URL when there is one (so renaming the folder does not change the scope), else the
     repository's folder name: the folder holding `.git`, or the git directory itself, without a
@@ -240,6 +241,7 @@ A token starting with `-` before `--` is a flag. Put text that starts with `-` a
 | `PATH` | Passed to git, to find it |
 | `HOME` | Passed to git, for the user's `~/.gitconfig`; also the default store's home |
 | `XDG_CONFIG_HOME` | Passed to git, for the user's git configuration there |
+| `SystemRoot` | Windows only: the Windows folder, whose `System32\whoami.exe` names the user; `C:\Windows` unless a drive path |
 
 An empty variable counts as unset. Nothing else in the environment is read, and git gets nothing
 else from it.
@@ -477,7 +479,7 @@ Register it in `.claude/settings.json` or `~/.claude/settings.json` for Claude C
         "hooks": [
           {
             "type": "command",
-            "command": "/usr/bin/env -i RELEMBRA_HOME=\"$RELEMBRA_HOME\" RELEMBRA_SCOPE=\"$RELEMBRA_SCOPE\" RELEMBRA_GLOBAL_SCOPE=\"$RELEMBRA_GLOBAL_SCOPE\" RELEMBRA_AGENT=\"$RELEMBRA_AGENT\" RELEMBRA_HARNESS=\"$RELEMBRA_HARNESS\" RELEMBRA_MODEL=\"$RELEMBRA_MODEL\" PATH=\"$PATH\" HOME=\"$HOME\" XDG_CONFIG_HOME=\"$XDG_CONFIG_HOME\" /path/to/relembra hook"
+            "command": "/usr/bin/env -i RELEMBRA_HOME=\"$RELEMBRA_HOME\" RELEMBRA_SCOPE=\"$RELEMBRA_SCOPE\" RELEMBRA_GLOBAL_SCOPE=\"$RELEMBRA_GLOBAL_SCOPE\" RELEMBRA_AGENT=\"$RELEMBRA_AGENT\" RELEMBRA_HARNESS=\"$RELEMBRA_HARNESS\" RELEMBRA_MODEL=\"$RELEMBRA_MODEL\" PATH=\"$PATH\" HOME=\"$HOME\" XDG_CONFIG_HOME=\"$XDG_CONFIG_HOME\" SystemRoot=\"$SystemRoot\" /path/to/relembra hook"
           }
         ]
       }
@@ -628,9 +630,15 @@ refused, by line and rule, never their text. Text: one `key: value` line each.
 
 `bun run build:cli` runs `build/cli.ts`: `bun build --compile --aot --trim
 --no-compile-autoload-dotenv --no-compile-autoload-bunfig` for the native target, writing
-`bin/relembra` and `bin/relembra.sha256` (`sha256sum` format). It skips the build when the sources,
-the script and the Bun version are unchanged; `--force` rebuilds. No fallback build exists: the AOT
-build runs on the targets built so far (IMPLEMENTATION-PLAN §4.6).
+`bin/relembra` (`bin/relembra.exe` on Windows) and `bin/relembra.sha256` (`sha256sum` format). It
+skips the build when the sources, the script and the Bun version are unchanged; `--force`
+rebuilds. No fallback build exists (IMPLEMENTATION-PLAN §4.6).
+
+`--aot` builds only for the platform it runs on, so every release binary is built on its own
+platform: macOS arm64 locally, Linux x64 and arm64 and Windows x64 and arm64 in the hosted CI's
+`cli` job. All of them use one Bun canary, pinned in `build/bun-toolchain.txt` by its immutable npm
+package and that package's sha512; `scripts/bun-toolchain.sh <platform> <dir>` downloads, checks
+and unpacks it.
 
 ## Install
 
@@ -641,5 +649,62 @@ missing line or a malformed hash is refused with exit 1, and nothing is installe
 So is a directory or a symlink at `<dest-dir>/relembra` (`mv` would put the file inside the
 directory, or leave a link's target in place); only a regular file there is replaced. The check
 and the move are not atomic: a process running as the same user could swap the path between
-them, the same-user limit stated under Trust.
-Downloading release binaries waits for releases, which need the owner's go (ticket 11).
+them, the same-user limit stated under Trust. `install.sh` serves macOS and Linux; Windows is
+installed by hand (below).
+
+## Windows
+
+The release binaries `relembra-windows-x64.exe` and `relembra-windows-arm64.exe` run on Windows
+10 and 11. What differs from macOS and Linux:
+
+- **Scope.** Windows has no uid, so the OS user part is `sid-<SID>`, the logon account's
+  security identifier as `%SystemRoot%\System32\whoami.exe /user` prints it, for example
+  `sid-S-1-5-21-1004336348-1177238915-682003330-1001`. Like a uid it is one per account, so
+  `PC\alex` and `CORP\alex` are two users, and renaming an account keeps its scope. It is never
+  read from `%USERNAME%`, which a caller can set and the hook's `env -i` clears. If `whoami`
+  cannot name the account, the scope is refused (`no-scope`) rather than shared. Folders are
+  compared by their canonical real path, case-folded, so `C:\Repo` and `c:\repo` are one project.
+- **Store protection.** Windows files have no modes, so the mode checks do not apply. Instead,
+  before a new store's first byte, its folder (`%USERPROFILE%\.relembra`, or `RELEMBRA_HOME`)
+  gets an ACL of its own: full control for the current user's SID, SYSTEM and Administrators,
+  and nothing else. The store and SQLite's `-wal` and `-shm` files inherit it. The folder becomes
+  yours first, since a folder's owner can always rewrite its ACL: if you may not take ownership of
+  a folder another account made, no store is created. A folder that already existed loses what it
+  inherited; one that grants anyone else access explicitly is refused, and no store is created
+  until you remove that grant. A `-wal`, `-shm` or `-journal` file already there without its store
+  is refused, since it keeps its own ACL, and so is a store folder that is a junction or symbolic
+  link, whose target `icacls` would change. If `whoami` or `icacls` fails, no store is created.
+- **Where the store is safe.** These steps work on the folder's path, so they protect the store
+  only when no other account can change the folder or the folder that holds it. An account that
+  could change the folder's ACL or owner before the store existed can keep a handle that widens it
+  again, and one that may rename entries in the parent folder can swap the folder for its own
+  after the ACL is set. The default, under your profile, has no such account: only you, SYSTEM and
+  Administrators can change your profile. Point `RELEMBRA_HOME` at a folder of your own inside a
+  folder only you can change, never in a shared or world-writable place. An existing store's ACL
+  is not read again on every open, since that would cost a process per command: a store folder
+  made by another tool, or whose ACL was widened later, is not detected.
+- **Hook.** `relembra init` prints the same session hook as elsewhere, a `sh` command line under
+  `/usr/bin/env -i`. Claude Code runs hook commands in Git Bash on Windows
+  (<https://code.claude.com/docs/en/hooks>, read 2026-11-02), which has `/usr/bin/env`; without
+  Git Bash, Claude Code falls back to PowerShell, where this command does not run. Install Git for
+  Windows.
+- **Owner trust.** The confirmation code is read from `/dev/tty`, which Windows does not have, so
+  every action that needs owner trust is refused as `owner-confirmation-required` (`no-tty`):
+  `--trust owner`, and a `retract`, `redact`, `supersede` or `sweep` that would change an owner
+  memory. Agent-trust work runs as elsewhere; this release has no owner trust on Windows.
+- **Line breaks in arguments.** A Windows launcher can split an argument at a line break
+  before relembra reads it (Git for Windows' MSYS runtime does), and such a note is then refused
+  as a usage error (`extra-argument`, exit 2) rather than by the guard. Either way nothing is
+  written; on stdin the guard refuses it as `multi-line`.
+- **Release tooling.** The library and the CLI are tested on Windows. The release gate
+  (`scripts/ci.sh`, `scripts/check-release.sh`), the benchmarks, the evaluation harness,
+  `install.sh`, the package smoke test and the site assembly are POSIX tools that run on macOS and
+  Linux only.
+- **Install.** Check the binary against `SHA256SUMS`, then put it on `PATH` as `relembra.exe`:
+
+  ```powershell
+  (Get-FileHash relembra-windows-x64.exe -Algorithm SHA256).Hash.ToLower()
+  Select-String relembra-windows-x64.exe SHA256SUMS   # the two hashes must be equal
+  New-Item -ItemType Directory -Force "$HOME\.local\bin" | Out-Null
+  Copy-Item relembra-windows-x64.exe "$HOME\.local\bin\relembra.exe"
+  ```

@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { createRelembra, type Memory } from "../../src/index.js";
 import { openSqliteStore } from "../../src/sqlite/index.js";
-import { BINARY, cliTest, ok, refused, run, sandbox, sandboxEnv } from "./support.js";
+import { BINARY, cliTest, ok, posixCliTest, refused, run, sandbox, sandboxEnv } from "./support.js";
 
 const box = sandbox();
 let rule: Memory;
@@ -89,7 +89,7 @@ describe("owner trust needs a human at a terminal; an agent's flag cannot grant 
     ).toBe("no-tty");
   });
 
-  cliTest(
+  posixCliTest(
     "at a real terminal, typing the printed code grants owner trust; a wrong code does not",
     () => {
       const python = spawnSync("python3", ["--version"]);

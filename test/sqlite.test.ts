@@ -23,7 +23,7 @@ import {
 } from "relembra/sqlite";
 import { storeConformanceCases } from "relembra/testing";
 import { rank } from "../src/ranking.js";
-import { createOwnerOnly, openDatabase } from "../src/sqlite/database.js";
+import { createOwnerOnly, OWNER_MODES, openDatabase } from "../src/sqlite/database.js";
 import { MIGRATIONS, migrate, schemaVersion } from "../src/sqlite/migrations.js";
 
 /** A schema version newer than this relembra supports. */
@@ -31,6 +31,10 @@ const FUTURE = MIGRATIONS.length + 1;
 
 import { sqliteTarget, tempDir } from "./sqlite-support.js";
 import { type HostContext, hostPolicy, OTHER_SCOPE, provenance, SCOPE } from "./support.js";
+
+// Mode tests run where the store checks POSIX modes; on Windows, sqlite-windows-acl.test.ts covers
+// the owner-only ACL in their place.
+const modeTest = test.skipIf(!OWNER_MODES);
 
 describe("store conformance: sqlite store", () => {
   for (const conformance of storeConformanceCases(sqliteTarget)) {
@@ -47,18 +51,21 @@ describe("sqlite store files", () => {
 
   const modeOf = (path: string) => statSync(path).mode & 0o777;
 
-  test("creates missing directories as 0700 and the database, WAL and SHM files as 0600", async () => {
-    const path = join(dir.path, "home", "nested", "relembra.db");
-    const store = openSqliteStore({ path });
-    await store.transaction(async (tx) => tx.putMemory(sampleMemory("m-1")));
+  modeTest(
+    "creates missing directories as 0700 and the database, WAL and SHM files as 0600",
+    async () => {
+      const path = join(dir.path, "home", "nested", "relembra.db");
+      const store = openSqliteStore({ path });
+      await store.transaction(async (tx) => tx.putMemory(sampleMemory("m-1")));
 
-    expect(modeOf(join(dir.path, "home"))).toBe(0o700);
-    expect(modeOf(join(dir.path, "home", "nested"))).toBe(0o700);
-    for (const file of [path, `${path}-wal`, `${path}-shm`]) expect(modeOf(file)).toBe(0o600);
-    await store.close();
-  });
+      expect(modeOf(join(dir.path, "home"))).toBe(0o700);
+      expect(modeOf(join(dir.path, "home", "nested"))).toBe(0o700);
+      for (const file of [path, `${path}-wal`, `${path}-shm`]) expect(modeOf(file)).toBe(0o600);
+      await store.close();
+    },
+  );
 
-  test("leaves an existing directory's mode alone", async () => {
+  modeTest("leaves an existing directory's mode alone", async () => {
     // The temp dir itself already exists; relembra must not chmod a directory it did not create.
     chmodSync(dir.path, 0o755);
     const store = openSqliteStore({ path: join(dir.path, "relembra.db") });
@@ -68,7 +75,7 @@ describe("sqlite store files", () => {
     await store.close();
   });
 
-  test("an existing store file that others can read or write is refused", async () => {
+  modeTest("an existing store file that others can read or write is refused", async () => {
     const path = join(dir.path, "relembra.db");
     await openSqliteStore({ path }).close();
 
@@ -354,7 +361,7 @@ describe("sqlite store opening", () => {
     }
   });
 
-  test("an existing -wal or -shm file that others can read or write is refused", async () => {
+  modeTest("an existing -wal or -shm file that others can read or write is refused", async () => {
     const path = join(dir.path, "relembra.db");
     const holder = openSqliteStore({ path });
     await holder.transaction((tx) => tx.putMemory(sampleMemory("m-1")));
@@ -734,7 +741,7 @@ describe("sqlite store paths are regular files, never symbolic links", () => {
     await openSqliteStore({ path: real }).close();
   });
 
-  test("a loose sidecar behind a symbolic link is refused", async () => {
+  modeTest("a loose sidecar behind a symbolic link is refused", async () => {
     const real = join(dir.path, "real.db");
     const holder = openSqliteStore({ path: real });
     await holder.transaction((tx) => tx.putMemory(sampleMemory("m-1")));
@@ -751,7 +758,7 @@ describe("sqlite store paths are regular files, never symbolic links", () => {
     }
   });
 
-  test("the files are checked again once SQLite has opened them", () => {
+  modeTest("the files are checked again once SQLite has opened them", () => {
     // openDatabase alone, without createOwnerOnly first: only the check after opening runs.
     const path = join(dir.path, "relembra.db");
     writeFileSync(path, "", { mode: 0o600 });

@@ -3,6 +3,46 @@
 All notable changes to relembra. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.0.0-beta.2] - 2026-11-02
+
+The CLI for Linux and Windows. The library, the store schemas and the export format are
+unchanged from 1.0.0-beta.1.
+
+### Added
+
+- Native CLI binaries on the GitHub release for Linux x64 and arm64 (glibc) and Windows x64 and
+  arm64, beside macOS arm64. `--aot` builds only for the platform it runs on, so each is built on
+  its own platform in the hosted CI. Every platform uses one Bun canary, pinned by its immutable
+  npm package and sha512 (`build/bun-toolchain.txt`, `scripts/bun-toolchain.sh`): the revision
+  that built 1.0.0-beta.1.
+- Windows support ([docs/CLI.md](docs/CLI.md#windows)):
+  - The scope's user part is `sid-<SID>`, since Windows has no uid: the logon account's security
+    identifier as `whoami /user` prints it, one per account like a uid, never `%USERNAME%`.
+  - A new store's folder gets an owner-only ACL (the user's SID, SYSTEM, Administrators, and no
+    other grant, explicit or inherited), in place of the POSIX mode checks Windows cannot apply.
+    The user takes ownership of the folder first (or no store is created); a folder that grants
+    another account access explicitly, a sidecar left there without its store, and a folder that
+    is a junction or link, are refused. Known limit: these steps work on paths, so the store is
+    protected only when no other account can change its folder or the folder's parent; the
+    default under the user's profile meets that ([docs/CLI.md](docs/CLI.md#windows)).
+  - git is found as `git.exe`, and paths are compared case-blind by their canonical real path.
+  - A local origin is keyed by its real path written with forward slashes, a drive path
+    (`C:\…`) is local as git reads it, and a `file:///C:/…` URL names `C:/…`, so the project name
+    beside the hash is the upstream's folder, never the whole path.
+  - The session hook runs in Git Bash, as Claude Code does on Windows.
+  - Not yet on Windows: owner trust, which needs `/dev/tty` (those actions are refused as
+    `no-tty`), and the release tooling (gate, benchmarks, `install.sh`), which stays on macOS and
+    Linux.
+
+### Fixed
+
+- A store whose `-wal` has no `-shm` beside it has its schema version read from the in-memory
+  WAL image straight away. On Windows a read-only connection there created the `-shm`, so a store
+  from a newer relembra was refused only after a file had changed, and a WAL it could not replay
+  failed with SQLite's `SQLITE_PROTOCOL` instead of `StoreUnverifiedError`.
+- `.gitattributes` keeps every text file LF in every checkout: Windows' default CRLF made the
+  guard refuse the fixtures and changed every digest.
+
 ## [1.0.0-beta.1] - 2026-11-01
 
 The first public release, a beta: on npm under the `beta` dist-tag (`npm install relembra@beta`),
@@ -79,4 +119,5 @@ table of `docs/specs/IMPLEMENTATION-PLAN.md`. Known residuals are documented in 
 (import id existence) and `docs/CLI.md` (same-user trust model). Report vulnerabilities as
 [SECURITY.md](SECURITY.md) describes.
 
+[1.0.0-beta.2]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.2
 [1.0.0-beta.1]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.1
