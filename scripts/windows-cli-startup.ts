@@ -65,6 +65,14 @@ probe(
     "$acl = [IO.Directory]::GetAccessControl([IO.Path]::GetTempPath()); [Console]::Write($acl.GetSecurityDescriptorBinaryForm().Length)",
   ),
 );
+probe(
+  "framework-json",
+  powershell,
+  ps(
+    "[void][Reflection.Assembly]::Load('System.Web.Extensions, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35'); $serializer = [System.Web.Script.Serialization.JavaScriptSerializer]::new(); $value = $serializer.DeserializeObject([Console]::In.ReadToEnd()); [Console]::Write($serializer.Serialize(@{probe=$value.probe}))",
+  ),
+  '{"probe":true}',
+);
 const candidate = probe("candidate-help", join(process.cwd(), "bin", "relembra.exe"), ["--help"]);
 if (!candidate) {
   const work = mkdtempSync(join(tmpdir(), "relembra-startup-control-"));

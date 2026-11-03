@@ -5,24 +5,26 @@ import type { ChainFolder } from "./windows-acl.js";
 const PROGRAM = String.raw`
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+[void][Reflection.Assembly]::Load('System.Web.Extensions, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35')
+$serializer = [System.Web.Script.Serialization.JavaScriptSerializer]::new()
 function Read-Folder([string] $path) {
   $attributes = [IO.File]::GetAttributes($path)
   if (($attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "$path is a link or reparse point" }
   if (($attributes -band [IO.FileAttributes]::Directory) -eq 0) { throw "$path is not a directory" }
   $sections = [Security.AccessControl.AccessControlSections]::Owner -bor [Security.AccessControl.AccessControlSections]::Access
   $acl = [IO.Directory]::GetAccessControl($path, $sections)
-  [PSCustomObject]@{
+  @{
     path = $path
     ownerSid = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
     dacl = $acl.GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]::Access)
   }
 }
 try {
-  $request = [Console]::In.ReadToEnd() | ConvertFrom-Json
+  $request = $serializer.DeserializeObject([Console]::In.ReadToEnd())
   if ($request.mode -eq 'read') {
     $result = @(foreach ($path in $request.paths) { Read-Folder $path })
-    ConvertTo-Json -InputObject $result -Compress
+    [Console]::Write($serializer.Serialize([object[]]$result))
   } elseif ($request.mode -eq 'create') {
     foreach ($expected in $request.chain) {
       $actual = Read-Folder $expected.path
@@ -35,7 +37,7 @@ try {
         throw "$path already exists; a new Windows store requires a new folder"
       }
     }
-    $security = New-Object Security.AccessControl.DirectorySecurity
+    $security = [Security.AccessControl.DirectorySecurity]::new()
     $security.SetSecurityDescriptorSddlForm($request.sddl)
     foreach ($path in $request.paths) {
       [void][IO.Directory]::CreateDirectory($path, $security)

@@ -26,6 +26,10 @@ The program is constant; paths and descriptors travel as JSON over stdin, and ob
 return as JSON on stdout. No profile, interactive prompt, Get-Acl provider, script file,
 compilation, icacls save file, TEMP or TMP directory participates.
 
+JSON uses the strongly named Framework System.Web.Extensions assembly directly. The Windows
+arm64 control timed out while running ConvertFrom-Json; the security helper
+therefore uses no Utility cmdlets (including New-Object or ConvertTo-Json).
+
 Compared with a native Node-API addon, this preserves zero runtime dependencies and Node 24.14,
 Bun and AOT compatibility without another platform artifact. Direct node:ffi is unavailable
 on Node 24. An emitted P/Invoke helper adds complexity without solving historical ancestry.
