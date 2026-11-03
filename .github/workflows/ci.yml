@@ -67,6 +67,9 @@ jobs:
         run: bun test test/build-flags.test.ts test/build-cache.test.ts
       # Always built, never a cached binary, as scripts/ci.sh does.
       - run: bun build/cli.ts --force
+      - name: Windows AOT startup and bounded system-host controls
+        if: runner.os == 'Windows'
+        run: bun scripts/windows-cli-startup.ts
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: relembra-cli-${{ matrix.platform }}

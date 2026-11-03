@@ -70,7 +70,7 @@ interface Opened {
 function openStore(kind: StoreKind): Opened {
   if (kind === "memory") return { store: createMemoryStore(), close: async () => {} };
   const dir = mkdtempSync(join(tmpdir(), "relembra-eval-candidate-"));
-  const store: SqliteStore = openSqliteStore({ path: join(dir, "relembra.db") });
+  const store: SqliteStore = openSqliteStore({ path: join(dir, "store", "relembra.db") });
   return {
     store,
     close: async () => {

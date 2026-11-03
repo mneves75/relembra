@@ -101,7 +101,9 @@ test("a store created under node is owner-only and keeps what it wrote", async (
       assert.equal(statSync(join(dir.path, "home")).mode & 0o777, 0o700);
       assert.equal(statSync(path).mode & 0o777, 0o600);
     } else {
-      const expected = new Set([windowsSid(), "SY", "BA"]);
+      const sid = windowsSid();
+      // SDDL prints the built-in Administrator (RID 500) as LA, including on hosted runners.
+      const expected = new Set([sid.endsWith("-500") ? "LA" : sid, "SY", "BA"]);
       assert.ok(!expected.has(""));
       for (const [name, file, inherited] of [
         ["folder", join(dir.path, "home"), false],

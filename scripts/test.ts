@@ -19,8 +19,8 @@ const postgres = [...TEST_FILES.scanSync(".")]
   .filter((file) => !file.split("/").includes("node_modules"))
   .filter((file) => POSTGRES.test(readFileSync(file, "utf8")))
   .sort();
-// On Windows each new store runs icacls three times before its first byte (src/sqlite/database.ts,
-// restrictFolderToOwner), so a test that makes several stores outlasts Bun's 5 s default on a
+// On Windows each new store uses the system PowerShell to read and create private directories,
+// so a test that makes several stores outlasts Bun's 5 s default on a
 // loaded hosted runner. A test's own timeout still applies.
 const extra = [
   ...(process.platform === "win32" ? ["--timeout=20000"] : []),
