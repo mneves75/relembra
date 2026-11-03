@@ -20,7 +20,7 @@ describe("two writer processes on one sqlite file", () => {
   afterEach(() => dir.remove());
 
   async function runWriters(mode: "store" | "lossy") {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     const barrier = join(dir.path, "barrier");
     mkdirSync(barrier);
     // Create and migrate the file first, so the writers race only on writes.

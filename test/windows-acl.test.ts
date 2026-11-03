@@ -30,8 +30,13 @@ const RUNNER_ROOT =
   "D:AI(A;;0x1000a1;;;S-1-15-3-65536-1888954469-739942743-1668119174-2468466756-4239452838-1296943325-355587736-700089176)(A;;LC;;;AU)(A;OICIIO;SDGXGWGR;;;AU)(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)S:PAI(ML;OINPIO;NW;;;HI)";
 
 const chain = (parent: string, ...above: string[]) => [
-  { path: "C:\\Users\\me\\AppData", dacl: parent, holdsStoreFolder: true },
-  ...above.map((dacl, i) => ({ path: `C:\\up${i}`, dacl, holdsStoreFolder: false })),
+  { path: "C:\\Users\\me\\AppData", dacl: parent, ownerSid: USER, holdsStoreFolder: true },
+  ...above.map((dacl, i) => ({
+    path: `C:\\up${i}`,
+    dacl,
+    ownerSid: USER,
+    holdsStoreFolder: false,
+  })),
 ];
 
 describe("parseDacl reads an SDDL access list", () => {
@@ -125,6 +130,29 @@ describe("parseDacl reads an SDDL access list", () => {
 });
 
 describe("chainRefusal applies the four rules", () => {
+  test("a foreign owner is refused even when its SID has no access entry", () => {
+    const folders = chain(PROFILE, PROFILE, USERS, ROOT);
+    expect(chainRefusal(folders, TRUSTED)).toBeUndefined();
+    for (let index = 0; index < folders.length; index++) {
+      const changed = folders.map((folder, i) => ({
+        ...folder,
+        ownerSid: i === index ? "S-1-5-21-9-8-7-1002" : folder.ownerSid,
+      }));
+      expect(chainRefusal(changed, TRUSTED)).toMatch(/owned by another account/);
+    }
+  });
+
+  test("a missing or placeholder owner cannot attest the chain", () => {
+    for (const ownerSid of ["", "S-1-3-0", "unknown"]) {
+      expect(
+        chainRefusal(
+          chain(PROFILE).map((folder) => ({ ...folder, ownerSid })),
+          TRUSTED,
+        ),
+      ).toMatch(/owner/);
+    }
+  });
+
   test("positive control: the default profile chain passes", () => {
     expect(chainRefusal(chain(PROFILE, PROFILE, USERS, ROOT), TRUSTED)).toBeUndefined();
   });
@@ -150,6 +178,14 @@ describe("chainRefusal applies the four rules", () => {
     expect(chainRefusal(chain(PROFILE, PROFILE, "D:(A;;DT;;;AU)"), TRUSTED)).toMatch(
       /C:\\up1 .*S-1-5-11\) .*rename or delete the folders in it/,
     );
+  });
+
+  test("an attribute write or generic write can turn an empty ancestor into a reparse point", () => {
+    for (const right of ["0x100", "GW"]) {
+      expect(chainRefusal(chain(PROFILE, `D:(A;;${right};;;BU)`), TRUSTED)).toMatch(
+        /attributes or turn it into a reparse point/,
+      );
+    }
   });
 
   test("R3: a foreign right to add folders, on the store folder's parent only", () => {
@@ -182,11 +218,17 @@ describe("chainRefusal applies the four rules", () => {
 
   test("the built-in Administrator account's alias is the user only when the user is that account", () => {
     const dacl = "D:(A;OICI;FA;;;LA)";
-    expect(chainRefusal(chain(dacl), trustedAccounts("S-1-5-21-1-2-3-500"))).toBeUndefined();
+    const admin = "S-1-5-21-1-2-3-500";
+    expect(
+      chainRefusal(
+        chain(dacl).map((folder) => ({ ...folder, ownerSid: admin })),
+        trustedAccounts(admin),
+      ),
+    ).toBeUndefined();
     expect(chainRefusal(chain(dacl), TRUSTED)).toMatch(/\(LA\) /);
   });
 
-  test("OWNER RIGHTS is another account: the owner is not read", () => {
+  test("OWNER RIGHTS does not relax the conservative permission check", () => {
     expect(chainRefusal(chain(PROFILE, "D:(A;;WD;;;OW)"), TRUSTED)).toMatch(/\(S-1-3-4\)/);
   });
 });

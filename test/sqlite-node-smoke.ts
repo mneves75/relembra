@@ -9,13 +9,24 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, test } from "node:test";
 import { openSqliteStore, SchemaTooNewError } from "relembra/sqlite";
 import { createMemoryStore, storeConformanceCases } from "relembra/testing";
-import { createOwnerOnly, openDatabase } from "../src/sqlite/database.js";
+import { createOwnerOnly, OWNER_MODES, openDatabase } from "../src/sqlite/database.js";
 import { MIGRATIONS } from "../src/sqlite/migrations.js";
+import { windowsSid, windowsTool } from "./platform-support.js";
 import { INTERLEAVINGS, openDuringUpgrade } from "./sqlite-race-support.js";
 import { sqliteTarget, tempDir } from "./sqlite-support.js";
 
 /** A schema version newer than this relembra supports. */
 const FUTURE = MIGRATIONS.length + 1;
+
+/** Reads Windows ACL entries independently of the store's ACL reader and parser. */
+function windowsEntries(path: string, saved: string): string[] {
+  windowsTool("icacls.exe", [path, "/save", saved, "/q"]);
+  const dacl = readFileSync(saved, "utf16le")
+    .split(/\r?\n/)
+    .find((line) => line.startsWith("D:"));
+  assert.ok(dacl, `icacls did not save an access list for ${path}`);
+  return [...dacl.matchAll(/\([^()]+\)/g)].map((entry) => entry[0]);
+}
 
 describe("a store converted to WAL and upgraded concurrently is refused under node", () => {
   for (const interleaving of INTERLEAVINGS) {
@@ -23,7 +34,7 @@ describe("a store converted to WAL and upgraded concurrently is refused under no
       const dir = tempDir();
       try {
         const { before, after, refusal } = await openDuringUpgrade(
-          join(dir.path, "relembra.db"),
+          join(dir.path, "store", "relembra.db"),
           interleaving,
         );
         assert.ok(refusal instanceof SchemaTooNewError, String(refusal));
@@ -52,6 +63,15 @@ test("a store created under node is owner-only and keeps what it wrote", async (
   const dir = tempDir();
   try {
     const path = join(dir.path, "home", "relembra.db");
+    if (!OWNER_MODES) {
+      windowsTool("icacls.exe", [dir.path, "/grant", "*S-1-1-0:(OI)(CI)R"]);
+      // Control: an unsecured child would inherit Everyone's access from this parent.
+      assert.ok(
+        windowsEntries(dir.path, join(dir.path, "parent-acl.txt")).some((entry) =>
+          entry.endsWith(";;;WD)"),
+        ),
+      );
+    }
     const store = openSqliteStore({ path });
     const noted = {
       id: "m-node",
@@ -77,8 +97,31 @@ test("a store created under node is owner-only and keeps what it wrote", async (
     await store.transaction((tx) => tx.putMemory(noted));
     await store.close();
 
-    assert.equal(statSync(join(dir.path, "home")).mode & 0o777, 0o700);
-    assert.equal(statSync(path).mode & 0o777, 0o600);
+    if (OWNER_MODES) {
+      assert.equal(statSync(join(dir.path, "home")).mode & 0o777, 0o700);
+      assert.equal(statSync(path).mode & 0o777, 0o600);
+    } else {
+      const expected = new Set([windowsSid(), "SY", "BA"]);
+      assert.ok(!expected.has(""));
+      for (const [name, file, inherited] of [
+        ["folder", join(dir.path, "home"), false],
+        ["store", path, true],
+      ] as const) {
+        const entries = windowsEntries(file, join(dir.path, `${name}-acl.txt`));
+        assert.equal(entries.length, 3);
+        const accounts = entries.map((entry) => {
+          const ace = /^\(A;([A-Z]*);FA;;;([^;)]+)\)$/.exec(entry);
+          assert.ok(ace, `unexpected access entry: ${entry}`);
+          assert.equal(ace[1]?.includes("ID"), inherited);
+          if (!inherited) {
+            assert.ok(ace[1]?.includes("OI"));
+            assert.ok(ace[1]?.includes("CI"));
+          }
+          return ace[2];
+        });
+        assert.deepEqual(new Set(accounts), expected);
+      }
+    }
     const reopened = openSqliteStore({ path });
     assert.deepEqual(await reopened.recall({ scopes: ["node/smoke"], limit: 5 }), [noted]);
     await reopened.close();
@@ -90,7 +133,7 @@ test("a store created under node is owner-only and keeps what it wrote", async (
 test("under node a newer store in WAL mode is refused without creating or changing a file", async () => {
   const dir = tempDir();
   try {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     await openSqliteStore({ path }).close();
     const raw = new DatabaseSync(path);
     raw.exec(`INSERT INTO schema_version (version, applied_at) VALUES (${FUTURE}, 0)`);
@@ -114,7 +157,7 @@ test("under node a newer store in WAL mode is refused without creating or changi
 test("under node a store that stays torn is retried for the busy timeout, then refused, changing no file", async () => {
   const dir = tempDir();
   try {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     await openSqliteStore({ path }).close();
     const full = readFileSync(path);
     writeFileSync(path, full.subarray(0, 4096));
@@ -141,7 +184,7 @@ test("under node a store that stays torn is retried for the busy timeout, then r
 test("under node the store's connection is defensive, WAL and synchronous=FULL", () => {
   const dir = tempDir();
   try {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     createOwnerOnly(path);
     const db = openDatabase(path, 100);
     try {

@@ -267,7 +267,7 @@ describe("find through the term index ranks exactly as the full scan", () => {
       let compared = 0;
       try {
         for (let seed = 1; seed <= SQLITE_SEEDS; seed++) {
-          const store = openSqliteStore({ path: join(dir.path, `seed-${seed}.db`) });
+          const store = openSqliteStore({ path: join(dir.path, `seed-${seed}`, "relembra.db") });
           try {
             compared += await runCorpus(seed, store);
           } finally {
@@ -345,7 +345,7 @@ const KINDS: readonly [string, () => { store: Store; done: () => Promise<void> }
     "sqlite store",
     () => {
       const dir = tempDir();
-      const store = openSqliteStore({ path: join(dir.path, "paths.db") });
+      const store = openSqliteStore({ path: join(dir.path, "paths", "relembra.db") });
       return {
         store,
         done: async () => {

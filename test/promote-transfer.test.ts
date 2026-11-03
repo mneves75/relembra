@@ -151,7 +151,9 @@ describe("import of a promotion", () => {
       const jsonl = await exportJsonl(source.store, both);
 
       const store =
-        kind === "memory" ? createMemoryStore() : openSqliteStore({ path: `${dir.path}/r.db` });
+        kind === "memory"
+          ? createMemoryStore()
+          : openSqliteStore({ path: `${dir.path}/store/r.db` });
       try {
         const report = await importJsonl(store, both, jsonl);
         expect(report).toEqual({ imported: 2, skipped: 0, refused: [] });
@@ -404,7 +406,7 @@ describe("import of a promotion", () => {
       const fresh = (name: string): Store =>
         kind === "memory"
           ? createMemoryStore()
-          : openSqliteStore({ path: `${dir.path}/${name}.db` });
+          : openSqliteStore({ path: `${dir.path}/${name}/relembra.db` });
       const opened: Store[] = [];
       try {
         for (const [line, reason, name] of [

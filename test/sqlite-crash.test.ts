@@ -21,7 +21,7 @@ describe("sqlite crash and first-open processes", () => {
   const children: ChildProcess[] = [];
   beforeEach(() => {
     dir = tempDir();
-    path = join(dir.path, "relembra.db");
+    path = join(dir.path, "store", "relembra.db");
     barrier = join(dir.path, "barrier");
     mkdirSync(barrier);
   });
@@ -366,7 +366,7 @@ describe("sqlite crash and first-open processes", () => {
     for (let round = 0; round < 5; round++) {
       const roundDir = join(dir.path, `round-${round}`);
       mkdirSync(roundDir);
-      path = join(roundDir, "relembra.db");
+      path = join(roundDir, "store", "relembra.db");
       barrier = roundDir;
       const runs = ["alpha", "beta"].map((name) => start("open-fresh", path, barrier, name));
       await waitFor(() => ["alpha", "beta"].every((n) => existsSync(join(barrier, `ready-${n}`))));
@@ -394,6 +394,7 @@ describe("sqlite crash and first-open processes", () => {
 
   test("a migration killed between DDL statements leaves nothing, and the next open completes it", async () => {
     // A committed row from before the migration, which the interruption must not touch.
+    mkdirSync(join(dir.path, "store"));
     const before = new DatabaseSync(path);
     before.exec("PRAGMA journal_mode = WAL");
     before.exec("CREATE TABLE keep (x INTEGER); INSERT INTO keep VALUES (42);");

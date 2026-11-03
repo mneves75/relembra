@@ -1,9 +1,7 @@
 /**
- * Whether another account could change the folders that hold a Windows store folder, read from
- * their access lists as SDDL (docs/specs/w-nv1/spec.md). relembra secures a new store's folder by
- * its path, which holds only while no other account can rename, delete, re-permission or pre-create
- * a folder on that path, or open the new folder before its ACL is set. Pure: the caller reads the
- * access lists with icacls.
+ * Current owners and access lists of the existing ancestry of a new Windows store directory.
+ * The filesystem adapter reads SIDs and SDDL directly through .NET; these conservative rules
+ * neither adopt preexisting store directories nor attest to historical ancestor handles.
  */
 import { win32 } from "node:path";
 
@@ -19,10 +17,11 @@ export interface Ace {
   readonly sid: string;
 }
 
-/** A folder on the path to the store folder, with its access list as `icacls /save` writes it. */
+/** An existing ancestor with its owner SID and DACL read directly from the filesystem. */
 export interface ChainFolder {
   readonly path: string;
   readonly dacl: string;
+  readonly ownerSid: string;
   /** The folder the store folder is made in. */
   readonly holdsStoreFolder: boolean;
 }
@@ -100,6 +99,7 @@ const DENY_TYPES = new Set(["D", "XD", "OD"]);
 const CALLBACK_TYPES = new Set(["XA", "XD", "ZA"]);
 const GUID = /^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$/;
 
+const WRITE_ATTRIBUTES = 0x100;
 const DELETE = 0x10000;
 const WRITE_DAC = 0x40000;
 const WRITE_OWNER = 0x80000;
@@ -232,6 +232,12 @@ export function chainRefusal(
   trusted: ReadonlySet<string>,
 ): string | undefined {
   for (const folder of chain) {
+    if (!/^S-1-[0-9]+(?:-[0-9]+)+$/.test(folder.ownerSid) || folder.ownerSid === CREATOR_OWNER) {
+      return `${folder.path} has an unverifiable owner`;
+    }
+    if (!trusted.has(folder.ownerSid)) {
+      return `${folder.path} is owned by another account (${folder.ownerSid})`;
+    }
     const aces = parseDacl(folder.dacl) ?? [
       { allow: true, inheritOnly: false, containerInherit: true, mask: 0x1f01ff, sid: EVERYONE },
     ];
@@ -241,6 +247,9 @@ export function chainRefusal(
       const own = ace.inheritOnly ? 0 : ace.mask;
       if (own & (DELETE | WRITE_DAC | WRITE_OWNER | GENERIC_ALL)) {
         return refuse("rename, delete or re-permission it");
+      }
+      if (own & (WRITE_ATTRIBUTES | GENERIC_WRITE)) {
+        return refuse("change its attributes or turn it into a reparse point");
       }
       if (own & DELETE_CHILD) return refuse("rename or delete the folders in it");
       if (!folder.holdsStoreFolder) continue;

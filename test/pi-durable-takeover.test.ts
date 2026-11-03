@@ -30,7 +30,7 @@ describe("pi-durable takeover through a host fencing epoch", () => {
   let store: SqliteStore;
   beforeEach(() => {
     dir = tempDir();
-    store = openSqliteStore({ path: join(dir.path, "relembra.db") });
+    store = openSqliteStore({ path: join(dir.path, "store", "relembra.db") });
   });
   afterEach(async () => {
     await store.close();

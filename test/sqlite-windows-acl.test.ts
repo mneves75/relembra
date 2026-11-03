@@ -1,23 +1,26 @@
 /**
- * Windows has no file modes, so a new store's folder gets an ACL of its own (src/sqlite/database.ts,
- * restrictFolderToOwner): only the user, SYSTEM and Administrators, nothing inherited. Read back
- * with icacls. The ACL tests run on Windows only; elsewhere the mode checks in sqlite.test.ts
- * cover the store.
+ * Windows new-store directories are created private, with owner SIDs read directly through
+ * .NET. Independent icacls observations check the resulting access. Windows-only filesystem
+ * tests complement the POSIX mode checks in sqlite.test.ts.
  *
  * Bun's mkdirSync and mkdtempSync give a folder an explicit owner-only ACL, so a folder they make
  * would pass these tests with or without relembra's ACL. The tests use a parent that grants
  * Everyone read to everything made in it, and folders made by cmd, which inherit that grant.
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, lstatSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  lstatSync,
+  mkdtempSync,
+  openSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  createOwnerOnly,
-  restrictFolderToOwner,
-  storeFolderAccounts,
-  windowsSystem32,
-} from "../src/sqlite/database.js";
+import { createOwnerOnly, storeFolderAccounts, windowsSystem32 } from "../src/sqlite/database.js";
 import { windowsSid, windowsTool } from "./platform-support.js";
 
 const WINDOWS = process.platform === "win32";
@@ -113,8 +116,8 @@ describe.skipIf(!WINDOWS)("Windows store ACL", () => {
     expect(acl(home)).toMatch(/Everyone:\(I\)/);
   });
 
-  test("a store in a folder that inherited Everyone's read grants only the three", () => {
-    const home = plainFolder(join(leakyParent(), "home"));
+  test("a new store folder under inheritable Everyone read grants only the three", () => {
+    const home = join(leakyParent(), "home");
     const store = join(home, "relembra.db");
     createOwnerOnly(store);
     expectOwnerOnly(home, store);
@@ -127,17 +130,17 @@ describe.skipIf(!WINDOWS)("Windows store ACL", () => {
     // Positive control: the grant is explicit, so dropping inheritance alone keeps it.
     expect(acl(home)).toMatch(/Everyone:\(OI\)/);
     const store = join(home, "relembra.db");
-    expect(() => createOwnerOnly(store)).toThrow(/grants another account access \(4 entries/);
+    const before = acl(home);
+    expect(() => createOwnerOnly(store)).toThrow(/already exists/);
     expect(existsSync(store)).toBe(false);
+    expect(acl(home)).toBe(before);
   });
 
-  test("the ACL step run again beside a store another process made keeps it owner-only", () => {
-    // Two first opens at once: the second runs the ACL step after the first made the store. No
-    // step may restore the leaky parent's grants, even for a moment, or the store inherits them.
-    const home = plainFolder(join(leakyParent(), "home"));
+  test("opening an existing store never restores inherited grants", () => {
+    const home = join(leakyParent(), "home");
     const store = join(home, "relembra.db");
     createOwnerOnly(store);
-    restrictFolderToOwner(home);
+    createOwnerOnly(store);
     expectOwnerOnly(home, store);
   });
 
@@ -148,25 +151,65 @@ describe.skipIf(!WINDOWS)("Windows store ACL", () => {
     expectOwnerOnly(home, store);
   });
 
-  test("a folder another account owns becomes the user's before the grants", () => {
+  test("a preexisting folder with an open writable handle is refused without changing its ACL", () => {
+    const home = plainFolder(join(leakyParent(), "home"));
+    const held = join(home, "held.txt");
+    const handle = openSync(held, "wx");
+    const before = acl(home);
+    const store = join(home, "relembra.db");
+    try {
+      expect(existsSync(held)).toBe(true);
+      expect(() => createOwnerOnly(store)).toThrow(/already exists/);
+      expect(existsSync(store)).toBe(false);
+      expect(acl(home)).toBe(before);
+    } finally {
+      closeSync(handle);
+    }
+  });
+
+  test("creating nested private folders does not depend on TEMP or TMP being writable", () => {
+    const parent = leakyParent();
+    const unavailable = join(parent, "missing-temp");
+    const previous = { TEMP: process.env["TEMP"], TMP: process.env["TMP"] };
+    process.env["TEMP"] = unavailable;
+    process.env["TMP"] = unavailable;
+    try {
+      expect(() => mkdtempSync(join(tmpdir(), "control-"))).toThrow();
+      const home = join(parent, "new", "nested");
+      const store = join(home, "relembra.db");
+      createOwnerOnly(store);
+      expectOwnerOnly(home, store);
+      expect(grants(join(parent, "new"))).toHaveLength(3);
+      expect(existsSync(unavailable)).toBe(false);
+    } finally {
+      for (const key of ["TEMP", "TMP"] as const) {
+        if (previous[key] === undefined) delete process.env[key];
+        else process.env[key] = previous[key];
+      }
+    }
+  });
+
+  test("a folder name containing PowerShell syntax is data", () => {
+    const home = join(leakyParent(), "home'; throw 'injected");
+    const store = join(home, "relembra.db");
+    createOwnerOnly(store);
+    expectOwnerOnly(home, store);
+  });
+
+  test("an ancestor owned by another account is refused even without a grant to it", () => {
     const parent = leakyParent();
     const home = plainFolder(join(parent, "home"));
     // BUILTIN\Users stands in for another account: an owner may always rewrite the ACL.
     windowsTool("icacls.exe", [home, "/setowner", "*S-1-5-32-545"]);
     // Positive control: the owner really changed.
     expect(ownerOf(parent, "home")).toBe("BUILTIN\\Users");
-    const store = join(home, "relembra.db");
-    createOwnerOnly(store);
-    const owner = ownerOf(parent, "home");
-    // whoami prints the account as `HOST\user`, the name dir /q shows, perhaps cut short.
-    const account = windowsTool("whoami.exe", []).trim();
-    expect({
-      owner,
-      named: owner.includes("\\"),
-      account,
-      isAccount: account.toLowerCase().startsWith(owner.toLowerCase()),
-    }).toEqual({ owner, named: true, account, isAccount: true });
-    expectOwnerOnly(home, store);
+    expect(acl(home)).not.toContain("BUILTIN\\Users:");
+    const before = acl(home);
+    const store = join(home, "new", "relembra.db");
+    expect(() => createOwnerOnly(store)).toThrow(/owned by another account \(S-1-5-32-545\)/);
+    expect(existsSync(store)).toBe(false);
+    expect(acl(home)).toBe(before);
+    expect(ownerOf(parent, "home")).toBe("BUILTIN\\Users");
   });
 
   test("a store folder that is a junction is refused, its target untouched", () => {
@@ -229,6 +272,14 @@ describe.skipIf(!WINDOWS)("Windows store ACL", () => {
     expect(existsSync(store)).toBe(false);
   });
 
+  test("an empty parent where another account may write attributes is refused", () => {
+    const parent = leakyParent();
+    refusedFor(parent, "(WA)", /BUILTIN\\Users:\(WA\)/);
+    const store = join(parent, "home", "relembra.db");
+    expect(() => createOwnerOnly(store)).toThrow(/attributes or turn it into a reparse point/);
+    expect(existsSync(join(parent, "home"))).toBe(false);
+  });
+
   test("a junction above the store folder is refused, its target untouched", () => {
     const parent = leakyParent();
     const target = plainFolder(join(parent, "target"));
@@ -245,7 +296,7 @@ describe.skipIf(!WINDOWS)("Windows store ACL", () => {
       const home = plainFolder(join(leakyParent(), "home"));
       const store = join(home, "relembra.db");
       writeFileSync(`${store}${suffix}`, "");
-      expect(() => createOwnerOnly(store)).toThrow(/exists without its store/);
+      expect(() => createOwnerOnly(store)).toThrow(/already exists/);
       expect(existsSync(store)).toBe(false);
     }
   });
@@ -258,12 +309,12 @@ describe.skipIf(!WINDOWS)("Windows store ACL", () => {
     symlinkSync(join(parent, "elsewhere.wal"), `${store}-wal`, "file");
     expect(existsSync(`${store}-wal`)).toBe(false);
     expect(lstatSync(`${store}-wal`).isSymbolicLink()).toBe(true);
-    expect(() => createOwnerOnly(store)).toThrow(/exists without its store/);
+    expect(() => createOwnerOnly(store)).toThrow(/already exists/);
     expect(existsSync(store)).toBe(false);
   });
 
   test("an existing store's folder is left as it is", () => {
-    const home = plainFolder(join(leakyParent(), "home"));
+    const home = join(leakyParent(), "home");
     const store = join(home, "relembra.db");
     createOwnerOnly(store);
     const before = acl(home);
