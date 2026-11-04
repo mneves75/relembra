@@ -5,6 +5,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+No changes yet.
+
+## [1.0.0-beta.5] - 2026-11-04
+
 Release tooling only. The library, the CLI, the store schemas and the export format are unchanged.
 
 ### Added
@@ -180,6 +184,7 @@ table of `docs/specs/IMPLEMENTATION-PLAN.md`. Known residuals are documented in 
 (import id existence) and `docs/CLI.md` (same-user trust model). Report vulnerabilities as
 [SECURITY.md](SECURITY.md) describes.
 
+[1.0.0-beta.5]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.5
 [1.0.0-beta.4]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.4
 [1.0.0-beta.3]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.3
 [1.0.0-beta.2]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.2
