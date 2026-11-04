@@ -34,7 +34,7 @@ describe("pi-durable wake after a crash inside a model request", () => {
   let store: SqliteStore | undefined;
   beforeEach(() => {
     dir = tempDir();
-    storePath = join(dir.path, "relembra.db");
+    storePath = join(dir.path, "store", "relembra.db");
     piPath = join(dir.path, "pi.sqlite");
   });
   afterEach(async () => {

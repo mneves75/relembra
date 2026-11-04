@@ -3,6 +3,24 @@
 All notable changes to relembra. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Security
+
+- Windows: read ancestor owners and access lists directly through .NET Framework, without
+  temporary ACL files. Create missing store directories with a protected descriptor at birth.
+  A new database now requires an absent leaf directory; preexisting uninitialized directories
+  are refused without changing their ownership or grants. Also refuse foreign attribute-write
+  rights that could turn an empty ancestor into a reparse point. Existing stores are unchanged.
+  Current permissions cannot attest to historical ancestor handles; that boundary remains
+  explicit in [docs/CLI.md](docs/CLI.md#windows).
+- Windows: two processes opening a missing store at once both succeed. The creators of one
+  store are serialised by a named mutex (per account and folder, with its own private
+  descriptor, verified before use), and the empty database is created under it, so the second
+  finds the first's file instead of refusing its folder. The database is created through .NET
+  under that lock, so it carries the folder's grants as inherited entries, as SQLite's sidecars
+  do; the store folder takes the auto-inherit model.
+
 ## [1.0.0-beta.3] - 2026-11-02
 
 Windows store protection checks the store folder's whole path. The library, the store schemas

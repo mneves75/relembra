@@ -664,36 +664,30 @@ The release binaries `relembra-windows-x64.exe` and `relembra-windows-arm64.exe`
   read from `%USERNAME%`, which a caller can set and the hook's `env -i` clears. If `whoami`
   cannot name the account, the scope is refused (`no-scope`) rather than shared. Folders are
   compared by their canonical real path, case-folded, so `C:\Repo` and `c:\repo` are one project.
-- **Store protection.** Windows files have no modes, so the mode checks do not apply. Instead,
-  before a new store's first byte, its folder (`%USERPROFILE%\.relembra`, or `RELEMBRA_HOME`)
-  gets an ACL of its own: full control for the current user's SID, SYSTEM and Administrators,
-  and nothing else. The store and SQLite's `-wal` and `-shm` files inherit it. The folder becomes
-  yours first, since a folder's owner can always rewrite its ACL: if you may not take ownership of
-  a folder another account made, no store is created. A folder that already existed loses what it
-  inherited; one that grants anyone else access explicitly is refused, and no store is created
-  until you remove that grant. A `-wal`, `-shm` or `-journal` file already there without its store
-  is refused, since it keeps its own ACL, and so is a store folder that is a junction or symbolic
-  link, whose target `icacls` would change. If `whoami` or `icacls` fails, no store is created.
-- **Where the store is safe.** These steps work on the folder's path, so they protect the store
-  only when no other account can change that path. Before them, relembra reads the access list of
-  every folder from the one that holds the store folder up to the drive root (`icacls /save`, by
-  SID), and no store is created when an account other than you, SYSTEM, Administrators or
-  TrustedInstaller may rename, delete or re-permission one of those folders, or delete what one
-  holds. The same applies when such an account may make folders in the folder that holds the store
-  folder, or may get more than read access to a folder made there: it could make the store folder
-  first, or open it before its ACL is set and keep that handle. A link anywhere on the path is
-  refused too. The error names the folder and the account. The default, under your profile,
-  passes: only you, SYSTEM and Administrators can change your profile. A folder in a shared or
-  world-writable place, such as `D:\data` under a drive root's default access list, is refused.
-  Owners are not read, since no tool that comes with Windows prints one as a SID: a folder on the
-  path that another account owns, but whose access list does not name that account, is not
-  detected. `icacls /save` writes each access list to a file, in a folder under `TEMP` that gets
-  the store folder's ACL. `TEMP` itself is not checked, so it must be a folder where no other
-  account gets access to what is made in it, deletes or renames what it holds, or is the owner.
-  The default under your profile meets all three. These
-  checks run only when relembra creates a store, about one `icacls` per folder on the path. An existing store's ACL is not read again on every open, since that would cost a process
-  per command: a store folder made by another tool, or whose ACL was widened later, is not
-  detected.
+- **Store protection.** A new Windows store requires a new leaf directory. The folder receives
+  a protected descriptor at creation: full control for the current user's SID, SYSTEM and
+  Administrators only, inherited by files and subfolders. The database and SQLite's sidecars
+  inherit it. A preexisting directory without the database is refused without taking ownership
+  or changing any ACL: existing handles cannot be revoked by tightening permissions. Choose
+  another, absent directory; existing data is never moved or deleted. Two processes creating
+  the same store at once are serialised by a named mutex (`Global\relembra-<hash>` of your SID
+  and the folder, private to you, SYSTEM and Administrators); the second finds the first's
+  database and opens it. A mutex of that name held by another account only prevents creation.
+- **Where the store is safe.** Before any directory is created, relembra reads every existing
+  ancestor's owner SID and DACL through the system Windows PowerShell 5.1 and .NET Framework.
+  It refuses foreign owners and permissions allowing another account to rename, delete,
+  re-permission, change attributes or replace a directory, or create the store folder first.
+  Reparse points and inherited grants beyond read and execute are also refused. Trusted
+  accounts are you, SYSTEM, Administrators and TrustedInstaller.
+  Missing components are created with their private descriptor from the first instant and
+  verified afterwards. No access-list file or compiler uses TEMP or TMP. A blocked or missing
+  PowerShell, timeout, unreadable descriptor or malformed result prevents creation.
+  Existing ancestors must have been protected throughout their relevant lifetime: current
+  permissions cannot reveal handles opened before those permissions were restricted. These
+  checks do not certify such history or provide an unconditional guarantee against it.
+  Checks run only for a new database. Existing stores keep their existing behavior and are
+  not recertified or repaired; an older store or a folder whose ACL was widened needs its
+  own security assessment. See [the security specification](specs/w-nv1/spec.md).
 - **Hook.** `relembra init` prints the same session hook as elsewhere, a `sh` command line under
   `/usr/bin/env -i`. Claude Code runs hook commands in Git Bash on Windows
   (<https://code.claude.com/docs/en/hooks>, read 2026-11-02), which has `/usr/bin/env`; without

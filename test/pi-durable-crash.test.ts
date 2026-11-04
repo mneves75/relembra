@@ -28,7 +28,7 @@ describe("pi-durable crash between the memory commit and the journal ack", () =>
   beforeEach(() => {
     dir = tempDir();
     piPath = join(dir.path, "pi.sqlite");
-    storePath = join(dir.path, "relembra.db");
+    storePath = join(dir.path, "store", "relembra.db");
   });
   afterEach(() => dir.remove());
 

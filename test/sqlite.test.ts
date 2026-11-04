@@ -91,7 +91,7 @@ describe("sqlite store files", () => {
   });
 
   test("the file is in WAL mode and records schema versions 1 to 6 once", async () => {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     await openSqliteStore({ path }).close();
     await openSqliteStore({ path }).close();
 
@@ -164,7 +164,7 @@ describe("sqlite store files", () => {
   });
 
   test("a schema 3 file with data migrates to 4, and its term index equals the one writes build", async () => {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     // A store built through the library, so its index was kept write by write.
     const store = openSqliteStore({ path });
     const writer = await populate(store);
@@ -318,7 +318,7 @@ describe("sqlite store files", () => {
   });
 
   test("a file written by a newer relembra is refused, not downgraded", async () => {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     await openSqliteStore({ path }).close();
 
     // Positive control: the current version opens.
@@ -340,7 +340,7 @@ describe("sqlite store opening", () => {
   afterEach(() => dir.remove());
 
   test("the connection is defensive, WAL and synchronous=FULL", () => {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     createOwnerOnly(path);
     const db = openDatabase(path, 100);
     try {
@@ -383,7 +383,7 @@ describe("sqlite store opening", () => {
   });
 
   test("a newer store in WAL mode, closed cleanly, is refused without creating or changing a file", async () => {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     await openSqliteStore({ path }).close();
     const raw = new DatabaseSync(path);
     raw.exec(`INSERT INTO schema_version (version, applied_at) VALUES (${FUTURE}, 0)`);
@@ -398,7 +398,7 @@ describe("sqlite store opening", () => {
   });
 
   test("a store newer than this relembra is refused without changing a byte", async () => {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     await openSqliteStore({ path }).close();
     const raw = new DatabaseSync(path);
     raw.exec(`INSERT INTO schema_version (version, applied_at) VALUES (${FUTURE}, 0)`);
@@ -411,7 +411,7 @@ describe("sqlite store opening", () => {
     expect(readFileSync(path).equals(before)).toBe(true);
     expect(existsSync(`${path}-wal`)).toBe(false);
     // Positive control: opening a current store does switch it to WAL, which changes the file.
-    const current = join(dir.path, "current.db");
+    const current = join(dir.path, "current", "relembra.db");
     await openSqliteStore({ path: current }).close();
     const check = new DatabaseSync(current);
     check.exec("PRAGMA journal_mode = DELETE");
@@ -439,7 +439,7 @@ describe("sqlite store opening", () => {
   });
 
   test("a reader holding a rollback-journal store while it is switched to WAL raises StoreBusyError", async () => {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     await openSqliteStore({ path }).close();
     const reader = new DatabaseSync(path);
     reader.exec("PRAGMA journal_mode = DELETE");
@@ -457,7 +457,7 @@ describe("sqlite store opening", () => {
   });
 
   test("a busy timeout above SQLite's 32-bit maximum is refused, and the maximum is accepted", async () => {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     // PRAGMA busy_timeout takes a 32-bit int: 2147483648 would silently become 0 (no waiting).
     expect(() => openSqliteStore({ path, busyTimeoutMs: 2_147_483_648 })).toThrow(RangeError);
     expect(existsSync(path)).toBe(false);
@@ -466,7 +466,7 @@ describe("sqlite store opening", () => {
   });
 
   test("a busy timeout that is not a finite non-negative integer is refused before the file is touched", () => {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     for (const busyTimeoutMs of [Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5]) {
       expect(() => openSqliteStore({ path, busyTimeoutMs })).toThrow(RangeError);
     }
@@ -505,7 +505,7 @@ describe("sqlite redaction on disk", () => {
   };
 
   test("the store's connection has secure_delete on", () => {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     createOwnerOnly(path);
     const db = openDatabase(path, 100);
     try {
@@ -540,7 +540,7 @@ describe("sqlite redaction on disk", () => {
   }
 
   test("a reader holding an old snapshot defers the WAL truncation, and a later commit completes it", async () => {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     const store = openSqliteStore({ path, busyTimeoutMs: 50 });
     const relembra = createRelembra({ store, policy: () => owner });
     const secret = await relembra.note(null, { scope: SCOPE, text: SECRET, provenance });
@@ -564,7 +564,7 @@ describe("sqlite redaction on disk", () => {
   });
 
   test("a scrub that failed survives a restart: the reopened store truncates the WAL before any read", async () => {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     const store = openSqliteStore({ path, busyTimeoutMs: 50 });
     const relembra = createRelembra({ store, policy: () => owner });
     const secret = await relembra.note(null, { scope: SCOPE, text: SECRET, provenance });
@@ -594,7 +594,7 @@ describe("sqlite redaction on disk", () => {
   });
 
   test("handles opened before another handle's redaction see its pending scrub, and finish it", async () => {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     const a = openSqliteStore({ path, busyTimeoutMs: 50 });
     const b = openSqliteStore({ path, busyTimeoutMs: 50 });
     const c = openSqliteStore({ path, busyTimeoutMs: 50 });
@@ -626,7 +626,7 @@ describe("sqlite redaction on disk", () => {
   });
 
   test("a scrub clears only the redactions it truncated: one committed after its truncation stays pending", async () => {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     // a waits long enough to outlast the hold below; b gives up on its truncation quickly.
     const a = openSqliteStore({ path, busyTimeoutMs: 1_000 });
     const b = openSqliteStore({ path, busyTimeoutMs: 50 });
@@ -683,7 +683,7 @@ describe("sqlite redaction on disk", () => {
   });
 
   test("a scrub that still cannot finish at reopen stays pending, and the next commit retries it", async () => {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     const store = openSqliteStore({ path, busyTimeoutMs: 50 });
     const relembra = createRelembra({ store, policy: () => owner });
     const secret = await relembra.note(null, { scope: SCOPE, text: SECRET, provenance });
@@ -728,7 +728,7 @@ describe("sqlite store paths are regular files, never symbolic links", () => {
   });
 
   test("a symbolic link to an existing store is refused without touching the store", async () => {
-    const real = join(dir.path, "real.db");
+    const real = join(dir.path, "store", "real.db");
     await openSqliteStore({ path: real }).close();
     const before = readFileSync(real);
     const alias = join(dir.path, "alias.db");
@@ -772,7 +772,7 @@ describe("sqlite store paths are regular files, never symbolic links", () => {
   });
 
   test("a sidecar that is a symbolic link is refused", async () => {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     await openSqliteStore({ path }).close();
     const elsewhere = join(dir.path, "elsewhere");
     mkdirSync(elsewhere);
@@ -955,7 +955,7 @@ describe("relembra on the sqlite store", () => {
   afterEach(() => dir.remove());
 
   test("note, find and recall work end to end, and survive reopening the file", async () => {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     const store = openSqliteStore({ path });
     const relembra = createRelembra({ store, policy: hostPolicy });
     const build = await relembra.note(
@@ -996,7 +996,7 @@ describe("sqlite event format", () => {
   afterEach(() => dir.remove());
 
   test("every persisted event body carries format 1", async () => {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     const store = openSqliteStore({ path });
     const relembra = createRelembra({ store, policy: hostPolicy });
     const noted = await relembra.note(
@@ -1027,7 +1027,7 @@ describe("host callbacks and sqlite transactions", () => {
   afterEach(() => dir.remove());
 
   test("the policy, clock and ids never run while the store holds its write lock", async () => {
-    const path = join(dir.path, "relembra.db");
+    const path = join(dir.path, "store", "relembra.db");
     const store = openSqliteStore({ path });
     const probe = new DatabaseSync(path);
     probe.exec("PRAGMA busy_timeout = 0");

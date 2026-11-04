@@ -1,93 +1,122 @@
-# W-NV1: refuse a Windows store folder that another account can change
+# W-NV1: create a Windows store privately and verify its ancestry
 
-Status: in progress (1.0.0-beta.3)
+Status: beta.4 implementation; Windows acceptance and security review pending.
 
-## Assumptions
+## Assumptions and boundary
 
-The owner chose this approach and asked for no interview (2026-11-02). Each open decision is
-assumed here:
+The owner selected “Build beta.4” after the beta.3 release (2026-11-02).
+This is a security correction, without an interview. No store schema or export format changes.
 
-1. **Enforce the waiver's precondition instead of switching to handles.** The store's folder is
-   still secured by path with `icacls`. Before that happens, relembra reads the access lists of the
-   folder's parent and of every folder above it, and refuses when another account could change
-   them. Handle-based Win32 calls need FFI, which is experimental in both Bun (`bun:ffi`) and Node
-   26 (`node:ffi`); the library runs on both, and AGENTS.md allows no runtime dependency.
-2. **Access lists are read with `icacls <folder> /save <file>`,** which writes SDDL with SIDs, so
-   no account name or system language is involved. PowerShell is not used: `Get-Acl` hung on the
-   arm runner (run 41391564103), and its policies differ from one machine to another.
-3. **Trusted accounts:** the user, SYSTEM (`S-1-5-18`), Administrators (`S-1-5-32-544`),
-   TrustedInstaller (`S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464`), and
-   CREATOR OWNER (`S-1-3-0`), which stands for whoever creates the folder, here the user.
-   Every other SID counts as another account, OWNER RIGHTS (`S-1-3-4`) included. Deny entries are
-   ignored, so a deny can only lead to a refusal, never let a folder pass.
-4. **Owners are not read.** No tool on a stock Windows system prints a folder's owner as a SID
-   without PowerShell; `dir /q` prints a localized name and cuts it short. An ancestor owned by
-   another account whose access list does not name that account is not detected. That is the
-   remaining risk, and docs/CLI.md states it.
-5. **Behaviour change accepted:** a store folder under a shared or world-writable folder (for
-   example `D:\data\relembra` beside the default access list of a drive root) is now refused at
-   first open. Existing stores are not touched: the check runs only when relembra creates a store.
-6. **Cost:** one `icacls` process for each folder from the parent of the store folder up to the
-   root, only when a store is created. No cache: a cached verdict would outlive the access lists it
-   was based on.
-7. **Size:** one session, so this spec has no ticket files.
+- A new Windows store requires an absent leaf directory. Existing uninitialized directories
+  are refused without changing their owner or ACL. Reusing one cannot revoke handles opened
+  before it was private. Choose a new directory instead; no existing data is moved or deleted.
+- Existing database files retain their existing open behavior. This change does not certify
+  stores created by an older release, another tool, or subsequently re-permissioned.
+- The current user, SYSTEM, Administrators and TrustedInstaller are trusted. CREATOR OWNER
+  remains an inheritance placeholder, never a trusted actual owner.
+- Existing ancestors must have been protected from untrusted accounts throughout their relevant
+  lifetime. Current owner and ACL reads cannot detect historical WRITE_DAC, DELETE or
+  FILE_WRITE_ATTRIBUTES handles. This boundary remains explicit: passing these checks does not
+  unconditionally clear W-NV1, renew a waiver, or authorize publication.
 
-## Rules
+## Decision
 
-Let P be the folder that holds the store folder, and let the chain be P and every folder above
-it, on the path as given, never its canonical form. A volume root cannot be renamed, and every
-folder below it can be swapped only with DELETE on it (R1) or DELETE_CHILD on the folder above
-(R2), which the chain's own access lists show. So when they pass, the folders read are the ones
-the ACL steps act on. Reading the canonical path instead would skip a folder on this one (Sol,
-PR #7). A link anywhere on the chain is refused. An entry is "foreign" when it is an allow entry
-for an untrusted SID. relembra refuses when:
+Use the Windows PowerShell 5.1 installed in System32 with .NET Framework filesystem APIs.
+The program is constant; paths and descriptors travel as JSON over stdin, and observations
+return as JSON on stdout. relembra uses no profile, interactive prompt, Get-Acl provider,
+script file, compilation, icacls save file, TEMP or TMP directory (PowerShell's own startup
+may create a missing TEMP; see below).
 
-| Rule | Where | Foreign entry that applies to the folder itself and grants | Why |
-|---|---|---|---|
-| R1 | every folder in the chain | delete, change permissions, take ownership, or generic all | the folder can be renamed, deleted or re-permissioned |
-| R2 | every folder in the chain | delete child, or generic all | an entry in it, the next folder on the path, can be renamed or deleted |
-| R3 | P | add a subfolder, generic write, or generic all | the store folder can be created first by someone else |
-| R4 | P, entries inherited by subfolders (`CI`), inherit-only included | anything beyond read and execute | the new store folder grants it until the ACL step, long enough to open a handle that keeps it |
+JSON uses the strongly named Framework System.Web.Extensions assembly directly. The Windows
+arm64 control timed out while running ConvertFrom-Json; the security helper
+therefore uses no Utility cmdlets (including New-Object or ConvertTo-Json).
 
-A null DACL counts as full control for Everyone. An access list that cannot be read, or that
-holds an ACE type, right, flag, GUID or shape this parser does not know, is refused. A callback
-entry's condition is skipped as one field, quoted strings included, and the entry counts as
-unconditional.
+The creators of one store are serialised by a named .NET mutex, `Global\relembra-<sha256>`
+of the current SID and the case-folded resolved store folder, created with a private
+MutexSecurity (full control for the user, SYSTEM and Administrators). Before waiting, its
+owner and every entry are verified; a foreign or squatted name is refused, never
+re-permissioned, so that name can at most deny creation. The wait is bounded (10 s) and an
+abandoned mutex counts as acquired. The mutex is an initialization guard, not a claim about
+historical ancestor handles. A long and an 8.3 spelling of one folder take two names and
+refuse each other. No lockfile, TEMP file or service is added.
 
-## Where the access lists are written
+The empty database is created through .NET (FileMode.CreateNew) under the lock, not by the
+runtime's open: files Node and Bun created in the private folder carried the three grants as
+explicit entries (CI run 41689802952), a file .NET creates there carries them as inherited
+entries (run 41762474475, probe `folder-inheritance-model`). The folder descriptor is
+`D:PAI…`: protected, and auto-inherited as a folder set with icacls is. CreateDirectory drops
+the `AI` bit (the probe read `D:P` back from a `D:PAI` request), so the same descriptor is then
+set again through Directory.SetAccessControl, which adopts the model, and read back.
 
-`icacls /save` needs a file, and the check trusts what the file says. The file goes in a scratch
-folder under TEMP that gets the store folder's own ACL: owned by the user (`/setowner`), full
-control for the user, SYSTEM and Administrators only (`/inheritance:r /grant:r`), and checked on
-stdout to hold exactly those entries. Each save gets a fresh random name. Bun's mkdtemp already
-gives the folder those three entries, explicit. Node's gives it TEMP's inherited ACL until these
-steps.
+relembra writes nothing under TEMP or TMP. Windows PowerShell's own startup may create a
+missing TEMP for its script-policy probe; the Windows test measures that with no store involved
+and checks that relembra added nothing to it.
 
-**Remaining condition: TEMP is trusted.** These steps act on the folder after it exists, so
-TEMP, and every folder above it, must meet three conditions. The default `%LOCALAPPDATA%\Temp`
-under the profile meets all three; the owner accepted this residual on 2026-11-02.
+Compared with a native Node-API addon, this preserves zero runtime dependencies and Node 24.14,
+Bun and AOT compatibility without another platform artifact. Direct node:ffi is unavailable
+on Node 24. An emitted P/Invoke helper adds complexity without solving historical ancestry.
+PowerShell absence, policy refusal, timeout or malformed output fails closed.
 
-1. **TEMP gives other accounts no inherited access to folders made in it.** Sol, round 2 of
-   PR #7: a handle opened before the steps keeps its access, and FILE_WRITE_ATTRIBUTES is enough
-   to turn the empty folder into a junction to one that account controls, so it could forge the
-   saved files.
-2. **It does not let other accounts delete or rename its entries.**
-3. **It is not owned by another account.**
+## Rules and ordering
 
-TEMP's chain is not read: it would have to be read through files in TEMP, which the same
-account could forge. Creating the folder already private, in one step, needs CreateDirectoryW
-with a security descriptor, so experimental FFI in both runtimes; it was the rejected
-alternative.
+1. Before creating any Windows directory, resolve a local drive path. Reject device/UNC paths
+   and alternate streams in any component, and a leaf that is a link. Whether an existing
+   leaf is refused is decided under the mutex (rule 6).
+2. Walk the given ancestry to the drive root, identifying the deepest existing ancestor.
+   Read existing directories root-first through Directory.GetAccessControl(Owner | Access).
+   GetOwner(SecurityIdentifier) returns the owner's SID. GetSecurityDescriptorSddlForm(Access)
+   returns the DACL. Reject all reparse points, non-directories and unreadable descriptors.
+3. Reject foreign or unverifiable owners even when their SID appears in no access entry.
+   Check every existing ancestor for foreign allow entries granting DELETE, WRITE_DAC,
+   WRITE_OWNER, generic all, DELETE_CHILD, FILE_WRITE_ATTRIBUTES or generic write.
+   Attribute writes matter because the deepest existing ancestor may be empty and convertible
+   into a junction. Check that deepest ancestor for foreign add-subdirectory access as well.
+   Keep beta.3's conservative refusal of inherited permissions beyond read and execute.
+   Denials never cancel these conservative refusals. Unknown SDDL fails closed.
+4. Re-read the existing ancestry immediately before creation; reject a changed descriptor.
+   This detects observed changes, and is not a proof against historical handles.
+5. Create missing components root-first using Directory.CreateDirectory(path, DirectorySecurity).
+   Its SECURITY_ATTRIBUTES supplies the owner and protected DACL to CreateDirectory itself.
+   Only the current user, SYSTEM and Administrators receive full control, inheritable by files
+   and subdirectories, each SID once (SYSTEM may itself be the current user).
+6. Under the mutex: when the database file already exists, another creator finished; verify
+   that it is a regular file with exactly the three grants and that the leaf has the exact
+   private descriptor, and report `exists`. Otherwise refuse any component that already
+   exists, including the leaf an abandoned creator left behind. Verify every created
+   component's owner, reparse status, inheritance protection, auto-inherit model and exact
+   access rules.
+7. Only after successful verification, and still under the mutex, refuse orphan sidecars and
+   create the empty database with FileMode.CreateNew through .NET, so it inherits the verified
+   grants; verify its entries. Preserve the caller's file-type refusals. Never take ownership
+   of, harden, remove or silently adopt a preexisting uninitialized directory.
 
 ## Acceptance
 
-- Pure tests, which run on every platform: SDDL parsing (letter rights, hex rights, every flag,
-  conditional ACEs, a null DACL, an unknown token) and each rule, with a passing chain as the
-  positive control.
-- Windows tests, run in CI on windows-latest and windows-11-arm: one refusal for each rule, with
-  `BUILTIN\Users` standing in for another account and a positive control for each showing the
-  grant is present. Every existing Windows ACL test still passes, the leaky parent (inheritable
-  read for Everyone) included.
-- docs/CLI.md and CHANGELOG describe the refusal and the remaining owner risk.
-- Independent review by Sol. The production security gate decides whether W-NV1 is cleared,
-  before the beta.3 release (owner).
+- Cross-platform pure tests reproduce the foreign-owner bug before its fix, retain the ACL
+  parsing/permission controls, and refuse missing owners and attribute-write grants.
+- Real Windows x64 and arm64: fresh leaf and nested components have protected exact grants;
+  the owner's SID is verified; foreign ancestor owner with no matching grant is refused;
+  preexisting directories with open writable handles remain unchanged and receive no store.
+- A failing mkdtemp positive control with unavailable TEMP/TMP accompanies successful store
+  creation. Quoted PowerShell syntax in a directory name remains literal data.
+- Existing R1–R4, junction, existing-store and sidecar scenarios remain covered with the
+  stronger absent-leaf policy. General persistence fixtures use absent per-store directories,
+  with raw existing-database fixtures prepared explicitly.
+- Node 24.14/26, Bun and the native AOT executable run the applicable scenarios. Skipped
+  Windows tests on a Mac are not Windows proof.
+- Full local release gate, strict benchmark, independent adversarial review and security
+  deploy gate bind the final candidate before any release. Failed attempts remain evidence.
+- docs/CLI.md and CHANGELOG state the new-folder requirement and historical-ancestor boundary.
+  The security gate, not a green unit test, decides the remaining W-NV1 disposition.
+  Owner-only npm 2FA and merge/release authorization remain separate.
+
+## Primary references
+
+- [.NET Directory.GetAccessControl](https://learn.microsoft.com/en-us/dotnet/api/system.io.directory.getaccesscontrol?view=netframework-4.8.1)
+- [.NET Framework Directory implementation](https://raw.githubusercontent.com/microsoft/referencesource/main/mscorlib/system/io/directory.cs):
+  DirectorySecurity is converted to SECURITY_ATTRIBUTES for missing components; an existing
+  directory may return successfully, requiring read-back.
+- [CreateFileW sharing](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew):
+  attribute access is unaffected by sharing flags; restricting sharing does not revoke it.
+- [Reparse points](https://learn.microsoft.com/en-us/windows/win32/fileio/reparse-points):
+  a directory must be empty to acquire a reparse point.

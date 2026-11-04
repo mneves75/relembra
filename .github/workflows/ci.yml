@@ -67,6 +67,9 @@ jobs:
         run: bun test test/build-flags.test.ts test/build-cache.test.ts
       # Always built, never a cached binary, as scripts/ci.sh does.
       - run: bun build/cli.ts --force
+      - name: Windows AOT startup and bounded system-host controls
+        if: runner.os == 'Windows'
+        run: bun scripts/windows-cli-startup.ts
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: relembra-cli-${{ matrix.platform }}
@@ -246,6 +249,34 @@ jobs:
         run: node scripts/pack-smoke.ts --tarball "$RUNNER_TEMP"/package/*.tgz
       - name: Packed tarball under Bun
         run: bun scripts/pack-smoke.ts --tarball "$RUNNER_TEMP"/package/*.tgz
+
+  node-windows:
+    name: node (${{ matrix.os }}, ${{ matrix.node }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+        node: ["24.14", "26"]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+          package-manager-cache: false
+      - run: bun install --frozen-lockfile
+      - run: node --version
+      - name: SQLite conformance and private Windows directory creation under Node
+        run: npm run test:node
 
   pi-durable-latest:
     # Informational: the peer dependency claims exactly @earendil-works/pi-durable 1.4.0. This
