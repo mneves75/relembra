@@ -16,6 +16,9 @@ Release tooling only. The library, the CLI, the store schemas and the export for
   runs, and checks what was published.
 - `scripts/init.sh`: a fresh checkout's setup (tools and versions, `bun install --frozen-lockfile`,
   `bun run build:cli`); `--check` only reports.
+- `scripts/check-release.sh` writes `release-check.json` after its last check, naming the pinned
+  gate manifest and the benchmark record, so a later step can tell a finished run from an
+  interrupted one.
 - `docs/agents/notes.md`: working notes on the tooling and releases, linked from `AGENTS.md`.
 
 ## [1.0.0-beta.4] - 2026-11-04

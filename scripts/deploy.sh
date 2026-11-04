@@ -6,26 +6,28 @@
 #   scripts/deploy.sh prd
 #
 # hmo (homologação) touches nothing outside .scratch/deploy/<version>/: it binds HEAD to the
-# release check (the gated binary, the retained archive, the same relevant inputs), to the hosted
-# CI run of the push to main (every job green on this commit) and to the security gate record
-# (pass or waived, independently accepted, no expired waiver); downloads the hosted binaries and
-# checks each against the checksum beside it; lays out the seven release assets under their
-# release names with SHA256SUMS and the release notes from CHANGELOG.md; and writes plan.json.
-# It can be rerun after removing that directory.
+# release check (the gated binary, the retained archive, the same relevant inputs, and the marker
+# scripts/check-release.sh writes last), to the hosted CI run of the push to main (every job green
+# on this commit) and to the security gate record (pass or waived, independently accepted, no
+# expired waiver); downloads the hosted binaries and checks each against the checksum beside it;
+# lays out the seven release assets under their release names with SHA256SUMS and the release
+# notes from CHANGELOG.md; and writes plan.json, which records every asset's sha256. It can be
+# rerun after removing that directory.
 #
-# prd (produção) publishes exactly that plan, in docs/RELEASE.md's order: rechecks the assets,
-# tags HEAD with the gate verdict, pushes the tag, creates the draft release with every asset,
-# downloads the draft's assets and checks them, publishes, follows the release.yml run and binds
-# the staged npm archive to the release's by its sha1, dispatches pages.yml and follows it, then
-# downloads the published assets and checks them again. published.json holds what the evidence
-# record needs. Until the release is published every step can be undone, and a failure prints
-# the commands that undo it; after it, a failure is reported and nothing is undone, because a
-# published release is immutable.
+# prd (produção) publishes that plan and nothing else, in docs/RELEASE.md's order: rechecks every
+# asset against plan.json, tags HEAD with the gate verdict, pushes the tag, creates the draft
+# release with every asset, downloads the draft's assets and checks them, publishes, follows the
+# release.yml run and binds the staged npm archive to the release's by its sha1, dispatches
+# pages.yml and follows it, then downloads the published assets and checks them again.
+# published.json holds what the evidence record needs. Until the release is published every step
+# can be undone, and a failure prints the commands that undo it; after it, a failure is reported
+# and nothing is undone, because a published release is immutable.
 #
-# Needs git, gh (signed in), bun and node, curl, tar, openssl, and sha256sum or shasum. Exit codes:
-# 0 done, 1 refused or failed (the reason on stderr), 2 usage. RELEMBRA_DEPLOY_POLL (seconds
-# between polls, default 20) and RELEMBRA_DEPLOY_TIMEOUT (seconds to wait for a workflow run,
-# default 1200) exist for the tests.
+# Needs bash 3.2 or later, git, gh (signed in), bun and node, curl, tar, openssl, and sha256sum
+# and sha1sum or shasum. Exit codes: 0 done, 1 refused or failed (the reason on stderr), 2 usage.
+# RELEMBRA_DEPLOY_POLL (seconds between polls, default 20) and RELEMBRA_DEPLOY_TIMEOUT (seconds to
+# wait for a workflow run, default 1200) exist for the tests.
+#
 # shellcheck disable=SC2016  # the node -e programs below are single-quoted on purpose
 set -uo pipefail
 
@@ -55,6 +57,7 @@ else
   sha1_of() { shasum -a 1 "$1" | cut -d ' ' -f 1; }
   check_sums() { shasum -a 256 -c "$1"; }
 fi
+upper() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
 
 # json FILE PATH: a value from a JSON file by dotted path; strings bare, anything else as JSON.
 # Exit 3 when the path is absent, so a caller can tell "missing" from "empty".
@@ -79,11 +82,11 @@ tmp_now='' tmp_view='' plan_created=''
 trap 'rc=$?; rm -f "$tmp_now" "$tmp_view"; [ "$rc" = 0 ] || [ -z "$plan_created" ] || rm -rf "$plan"' EXIT
 
 # ---------------------------------------------------------------------------------------------
-# Checks shared by both stages: the tag must not exist anywhere, and the plan must match HEAD.
+# Shared by both stages
 # ---------------------------------------------------------------------------------------------
 
+# The remote first: a fetch brings its tags here, and the remote is what a release collides with.
 no_tag_anywhere() {
-  # The remote first: a fetch brings its tags here, and the remote is what a release collides with.
   local remote
   remote=$(git ls-remote --tags origin "refs/tags/$tag" "refs/tags/$tag^{}") ||
     refuse "cannot list origin's tags"
@@ -93,6 +96,7 @@ no_tag_anywhere() {
   fi
 }
 
+# In docs/RELEASE.md's order; SHA256SUMS goes between the binaries and the archive on the release.
 assets=(
   relembra-darwin-arm64
   relembra-linux-x64
@@ -139,23 +143,26 @@ hmo() {
   [ "$main" = "$head" ] || refuse "HEAD is not origin/main (${head:0:7} vs ${main:0:7}): merge and pull first"
   no_tag_anywhere
 
-  # The release check: passed and finished, on these bytes and these inputs.
-  local manifest="$check/gate/manifest.json"
+  # The release check: finished (its marker is written after every check passed), on a manifest
+  # that has not changed since, which verified these bytes.
+  local marker="$check/release-check.json" manifest="$check/gate/manifest.json"
+  [ -f "$marker" ] || refuse "release check did not finish: $check has no release-check.json (scripts/check-release.sh writes it last)"
+  [ "$(json "$marker" passed)" = true ] || refuse "release check did not pass ($marker)"
   [ -f "$manifest" ] || refuse "release check $check has no gate/manifest.json"
-  [ "$(json "$manifest" verdict)" = pass ] && [ "$(json "$manifest" complete)" = true ] ||
-    refuse "release check $check did not pass"
-  if ! { [ -f "$check/identity-final.json" ] && compgen -G "$check/bench/bench-*/bench.json" >/dev/null; }; then
-    refuse "release check did not finish (no identity-final.json or benchmark record in $check)"
-  fi
-  local binary_sha archive archive_sha
-  binary_sha=$(json "$manifest" 'artifacts' | node -e '
-    const artifacts = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
-    const named = (name) => artifacts.find((a) => a.name === name && a.verified === true);
+  [ "$(json "$marker" manifestSha256)" = "$(hash_of "$manifest")" ] ||
+    refuse "gate/manifest.json changed after the release check ($marker names another sha256)"
+  local artifacts binary_sha archive_sha archive
+  artifacts=$(node -e '
+    const m = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
+    if (m.verdict !== "pass" || m.complete !== true) { console.error("the gate manifest did not pass"); process.exit(1); }
+    const hex = /^[0-9a-f]{64}$/;
+    const named = (name) => (m.artifacts ?? []).find((a) => a.name === name && a.verified === true && hex.test(a.sha256Before) && a.sha256After === a.sha256Before && typeof a.path === "string");
     const cli = named("cli"), pkg = named("package");
-    if (!cli || !pkg) { console.error("the manifest verified no cli or package artifact"); process.exit(1); }
+    if (!cli) { console.error("no verified cli artifact in the gate manifest"); process.exit(1); }
+    if (!pkg) { console.error("no verified package artifact in the gate manifest"); process.exit(1); }
     process.stdout.write(`${cli.sha256After}\n${pkg.sha256After}\n${pkg.path}\n`);
-  ') || refuse "release check $check: no verified artifacts"
-  { read -r binary_sha; read -r archive_sha; read -r archive; } <<<"$binary_sha"
+  ' "$manifest" 2>&1) || refuse "release check $check: $artifacts"
+  { read -r binary_sha; read -r archive_sha; read -r archive; } <<<"$artifacts"
   [ -f bin/relembra ] || refuse "bin/relembra is missing"
   [ "$(hash_of bin/relembra)" = "$binary_sha" ] ||
     refuse "bin/relembra is not the binary the release check tested (sha256 $(hash_of bin/relembra), tested $binary_sha)"
@@ -173,17 +180,19 @@ hmo() {
     const before = read(process.argv[1]), after = read(process.argv[2]);
     const paths = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort();
     process.stdout.write(paths.filter((p) => before[p] !== after[p]).join(" "));
-  ' "$check/gate/identity-before.json" "$tmp_now")
+  ' "$check/gate/identity-before.json" "$tmp_now" 2>/dev/null) ||
+    refuse "cannot compare the inputs with the release check's ($check/gate/identity-before.json)"
   [ -z "$changed" ] || refuse "inputs changed since the release check: $changed"
 
-  # The security gate: a production record for this tree, pass or waived, independently accepted.
-  # Records are kept under a commit's or a tree's name, so they are found by content: the one for
-  # this tree, this commit's first. Its reason for refusing comes back on the same stream.
-  local record verdict waivers
+  # The security gate: a production record for this tree, pass or waived, independently accepted,
+  # every waiver with a valid expiry still ahead. Records are kept under a commit's or a tree's
+  # name, so they are found by content, this commit's first. The reason comes back on one stream.
+  local record record_path verdict waivers
   if ! record=$(node -e '
     const fs = require("node:fs"), path = require("node:path");
     const dir = ".scratch/security-gate";
-    const tree = process.argv[1], commit = process.argv[2];
+    const [tree, commit] = process.argv.slice(1);
+    const fail = (m) => { console.error(m); process.exit(1); };
     const records = fs.existsSync(dir)
       ? fs.readdirSync(dir).map((d) => path.join(dir, d, "production.json")).filter((p) => fs.existsSync(p))
           .map((p) => ({ p, r: JSON.parse(fs.readFileSync(p, "utf8")) }))
@@ -191,38 +200,54 @@ hmo() {
       : [];
     records.sort((a, b) => (b.r.commit === commit) - (a.r.commit === commit) || String(b.r.created_at).localeCompare(String(a.r.created_at)));
     const found = records[0];
-    if (!found) { console.error(`no security gate record for tree ${tree} under ${dir}`); process.exit(1); }
-    const { r } = found;
-    const fail = (m) => { console.error(m); process.exit(1); };
-    if (r.verdict !== "pass" && r.verdict !== "waived") fail(`security gate verdict is ${r.verdict} (${found.p})`);
-    if (r.independent_acceptance !== "pass") fail(`independent acceptance is ${r.independent_acceptance} (${found.p})`);
-    const now = new Date().toISOString();
-    for (const w of r.waivers ?? []) if (!(String(w.expires) > now)) fail(`waiver ${w.id} expired ${w.expires} (${found.p})`);
-    process.stdout.write([found.p, r.verdict, (r.waivers ?? []).map((w) => w.id).join(" ")].join("\n"));
+    if (!found) fail(`no security gate record for tree ${tree} under ${dir}`);
+    const { r, p } = found;
+    if (r.verdict !== "pass" && r.verdict !== "waived") fail(`security gate verdict is ${r.verdict} (${p})`);
+    if (r.independent_acceptance !== "pass") fail(`independent acceptance is ${r.independent_acceptance} (${p})`);
+    const waivers = Array.isArray(r.waivers) ? r.waivers : undefined;
+    if (r.verdict === "waived" && !(waivers && waivers.length > 0)) fail(`security gate is waived with no waivers (${p})`);
+    for (const w of waivers ?? []) {
+      if (typeof w.id !== "string" || w.id === "") fail(`a waiver has no id (${p})`);
+      const expires = typeof w.expires === "string" && /^\d{4}-\d{2}-\d{2}/.test(w.expires) ? Date.parse(w.expires) : NaN;
+      if (!Number.isFinite(expires)) fail(`waiver ${w.id} has no valid expiry (${JSON.stringify(w.expires)}, ${p})`);
+      if (expires <= Date.now()) fail(`waiver ${w.id} expired ${w.expires} (${p})`);
+    }
+    process.stdout.write([p, r.verdict, (waivers ?? []).map((w) => w.id).join(" ")].join("\n"));
   ' "$tree" "$head" 2>&1); then
     refuse "$record"
   fi
-  local record_path
   { read -r record_path; read -r verdict; read -r waivers; } <<<"$record"
-  local gate_line="${verdict^^}"
-  [ -z "$waivers" ] || gate_line="$gate_line ${waivers}"
+  local gate_line
+  gate_line=$(upper "$verdict")
+  [ -z "$waivers" ] || gate_line="$gate_line $waivers"
 
-  # The hosted run: this commit, finished, every job green.
-  local run_json
+  # The hosted run: the ci workflow's push to main, for this commit, finished, every job green.
+  local run_json run_sha run_status run_event run_workflow run_branch jobs red
   run_json=$(mktemp) || exit 1
-  gh run view "$run" --json headSha,status,conclusion,jobs >"$run_json" || refuse "cannot read run $run"
-  local run_sha run_status
+  gh run view "$run" --json headSha,status,conclusion,jobs,workflowName,event,headBranch >"$run_json" ||
+    refuse "cannot read run $run"
   run_sha=$(json "$run_json" headSha) || refuse "run $run has no headSha"
   [ "$run_sha" = "$head" ] || refuse "run $run is for ${run_sha:0:7}, not HEAD ${head:0:7}"
-  run_status=$(json "$run_json" status)
+  run_workflow=$(json "$run_json" workflowName) || refuse "run $run has no workflowName"
+  run_event=$(json "$run_json" event) || refuse "run $run has no event"
+  run_branch=$(json "$run_json" headBranch) || refuse "run $run has no headBranch"
+  if [ "$run_workflow" != ci ] || [ "$run_event" != push ] || [ "$run_branch" != main ]; then
+    refuse "run $run is a $run_event of $run_workflow on $run_branch, not the ci push to main"
+  fi
+  run_status=$(json "$run_json" status) || refuse "run $run has no status"
   [ "$run_status" = completed ] || refuse "run $run is $run_status; wait for it"
-  local red
-  red=$(json "$run_json" jobs | node -e '
+  jobs=$(json "$run_json" jobs) || refuse "run $run has no jobs"
+  red=$(printf '%s' "$jobs" | node -e '
     const jobs = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+    if (!Array.isArray(jobs) || jobs.length === 0) { process.stdout.write("has no jobs"); process.exit(0); }
     const bad = jobs.find((j) => j.conclusion !== "success");
     if (bad) process.stdout.write(`job ${bad.name} is ${bad.conclusion}`);
-  ')
-  [ -z "$red" ] || refuse "run $run: $red"
+  ') || refuse "run $run: cannot read its jobs"
+  case $red in
+  '') ;;
+  "has no jobs") refuse "run $run has no jobs" ;;
+  *) refuse "run $run: $red" ;;
+  esac
   [ "$(json "$run_json" conclusion)" = success ] || refuse "run $run concluded $(json "$run_json" conclusion)"
   rm -f "$run_json"
 
@@ -230,11 +255,11 @@ hmo() {
   mkdir -p "$plan/dl" || exit 1
   plan_created=1
   gh run download "$run" --dir "$plan/dl" --pattern 'relembra-cli-*' || refuse "cannot download run $run's artifacts"
-  local artifact file release
+  local spec artifact file release dir
   for spec in linux-x64:relembra:relembra-linux-x64 linux-aarch64:relembra:relembra-linux-arm64 \
     windows-x64:relembra.exe:relembra-windows-x64.exe windows-aarch64:relembra.exe:relembra-windows-arm64.exe; do
     IFS=: read -r artifact file release <<<"$spec"
-    local dir="$plan/dl/relembra-cli-$artifact"
+    dir="$plan/dl/relembra-cli-$artifact"
     [ -f "$dir/$file" ] && [ -f "$dir/relembra.sha256" ] ||
       refuse "run $run has no relembra-cli-$artifact artifact with $file and relembra.sha256"
     (cd "$dir" && check_sums relembra.sha256 >/dev/null 2>&1) ||
@@ -256,11 +281,17 @@ hmo() {
     fi
   fi
   : >"$plan/SHA256SUMS"
+  local asset_json=''
   for release in "${assets[@]}"; do
-    printf '%s  %s\n' "$(hash_of "$plan/$release")" "$release" >>"$plan/SHA256SUMS"
+    local sum
+    sum=$(hash_of "$plan/$release")
+    printf '%s  %s\n' "$sum" "$release" >>"$plan/SHA256SUMS"
+    asset_json="$asset_json$release=$sum"$'\n'
   done
 
   # Notes: the CHANGELOG section as written, then what docs/RELEASE.md says about the assets.
+  local waiver_list=''
+  [ -z "$waivers" ] || waiver_list=" (${waivers// /, })"
   {
     printf '%s\n' "$notes_body" | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}'
     cat <<EOF
@@ -272,7 +303,7 @@ hmo() {
 tested; npm staging publishes these bytes). Verify with \`shasum -a 256 -c SHA256SUMS\`. Install on macOS
 arm64 with \`sh install.sh relembra-darwin-arm64 SHA256SUMS\` from a checkout of this tag.
 
-Security gate: ${verdict^^}$( [ -z "$waivers" ] || printf ' (%s)' "${waivers// /, }"). Evidence: \`docs/eval/release-$version.md\` (follows by PR).
+Security gate: $(upper "$verdict")$waiver_list. Evidence: \`docs/eval/release-$version.md\` (follows by PR).
 EOF
   } >"$plan/notes.md"
 
@@ -280,17 +311,18 @@ EOF
   node scripts/stage-release.ts "$tag" "$plan" >/dev/null || refuse "release.yml would refuse this archive"
 
   local tag_message="$tag; security gate: $gate_line"
-  node -e '
-    const [out, version, tag, commit, tree, run, prerelease, check, manifest, record, verdict, waivers, binary, archive, message, notes] = process.argv.slice(1);
+  printf '%s' "$asset_json" | node -e '
+    const [out, version, tag, commit, tree, run, prerelease, check, manifest, record, verdict, waivers, binary, archive, sums, message, notes] = process.argv.slice(1);
+    const assets = Object.fromEntries(require("node:fs").readFileSync(0, "utf8").split("\n").filter(Boolean).map((line) => line.split("=")));
     require("node:fs").writeFileSync(out, `${JSON.stringify({
       version, tag, commit, tree, run, prerelease: prerelease === "1",
       releaseCheck: check, manifest, gateRecord: record, verdict, waivers: waivers ? waivers.split(" ") : [],
-      binarySha256: binary, archiveSha256: archive, tagMessage: message, notes,
+      binarySha256: binary, archiveSha256: archive, assets, sumsSha256: sums, tagMessage: message, notes,
       createdAt: new Date().toISOString(),
     }, null, 2)}\n`);
   ' "$plan/plan.json" "$version" "$tag" "$head" "$tree" "$run" "$prerelease" "$check" "$manifest" \
-    "$record_path" "$verdict" "$waivers" "$binary_sha" "$archive_sha" "$tag_message" "$plan/notes.md" ||
-    refuse "could not write plan.json"
+    "$record_path" "$verdict" "$waivers" "$binary_sha" "$archive_sha" "$(hash_of "$plan/SHA256SUMS")" \
+    "$tag_message" "$plan/notes.md" || refuse "could not write plan.json"
   echo "hmo ready: $plan"
   echo "tag message: $tag_message"
   echo "next: review $plan/notes.md and SHA256SUMS, then scripts/deploy.sh prd"
@@ -303,20 +335,24 @@ EOF
 poll=${RELEMBRA_DEPLOY_POLL:-20}
 timeout=${RELEMBRA_DEPLOY_TIMEOUT:-1200}
 
-# find_run WORKFLOW EVENT SINCE: the id of the newest WORKFLOW run of EVENT on HEAD created at or
-# after SINCE (UTC ISO 8601), polling until the timeout. `gh workflow run` and a release event give
-# no run id back, so the run is found by what it is for.
+# find_run WORKFLOW EVENT SINCE: sets found_run to the id of the newest WORKFLOW run of EVENT on
+# HEAD created at or after SINCE (UTC ISO 8601), polling until the timeout, or refuses. Not a
+# subshell: a refusal here must end the script. `gh workflow run` and a release event give no run
+# id back, so the run is found by what it is for.
+found_run=''
 find_run() {
-  local workflow=$1 event=$2 since=$3 deadline=$((SECONDS + timeout)) id
+  local workflow=$1 event=$2 since=$3 deadline=$((SECONDS + timeout)) listed
   while :; do
-    id=$(gh run list --workflow "$workflow" --event "$event" \
-      --json databaseId,headSha,event,createdAt,status,conclusion --limit 10 | node -e '
+    listed=$(gh run list --workflow "$workflow" --event "$event" \
+      --json databaseId,headSha,event,createdAt,status,conclusion --limit 10) ||
+      refuse "cannot list $workflow runs"
+    found_run=$(printf '%s' "$listed" | node -e '
       const runs = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
       const [commit, since] = process.argv.slice(1);
       const mine = runs.filter((r) => r.headSha === commit && r.createdAt >= since).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       if (mine[0]) process.stdout.write(String(mine[0].databaseId));
-    ' "$head" "$since") || refuse "cannot list $workflow runs"
-    [ -z "$id" ] || { printf '%s' "$id"; return; }
+    ' "$head" "$since") || refuse "cannot read the $workflow run list"
+    [ -z "$found_run" ] || return 0
     [ "$SECONDS" -lt "$deadline" ] || refuse "no $workflow run for $tag on ${head:0:7} within ${timeout}s"
     sleep "$poll"
   done
@@ -341,9 +377,21 @@ prd() {
   [ "$commit" = "$head" ] || refuse "plan is for ${commit:0:7}, HEAD is ${head:0:7}: redo hmo"
   [ "$(json "$plan/plan.json" tree)" = "$tree" ] || refuse "plan is for another tree: redo hmo"
   [ "$(json "$plan/plan.json" tag)" = "$tag" ] || refuse "plan is for $(json "$plan/plan.json" tag), not $tag"
-  local sums
-  sums=$(cd "$plan" && check_sums SHA256SUMS 2>&1) || refuse "assets changed since hmo: $(printf '%s' "$sums" | grep -v ': OK$' | tr '\n' ' ')"
   [ -f "$plan/notes.md" ] || refuse "$plan/notes.md is missing"
+  # Every asset against the hash hmo recorded, and SHA256SUMS against its own: a regenerated
+  # checksum file cannot vouch for swapped bytes.
+  local changed
+  changed=$(node -e '
+    const fs = require("node:fs"), crypto = require("node:crypto"), path = require("node:path");
+    const [dir] = process.argv.slice(1);
+    const plan = JSON.parse(fs.readFileSync(path.join(dir, "plan.json"), "utf8"));
+    const sha = (f) => { try { return crypto.createHash("sha256").update(fs.readFileSync(path.join(dir, f))).digest("hex"); } catch { return "missing"; } };
+    const problems = Object.entries({ ...plan.assets, SHA256SUMS: plan.sumsSha256 })
+      .filter(([name, want]) => typeof want !== "string" || sha(name) !== want)
+      .map(([name]) => name);
+    process.stdout.write(problems.join(" "));
+  ' "$plan" 2>/dev/null) || refuse "cannot read $plan/plan.json's assets"
+  [ -z "$changed" ] || refuse "assets changed since hmo: $changed; redo hmo"
   no_tag_anywhere
 
   # The tag: annotated with the verdict, on the remote before the release so --verify-tag holds.
@@ -357,10 +405,10 @@ prd() {
   # The draft, with every asset; its assets downloaded and checked before anything is public.
   local prerelease_flag=()
   [ "$prerelease" = 0 ] || prerelease_flag=(--prerelease)
-  local files=()
+  local files=() name
   for name in "${assets[@]:0:5}" SHA256SUMS "${assets[5]}"; do files+=("$plan/$name"); done
-  if ! gh release create "$tag" --verify-tag --draft "${prerelease_flag[@]}" --title "$tag" \
-    --notes-file "$plan/notes.md" "${files[@]}" >/dev/null; then
+  if ! gh release create "$tag" --verify-tag --draft ${prerelease_flag[@]+"${prerelease_flag[@]}"} \
+    --title "$tag" --notes-file "$plan/notes.md" "${files[@]}" >/dev/null; then
     rollback_hint
     refuse "cannot create the draft release"
   fi
@@ -376,12 +424,17 @@ prd() {
   # Publication. From here nothing is undone: a published release is immutable.
   local since
   since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  tmp_view=$(mktemp) || exit 1
   if ! gh release edit "$tag" --draft=false >/dev/null; then
+    # The edit may have gone through before the error reached us; what GitHub holds decides.
+    if gh release view "$tag" --json tagName,isDraft,isPrerelease,publishedAt,url >"$tmp_view" 2>/dev/null &&
+      [ "$(json "$tmp_view" isDraft)" = false ]; then
+      refuse "publishing reported an error, but the release is live: nothing is undone; continue by hand from the release.yml step in docs/RELEASE.md"
+    fi
     rollback_hint
     refuse "cannot publish the draft"
   fi
   local published_at url
-  tmp_view=$(mktemp) || exit 1
   gh release view "$tag" --json tagName,isDraft,isPrerelease,publishedAt,url >"$tmp_view" || refuse "cannot read the release"
   [ "$(json "$tmp_view" isDraft)" = false ] || refuse "the release is still a draft"
   published_at=$(json "$tmp_view" publishedAt)
@@ -390,7 +443,8 @@ prd() {
 
   # release.yml stages the archive on npm; the stage must hold the release's archive by sha1.
   local release_run log stage_id dist_tag staged_sha1 archive_sha1 integrity
-  release_run=$(find_run release.yml release "$since")
+  find_run release.yml release "$since"
+  release_run=$found_run
   gh run watch "$release_run" --exit-status >/dev/null || refuse "release.yml run $release_run failed; fix the cause and rerun it (gh run rerun $release_run)"
   log=$(gh run view "$release_run" --log) || refuse "cannot read release.yml run $release_run's log"
   stage_id=$(printf '%s\n' "$log" | sed -n 's/.*staged with id \([0-9a-f-]*\).*/\1/p' | head -n 1)
@@ -407,7 +461,8 @@ prd() {
   # Pages, from main, which is this commit.
   local pages_run
   gh workflow run pages.yml --ref main || refuse "cannot dispatch pages.yml"
-  pages_run=$(find_run pages.yml workflow_dispatch "$since")
+  find_run pages.yml workflow_dispatch "$since"
+  pages_run=$found_run
   gh run watch "$pages_run" --exit-status >/dev/null || refuse "pages.yml run $pages_run failed"
   echo "pages: run $pages_run"
 

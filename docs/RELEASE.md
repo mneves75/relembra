@@ -120,24 +120,30 @@ scripts/deploy.sh prd
 
 `hmo` writes nothing outside `.scratch/deploy/<version>/`. It refuses unless the working tree is
 clean and HEAD is `origin/main`; `package.json`, `src/version.ts` and a `## [<version>]` CHANGELOG
-section agree; no `v<version>` tag exists anywhere; the release check passed and finished on the
-current `bin/relembra`, on a retained archive named `relembra-<version>.tgz`, and on the same
-relevant inputs as HEAD (by content, so a squash that keeps the tree is accepted); a production
-security gate record for HEAD's tree is `pass` or `waived`, independently accepted, with no
-expired waiver; and the named hosted run is for HEAD with every job green. It then downloads that
-run's artifacts, checks each against its `relembra.sha256`, lays out the seven assets under their
-release names, writes `SHA256SUMS`, the notes (the CHANGELOG section plus the asset paragraph and
-the gate verdict), and `plan.json`; and runs `scripts/stage-release.ts` on the result, so an
+section agree; no `v<version>` tag exists anywhere; the release check finished (its
+`release-check.json`, which `scripts/check-release.sh` writes after its last check, names a gate
+manifest whose bytes are unchanged) and verified the current `bin/relembra` and a retained archive
+named `relembra-<version>.tgz`, on the same relevant inputs as HEAD (by content, so a squash that
+keeps the tree is accepted); a production security gate record for HEAD's tree is `pass` or
+`waived`, independently accepted, every waiver with a valid expiry still ahead; and the named
+hosted run is the `ci` workflow's push to `main` for HEAD, completed, with at least one job and
+every job green. It then downloads that run's artifacts, checks each against its
+`relembra.sha256`, lays out the seven assets under their release names, writes `SHA256SUMS`, the
+notes (the CHANGELOG section plus the asset paragraph and the gate verdict), and `plan.json`,
+which records every asset's sha256; and runs `scripts/stage-release.ts` on the result, so an
 archive `release.yml` would refuse is caught before anything is public.
 
-`prd` publishes that plan in the order below, after rechecking every asset against `SHA256SUMS`
-and that HEAD is still the plan's commit: tag (annotated with the gate verdict), push the tag,
-draft release with every asset, download and check the draft's assets, publish, follow the
-`release.yml` run and bind the staged archive to the release's by sha1, dispatch and follow
-`pages.yml`, then download the published assets and check them again, and write
-`.scratch/deploy/<version>/published.json` with what the evidence record needs. Until the draft is
-published every step can be undone, and a failure prints the commands that undo it; after that a
-failure is reported and nothing is undone, because a published release is immutable.
+`prd` publishes that plan and nothing else, in the order below, after rechecking every asset and
+`SHA256SUMS` against the hashes in `plan.json` and that HEAD is still the plan's commit: tag
+(annotated with the gate verdict), push the tag, draft release with every asset, download and
+check the draft's assets, publish, follow the `release.yml` run and bind the staged archive to the
+release's by sha1, dispatch and follow `pages.yml`, then download the published assets and check
+them again, and write `.scratch/deploy/<version>/published.json` with what the evidence record
+needs. Until the draft is published every step can be undone, and a failure prints the commands
+that undo it; after that a failure is reported and nothing is undone, because a published release
+is immutable. When publishing itself reports an error, the script reads the release back before
+deciding which of the two it is. The script runs on bash 3.2 or later, with `sha256sum` or
+`shasum`.
 
 Before publishing, check that no `refs/tags/v<version>` exists yet, peeled ref included
 (`git ls-remote --tags origin`); a collision blocks the release. Then, in this order:

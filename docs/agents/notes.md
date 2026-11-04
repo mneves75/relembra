@@ -27,6 +27,16 @@ those files cannot say: the mistake, the dead end, the thing that turned out to 
   every call, a bare repository as origin, and `realpath` on the temporary directory (macOS's
   temp dir is a symlink, and `git rev-parse --show-toplevel` returns the real path). A fixture
   `package.json` without `"type": "module"` makes Node print a MODULE_TYPELESS warning on stderr.
+- The first review of `deploy.sh` found three classes of defect worth remembering in any shell
+  tool: a checksum file verified against itself vouches for nothing (bind bytes to a record the
+  file cannot rewrite, here `plan.json`); a function that `exit`s inside `$(...)` ends only the
+  subshell, so every `x=$(...)` that can fail needs its own `|| refuse`, and a poll loop must not
+  live in a subshell; and dates compared as strings accept `"undefined"` and day-first dates as
+  the future. Also: a stock Mac's `/usr/bin/env bash` is 3.2, where `${x^^}` is a bad substitution
+  and `"${empty[@]}"` is unbound under `set -u`; the tests run the script with `/bin/bash` too.
+- `check-release.sh` used to leave no proof that it finished: `identity-final.json` was created by
+  redirection before the last checks ran. It now writes `release-check.json` last, naming the
+  pinned manifest's sha256, and `deploy.sh` requires it.
 
 ## 2026-11-03: Windows store folders (1.0.0-beta.4)
 
