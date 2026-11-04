@@ -79,11 +79,28 @@ Each platform's binary was built on its own runner by the Bun pinned in `build/b
 
 ## Mac installation
 
-Not performed in this release run: installing to `~/.local/bin` is a write outside the repository and the release request did not name this Mac. When wanted, from a checkout of the tag: keep the current binary as a rollback copy, then `sh install.sh relembra-darwin-arm64 SHA256SUMS` with the published assets, and the smoke test and benchmark of `docs/RELEASE.md`.
+Done on 2026-11-04 after the owner's go, per `docs/RELEASE.md`:
+
+- Rollback: the installed beta.4 binary (`d25dbd55cb3efb4c7fd86be96db9fd5f6233944f4f3844e697fb6bc5f7637564`)
+  kept as `.scratch/rollback-beta5/relembra-before-beta5` with its sha256 beside it.
+- The published assets were downloaded again into an empty directory and passed
+  `shasum -a 256 -c SHA256SUMS`; that `SHA256SUMS` is byte-identical to the plan's.
+- `sh install.sh relembra-darwin-arm64 SHA256SUMS` from the `main` checkout (`install.sh` identical
+  to the tag's) installed `~/.local/bin/relembra` with sha256
+  `ea8e79b2e2a12fc0426534780da152b17ce8b94f41183f26b618695fd652ac5b`, the gated and released bytes.
+- Smoke test in a disposable `RELEMBRA_HOME` and `RELEMBRA_SCOPE` (`RELEMBRA_GLOBAL_SCOPE` cleared),
+  then removed: `init`, `--help`, `note`, `find --json` (1 result), `wake`, `export` (header
+  `"relembra":"1.0.0-beta.5"`) and `check` exit 0; the store file is mode 0600; a blank note and
+  an oversized note exit 1; `find` without a query exits 2.
+- `bun bench/cli.ts --binary ~/.local/bin/relembra --size 20000 --seed 20261031 --runs 50`:
+  CLI `find` p50 61.08 ms / p95 108.88 ms (n = 50), `--help` p95 40.69 ms, library find p95
+  11.58 ms (n = 500), with a 1-minute load of 110.7 before and 101.2 after on 18 cores (other
+  sessions' work). Diagnostic only; the strict benchmark above is the release figure. beta.4
+  measured its installed binary at a far lower load, so the two are not comparable.
 
 ## Open
 
-- `npm stage approve` for the beta.5 stage (owner, 2FA), after `npm stage view` and
+- `npm stage approve` for the beta.5 stage (owner, 2FA; npm is not logged in on this machine), after `npm stage view` and
   `npm stage download` (its sha256 must equal the archive's above); then
   `npm view relembra@1.0.0-beta.5 dist.integrity` must equal the SRI in `published.json` and
   `dist-tags.beta` must point at 1.0.0-beta.5. The beta.2, beta.3 and beta.4 stages are still
