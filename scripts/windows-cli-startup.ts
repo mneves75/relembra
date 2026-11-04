@@ -73,6 +73,38 @@ probe(
   ),
   '{"probe":true}',
 );
+// Which model a folder created with a protected descriptor takes, and whether a file made in it
+// carries inherited (I) or copied (E) entries: before and after SetAccessControl re-applies it.
+probe(
+  "folder-inheritance-model",
+  powershell,
+  ps(
+    String.raw`$root = [IO.Path]::Combine([IO.Path]::GetTempPath(), 'relembra-inherit-' + [IO.Path]::GetRandomFileName())
+$sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$out = @()
+foreach ($control in @('P', 'PAI')) {
+  $folder = [IO.Path]::Combine($root, $control)
+  $sddl = 'O:{0}D:{1}(A;OICI;FA;;;{0})(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)' -f $sid, $control
+  $security = [Security.AccessControl.DirectorySecurity]::new()
+  $security.SetSecurityDescriptorSddlForm($sddl)
+  [void][IO.Directory]::CreateDirectory($folder, $security)
+  foreach ($step in @('created', 'reapplied')) {
+    if ($step -eq 'reapplied') {
+      $again = [Security.AccessControl.DirectorySecurity]::new()
+      $again.SetSecurityDescriptorSddlForm($sddl)
+      [IO.Directory]::SetAccessControl($folder, $again)
+    }
+    $file = [IO.Path]::Combine($folder, $step)
+    [IO.FileStream]::new($file, [IO.FileMode]::CreateNew).Dispose()
+    $marks = @([IO.File]::GetAccessControl($file).GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | ForEach-Object { if ($_.IsInherited) { 'I' } else { 'E' } }) -join ''
+    $prefix = [IO.Directory]::GetAccessControl($folder).GetSecurityDescriptorSddlForm('Access').Substring(0, 6)
+    $out += "$control/$step folder=$prefix file=$marks"
+  }
+}
+[IO.Directory]::Delete($root, $true)
+[Console]::Write($out -join '; ')`,
+  ),
+);
 const candidate = probe("candidate-help", join(process.cwd(), "bin", "relembra.exe"), ["--help"]);
 if (!candidate) {
   const work = mkdtempSync(join(tmpdir(), "relembra-startup-control-"));

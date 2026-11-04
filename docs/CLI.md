@@ -669,7 +669,10 @@ The release binaries `relembra-windows-x64.exe` and `relembra-windows-arm64.exe`
   Administrators only, inherited by files and subfolders. The database and SQLite's sidecars
   inherit it. A preexisting directory without the database is refused without taking ownership
   or changing any ACL: existing handles cannot be revoked by tightening permissions. Choose
-  another, absent directory; existing data is never moved or deleted.
+  another, absent directory; existing data is never moved or deleted. Two processes creating
+  the same store at once are serialised by a named mutex (`Global\relembra-<hash>` of your SID
+  and the folder, private to you, SYSTEM and Administrators); the second finds the first's
+  database and opens it. A mutex of that name held by another account only prevents creation.
 - **Where the store is safe.** Before any directory is created, relembra reads every existing
   ancestor's owner SID and DACL through the system Windows PowerShell 5.1 and .NET Framework.
   It refuses foreign owners and permissions allowing another account to rename, delete,

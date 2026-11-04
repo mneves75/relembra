@@ -30,6 +30,21 @@ JSON uses the strongly named Framework System.Web.Extensions assembly directly. 
 arm64 control timed out while running ConvertFrom-Json; the security helper
 therefore uses no Utility cmdlets (including New-Object or ConvertTo-Json).
 
+The creators of one store are serialised by a named .NET mutex, `Global\relembra-<sha256>`
+of the current SID and the case-folded resolved store folder, created with a private
+MutexSecurity (full control for the user, SYSTEM and Administrators). Before waiting, its
+owner and every entry are verified; a foreign or squatted name is refused, never
+re-permissioned, so that name can at most deny creation. The wait is bounded (10 s) and an
+abandoned mutex counts as acquired. The mutex is an initialization guard, not a claim about
+historical ancestor handles. A long and an 8.3 spelling of one folder take two names and
+refuse each other. No lockfile, TEMP file or service is added.
+
+The folder descriptor is `D:PAI…`: protected, and auto-inherited so the files made in it
+carry its grants as inherited entries. CreateDirectory with `D:P` left the folder in the
+NT 4 model, and Windows copied the grants into new files unmarked (CI run 41689802952).
+When the read-back after creation lacks `AI`, the same descriptor is set again through
+Directory.SetAccessControl (SetNamedSecurityInfo adopts the model) and read back once more.
+
 Compared with a native Node-API addon, this preserves zero runtime dependencies and Node 24.14,
 Bun and AOT compatibility without another platform artifact. Direct node:ffi is unavailable
 on Node 24. An emitted P/Invoke helper adds complexity without solving historical ancestry.
@@ -37,8 +52,9 @@ PowerShell absence, policy refusal, timeout or malformed output fails closed.
 
 ## Rules and ordering
 
-1. Before creating any Windows directory, refuse an existing new-store leaf and resolve a
-   local drive path. Reject device/UNC paths and alternate streams in directory components.
+1. Before creating any Windows directory, resolve a local drive path. Reject device/UNC paths
+   and alternate streams in any component, and a leaf that is a link. Whether an existing
+   leaf is refused is decided under the mutex (rule 6).
 2. Walk the given ancestry to the drive root, identifying the deepest existing ancestor.
    Read existing directories root-first through Directory.GetAccessControl(Owner | Access).
    GetOwner(SecurityIdentifier) returns the owner's SID. GetSecurityDescriptorSddlForm(Access)
@@ -56,12 +72,16 @@ PowerShell absence, policy refusal, timeout or malformed output fails closed.
    Its SECURITY_ATTRIBUTES supplies the owner and protected DACL to CreateDirectory itself.
    Only the current user, SYSTEM and Administrators receive full control, inheritable by files
    and subdirectories, each SID once (SYSTEM may itself be the current user).
-6. Refuse components that already exist before creation. The Framework overload can accept
-   a directory created concurrently by the same trusted account; verify every resulting
-   component's owner, reparse status, inheritance protection and exact access rules.
-7. Only after successful verification, create the database exclusively. Preserve file-type
-   and orphan-sidecar refusals. Never take ownership of, harden, remove or silently adopt a
-   preexisting uninitialized directory.
+6. Under the mutex: when the database file already exists, another creator finished; verify
+   that it is a regular file with exactly the three grants and that the leaf has the exact
+   private descriptor, and report `exists`. Otherwise refuse any component that already
+   exists, including the leaf an abandoned creator left behind. Verify every created
+   component's owner, reparse status, inheritance protection, auto-inherit model and exact
+   access rules.
+7. Only after successful verification, and still under the mutex, refuse orphan sidecars and
+   create the empty database with FileMode.CreateNew through .NET, so it inherits the verified
+   grants; verify its entries. Preserve the caller's file-type refusals. Never take ownership
+   of, harden, remove or silently adopt a preexisting uninitialized directory.
 
 ## Acceptance
 

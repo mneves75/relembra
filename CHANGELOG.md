@@ -14,6 +14,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
   rights that could turn an empty ancestor into a reparse point. Existing stores are unchanged.
   Current permissions cannot attest to historical ancestor handles; that boundary remains
   explicit in [docs/CLI.md](docs/CLI.md#windows).
+- Windows: two processes opening a missing store at once both succeed. The creators of one
+  store are serialised by a named mutex (per account and folder, with its own private
+  descriptor, verified before use), and the empty database is created under it, so the second
+  finds the first's file instead of refusing its folder. The store folder takes the
+  auto-inherit model, so the database and sidecars carry its grants as inherited entries.
 
 ## [1.0.0-beta.3] - 2026-11-02
 

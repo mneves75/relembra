@@ -10,7 +10,7 @@ export { StoreBusyError };
 
 import { walImage } from "./wal-image.js";
 import { chainRefusal, storeFolderChain, trustedAccounts } from "./windows-acl.js";
-import { createWindowsFolders, readWindowsChain } from "./windows-security.js";
+import { createStoreUnderLock, readWindowsChain } from "./windows-security.js";
 
 /** Thrown when an existing store file, or its -wal or -shm file, grants group or others access. */
 export class StoreFileModeError extends Error {
@@ -74,27 +74,17 @@ export const OWNER_MODES = process.platform !== "win32";
 
 /**
  * Creates POSIX directories as 0700 and files as 0600. On Windows a new store needs an absent
- * directory, created with a private descriptor. Existing files keep their existing checks.
+ * directory, created with a private descriptor, and the empty store file is made in it under the
+ * same lock. Existing files keep their existing checks.
  */
 export function createOwnerOnly(path: string): void {
   if (OWNER_MODES) mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   if (isSymbolicLink(path)) throw new StoreFileTypeError(path);
   // Windows ignores the modes: the directory must be private from creation, before any file.
-  if (!OWNER_MODES && !existsSync(path)) {
-    createWindowsStoreFolder(dirname(path));
-    // A sidecar without its store was put there by someone: it keeps its own ACL, and Windows
-    // opens a file by its full path whatever the folder grants, so SQLite would write into a file
-    // another account can read. Checked after the ACL, when no other account can add one. A
-    // sidecar beside a store that exists by now belongs to another process that created the
-    // store first (its folder got the same three grants), so it is no plant.
-    for (const sidecar of [`${path}-wal`, `${path}-shm`, `${path}-journal`]) {
-      if (hasEntry(sidecar) && !hasEntry(path)) {
-        throw new Error(`${sidecar} exists without its store; no store is created beside it`);
-      }
-    }
-  }
+  if (!OWNER_MODES && !existsSync(path)) createWindowsStore(path);
   try {
-    // O_EXCL never follows a link, so a link made since the check fails here with EEXIST.
+    // O_EXCL never follows a link, so a link made since the check fails here with EEXIST. On
+    // Windows the file exists by now, made under the store's lock, and this is a no-op.
     closeSync(openSync(path, "wx", 0o600));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
@@ -147,18 +137,22 @@ export function windowsUserSid(systemRoot: string | undefined): string {
 }
 
 /**
- * Creates an absent Windows store folder with its private descriptor supplied to mkdir.
- * Existing uninitialized folders are refused: changing an ACL cannot revoke old handles.
+ * Creates an absent Windows store folder with its private descriptor supplied to mkdir, then the
+ * empty store file in it, under a mutex named for the account and folder: two processes opening
+ * a missing store at once both succeed, the second finding the first's file. Whether an existing
+ * folder is another creator's or a preexisting uninitialized one is decided under that lock, by
+ * the store file's presence: the latter is refused, since changing an ACL cannot revoke old
+ * handles. A sidecar without its store (a file another account could read, since Windows opens
+ * a file by its path whatever the folder grants) is refused there too, before the first byte.
  */
-function createWindowsStoreFolder(dir: string): void {
-  const folder = win32.resolve(dir);
-  if (!/^[A-Za-z]:\\/.test(folder) || folder.slice(2).includes(":")) {
+function createWindowsStore(path: string): void {
+  const store = win32.resolve(path);
+  const folder = win32.dirname(store);
+  if (!/^[A-Za-z]:\\/.test(store) || store.slice(2).includes(":")) {
     throw new Error("a Windows store requires a local drive path without alternate streams");
   }
-  if (hasEntry(folder)) {
-    if (lstatSync(folder).isSymbolicLink()) throw new Error(`${folder} is a link`);
-    throw new Error(`${folder} already exists; a new Windows store requires a new folder`);
-  }
+  if (hasEntry(folder) && lstatSync(folder).isSymbolicLink())
+    throw new Error(`${folder} is a link`);
   const systemRoot = process.env["SystemRoot"];
   const sid = windowsUserSid(systemRoot);
   const executable = win32.join(
@@ -178,7 +172,15 @@ function createWindowsStoreFolder(dir: string): void {
   const chain = readWindowsChain(executable, existing.reverse());
   const refusal = chainRefusal(chain, trustedAccounts(sid));
   if (refusal !== undefined) throw new Error(`${refusal}; no store is created under it`);
-  createWindowsFolders(executable, missing.reverse(), chain, sid, storeFolderAccounts(sid));
+  createStoreUnderLock(
+    executable,
+    store,
+    folder,
+    missing.reverse(),
+    chain,
+    sid,
+    storeFolderAccounts(sid),
+  );
 }
 
 /**
