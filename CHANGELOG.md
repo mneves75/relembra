@@ -5,7 +5,18 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
-No changes yet.
+Release tooling only. The library, the CLI, the store schemas and the export format are unchanged.
+
+### Added
+
+- `scripts/deploy.sh`: the publication section of `docs/RELEASE.md` as a program. `hmo` binds HEAD
+  to the release check, the hosted CI run and the security gate record, downloads and checks the
+  hosted binaries and lays out the release assets with `SHA256SUMS` and notes, writing nothing
+  outside `.scratch/deploy/<version>/`; `prd` tags, publishes, follows the npm stage and Pages
+  runs, and checks what was published.
+- `scripts/init.sh`: a fresh checkout's setup (tools and versions, `bun install --frozen-lockfile`,
+  `bun run build:cli`); `--check` only reports.
+- `docs/agents/notes.md`: working notes on the tooling and releases, linked from `AGENTS.md`.
 
 ## [1.0.0-beta.4] - 2026-11-04
 
