@@ -14,6 +14,7 @@ import {
   lstatSync,
   mkdtempSync,
   openSync,
+  readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -175,12 +176,31 @@ describe.skipIf(!WINDOWS)("Windows store ACL", () => {
     process.env["TMP"] = unavailable;
     try {
       expect(() => mkdtempSync(join(tmpdir(), "control-"))).toThrow();
+      // Control: whether Windows PowerShell's own startup makes a missing TEMP (CI run
+      // 41762474475 found it present after a store was created). Measured with no store involved,
+      // so what relembra adds to it, if anything, is told apart from what PowerShell does.
+      windowsTool("WindowsPowerShell\\v1.0\\powershell.exe", [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "exit 0",
+      ]);
+      const powershellMakesTemp = existsSync(unavailable);
+      if (powershellMakesTemp) rmSync(unavailable, { recursive: true, force: true });
       const home = join(parent, "new", "nested");
       const store = join(home, "relembra.db");
       createOwnerOnly(store);
       expectOwnerOnly(home, store);
       expect(grants(join(parent, "new"))).toHaveLength(3);
-      expect(existsSync(unavailable)).toBe(false);
+      expect(existsSync(unavailable)).toBe(powershellMakesTemp);
+      // Nothing of relembra's in it: no folder, no store or sidecar.
+      const left = powershellMakesTemp ? readdirSync(unavailable, { withFileTypes: true }) : [];
+      expect(
+        left
+          .filter((entry) => entry.isDirectory() || /\.db$|-wal$|-shm$|-journal$/.test(entry.name))
+          .map((entry) => entry.name),
+      ).toEqual([]);
     } finally {
       for (const key of ["TEMP", "TMP"] as const) {
         if (previous[key] === undefined) delete process.env[key];

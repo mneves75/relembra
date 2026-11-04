@@ -5,7 +5,9 @@ import { win32 } from "node:path";
  * Whether a child that ends itself with `process.kill(process.pid, "SIGKILL")` died that way.
  * POSIX reports the signal. Windows has none: Node's SIGKILL is TerminateProcess with exit code 1,
  * so the parent sees status 1 and no signal, and the child wrote no stderr (an uncaught error
- * would also exit 1, with its stack on stderr).
+ * would also exit 1, with its stack on stderr). Node's own warning about node:sqlite being
+ * experimental (Node 24.14.1 prints it before a synchronous child reaches its kill) is not the
+ * child's output.
  */
 export function selfKilled(child: {
   status: number | null;
@@ -13,7 +15,16 @@ export function selfKilled(child: {
   stderr: string;
 }): boolean {
   if (process.platform !== "win32") return child.signal === "SIGKILL";
-  return child.signal === null && child.status === 1 && child.stderr === "";
+  const stderr = child.stderr
+    .split(/\r?\n/)
+    .filter(
+      (line) =>
+        !/^\(node:\d+\) ExperimentalWarning: /.test(line) &&
+        !line.startsWith("(Use `node --trace-warnings"),
+    )
+    .join("\n")
+    .trim();
+  return child.signal === null && child.status === 1 && stderr === "";
 }
 
 /**

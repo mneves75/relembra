@@ -39,11 +39,17 @@ abandoned mutex counts as acquired. The mutex is an initialization guard, not a 
 historical ancestor handles. A long and an 8.3 spelling of one folder take two names and
 refuse each other. No lockfile, TEMP file or service is added.
 
-The folder descriptor is `D:PAI…`: protected, and auto-inherited so the files made in it
-carry its grants as inherited entries. CreateDirectory with `D:P` left the folder in the
-NT 4 model, and Windows copied the grants into new files unmarked (CI run 41689802952).
-When the read-back after creation lacks `AI`, the same descriptor is set again through
-Directory.SetAccessControl (SetNamedSecurityInfo adopts the model) and read back once more.
+The empty database is created through .NET (FileMode.CreateNew) under the lock, not by the
+runtime's open: files Node and Bun created in the private folder carried the three grants as
+explicit entries (CI run 41689802952), a file .NET creates there carries them as inherited
+entries (run 41762474475, probe `folder-inheritance-model`). The folder descriptor is
+`D:PAI…`: protected, and auto-inherited as a folder set with icacls is. CreateDirectory drops
+the `AI` bit (the probe read `D:P` back from a `D:PAI` request), so the same descriptor is then
+set again through Directory.SetAccessControl, which adopts the model, and read back.
+
+relembra writes nothing under TEMP or TMP. Windows PowerShell's own startup may create a
+missing TEMP for its script-policy probe; the Windows test measures that with no store involved
+and checks that relembra added nothing to it.
 
 Compared with a native Node-API addon, this preserves zero runtime dependencies and Node 24.14,
 Bun and AOT compatibility without another platform artifact. Direct node:ffi is unavailable

@@ -17,8 +17,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 - Windows: two processes opening a missing store at once both succeed. The creators of one
   store are serialised by a named mutex (per account and folder, with its own private
   descriptor, verified before use), and the empty database is created under it, so the second
-  finds the first's file instead of refusing its folder. The store folder takes the
-  auto-inherit model, so the database and sidecars carry its grants as inherited entries.
+  finds the first's file instead of refusing its folder. The database is created through .NET
+  under that lock, so it carries the folder's grants as inherited entries, as SQLite's sidecars
+  do; the store folder takes the auto-inherit model.
 
 ## [1.0.0-beta.3] - 2026-11-02
 
