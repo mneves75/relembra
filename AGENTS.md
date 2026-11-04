@@ -20,6 +20,10 @@ TypeScript memory core for AI agents. Design: `docs/ARCHITECTURE.md`. Vocabulary
 
 ## Checks
 
+A fresh checkout starts with `scripts/init.sh`: it confirms the tools and versions below, runs
+`bun install --frozen-lockfile` (which enables the pre-push hook) and `bun run build:cli`;
+`scripts/init.sh --check` only reports.
+
 Hosted CI (`.github/workflows/ci.yml`) runs on every push to `main` and every pull request.
 Local runs are the release evidence. Before a merge, run the whole gate:
 
@@ -101,3 +105,10 @@ Local markdown under `docs/specs/<feature>/`. See `docs/agents/issue-tracker.md`
 ### Domain docs
 
 Single-context: `GLOSSARY.md` and `docs/adr/` at the repository root. See `docs/agents/domain.md`.
+
+### Working notes
+
+`docs/agents/notes.md` records what worked and what did not in this repository's tooling and
+releases, so a later session does not learn it again. Read it at the start of a task; add a dated
+entry when you learn something the next session needs. It carries no secrets, local paths, private
+names or session identifiers.

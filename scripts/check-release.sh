@@ -54,6 +54,13 @@ verified=$(bun scripts/gate-manifest.ts artifacts "$manifest" "$pinned") ||
   fail "artifacts (changed since the gate, $manifest)"
 case $verified in *"package: "*) ;; *) fail "artifacts: none verified ($manifest)" ;; esac
 
+# Written last, after every check above passed: what scripts/deploy.sh reads to know this run
+# finished, and which manifest bytes it finished on. Nothing earlier in the run writes it.
+json_string() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+printf '{\n  "passed": true,\n  "manifest": "%s",\n  "manifestSha256": "%s",\n  "benchmark": "%s",\n  "finishedAt": "%s"\n}\n' \
+  "$(json_string "$manifest")" "$pinned" "$(json_string "$record")" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  >"$run/release-check.json" || fail "cannot write $run/release-check.json"
+
 echo "release check passed"
 echo "gate manifest: $manifest (sha256 $pinned)"
 echo "benchmark: $record"

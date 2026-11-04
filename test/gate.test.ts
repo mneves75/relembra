@@ -818,6 +818,15 @@ describe.skipIf(NO_RELEASE_TOOLING)("scripts/check-release.sh", () => {
     const gateManifest = readFileSync(join(release as string, "gate/manifest.json"));
     expect(first.stdout).toContain(`gate manifest sha256: ${hex(gateManifest)}`);
     expect(first.stdout).toContain(`package: ${release}/gate/package/relembra-0.0.0.tgz (sha256 `);
+    // The marker scripts/deploy.sh reads: written last, naming the pinned manifest and the record.
+    expect(
+      JSON.parse(readFileSync(join(release as string, "release-check.json"), "utf8")),
+    ).toMatchObject({
+      passed: true,
+      manifest: `${release}/gate/manifest.json`,
+      manifestSha256: hex(gateManifest),
+      benchmark: `${release}/bench/bench-fake/bench.json`,
+    });
     const log = calls(dir);
     // The benchmark runs after the gate, in this run's own directories.
     expect(log.indexOf("bench/eval-latency.ts")).toBeGreaterThan(log.indexOf("run eval"));
