@@ -89,6 +89,9 @@ PowerShell absence, policy refusal, timeout or malformed output fails closed.
    create the empty database with FileMode.CreateNew through .NET, so it inherits the verified
    grants; verify its entries. Preserve the caller's file-type refusals. Never take ownership
    of, harden, remove or silently adopt a preexisting uninitialized directory.
+8. When a step fails after this run made a component, remove what this run made (the file, then
+   its folders in reverse, each empty) before reporting the failure, so a retry finds the leaf
+   absent. Nothing that existed before the run is removed.
 
 ## Acceptance
 

@@ -22,6 +22,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createOwnerOnly, storeFolderAccounts, windowsSystem32 } from "../src/sqlite/database.js";
+import { storeFolderChain } from "../src/sqlite/windows-acl.js";
+import { createStoreUnderLock, readWindowsChain } from "../src/sqlite/windows-security.js";
 import { windowsSid, windowsTool } from "./platform-support.js";
 
 const WINDOWS = process.platform === "win32";
@@ -340,5 +342,80 @@ describe.skipIf(!WINDOWS)("Windows store ACL", () => {
     const before = acl(home);
     createOwnerOnly(store);
     expect(acl(home)).toBe(before);
+  });
+});
+
+// The creation step itself, called as database.ts calls it, for the cases a race or a failure
+// reaches: another creator's finished store, and a failure after this run made its folder.
+describe.skipIf(!WINDOWS)("the Windows creation step under its lock", () => {
+  const powershell = () =>
+    join(windowsSystem32(process.env["SystemRoot"]), "WindowsPowerShell", "v1.0", "powershell.exe");
+  const chainOf = (folder: string) =>
+    readWindowsChain(powershell(), storeFolderChain(folder).filter(existsSync).reverse());
+  const create = (store: string, folder: string) =>
+    createStoreUnderLock(
+      powershell(),
+      store,
+      folder,
+      [folder],
+      chainOf(folder),
+      windowsSid(),
+      storeFolderAccounts(windowsSid()),
+    );
+
+  /**
+   * A folder made the way relembra makes one, by .NET with the descriptor at creation: the three
+   * grants, protected, and either the NT 4 model (`P`) or the auto-inherit model (`PAI`, which
+   * SetAccessControl applies, as relembra does). With `file`, an empty file made in it by .NET.
+   */
+  function dotnetFolder(path: string, control: "P" | "PAI", file?: string) {
+    const sid = windowsSid();
+    const sddl = `O:${sid}D:${control}(A;OICI;FA;;;${sid})(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)`;
+    const steps = [
+      `$s = [Security.AccessControl.DirectorySecurity]::new(); $s.SetSecurityDescriptorSddlForm('${sddl}')`,
+      `[void][IO.Directory]::CreateDirectory('${path}', $s)`,
+    ];
+    if (control === "PAI") {
+      steps.push(
+        `$a = [Security.AccessControl.DirectorySecurity]::new(); $a.SetSecurityDescriptorSddlForm('${sddl}')`,
+        `[IO.Directory]::SetAccessControl('${path}', $a)`,
+      );
+    }
+    if (file !== undefined) {
+      steps.push(`[IO.FileStream]::new('${file}', [IO.FileMode]::CreateNew).Dispose()`);
+    }
+    windowsTool("WindowsPowerShell\\v1.0\\powershell.exe", [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      steps.join("; "),
+    ]);
+  }
+
+  test("another creator's finished store is accepted only with the exact folder model", () => {
+    const parent = leakyParent();
+    // Positive control: the folder relembra would have made, store inside, is another creator's.
+    const done = join(parent, "done");
+    dotnetFolder(done, "PAI", join(done, "relembra.db"));
+    expect(create(join(done, "relembra.db"), done)).toBe("exists");
+    // The same grants under the NT 4 model are not what relembra makes: refused, untouched.
+    const stale = join(parent, "stale");
+    dotnetFolder(stale, "P", join(stale, "relembra.db"));
+    const before = acl(stale);
+    expect(() => create(join(stale, "relembra.db"), stale)).toThrow(/auto-inherit model/);
+    expect(acl(stale)).toBe(before);
+    expect(existsSync(join(stale, "relembra.db"))).toBe(true);
+  });
+
+  test("a failure after the folder is made removes what this run made, so a retry can succeed", () => {
+    const parent = leakyParent();
+    const home = join(parent, "home");
+    // `*` is illegal in a Windows file name: the folder is made, then the file's creation throws.
+    expect(() => create(join(home, "bad*name.db"), home)).toThrow(/Windows store security failed/);
+    expect(existsSync(home)).toBe(false);
+    // Positive control: the same leaf is free for the next attempt.
+    expect(create(join(home, "relembra.db"), home)).toBe("created");
+    expectOwnerOnly(home, join(home, "relembra.db"));
   });
 });
