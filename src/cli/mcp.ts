@@ -1,15 +1,18 @@
 /**
- * `relembra mcp`: an MCP server over stdio, protocol revision 2026-07-28, stateless. Each request
- * carries its protocol version and client capabilities in `_meta`; there is no initialize
- * handshake and no session (basic/index, "Statelessness"; basic/versioning). The server offers
- * `server/discover`, `tools/list` and `tools/call` (server/discover, server/tools).
+ * `relembra mcp`: a dual-era MCP server over stdio. Modern 2026-07-28 requests carry their version
+ * and capabilities in `_meta` and stay stateless, even beside an initialize-based session.
+ * Legacy revisions 2025-11-25, 2025-06-18, 2025-03-26 and 2024-11-05 negotiate once per process;
+ * unsupported initialize versions fall back to 2025-11-25 (basic/lifecycle, Version Negotiation).
+ * Legacy tools and results expose only fields their revision supports, with batches only for
+ * 2025-03-26. Modern requests offer `server/discover`, `tools/list` and `tools/call`; legacy
+ * sessions offer `ping`, `tools/list` and `tools/call` (basic/versioning, Dual-Era Servers).
  *
  * The CLI is the host: the scope, principal and provenance come from the launch environment,
- * exactly as for every other command (docs/CLI.md), and no tool argument or `_meta` field changes
- * them. The trust ceiling is `agent` and is never raised: raising it needs a person at the
- * terminal, and a stdio server has none. Every tool that returns memory text returns a rendering:
- * escaped, attributed, filtered by the host's egress filter and bounded by a byte budget, and
- * recorded as received by this server process's carrier before it is sent, so a later redaction
+ * exactly as for every other command (docs/CLI.md), and no initialize param, tool argument or
+ * `_meta` field changes them. The trust ceiling is `agent` and is never raised: raising it needs
+ * a person at the terminal, and a stdio server has none. Every tool that returns memory text
+ * returns a rendering: escaped, attributed, filtered by the host's egress filter and bounded by
+ * a byte budget, and recorded as received by this server process's carrier before it is sent, so a later redaction
  * lists the process as a pending carrier. The server cannot make a client forget anything, and
  * claims nothing about it.
  */
@@ -24,9 +27,12 @@ import { toCliError } from "./errors.js";
 import { type Frame, LineSplitter, MAX_MESSAGE_BYTES } from "./mcp-lines.js";
 import { composeWake } from "./wake.js";
 
-/** The one protocol revision this server speaks. */
+/** The stateless protocol revision. */
 export const PROTOCOL_VERSION = "2026-07-28";
-const SUPPORTED_VERSIONS = [PROTOCOL_VERSION];
+const LEGACY_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"] as const;
+type LegacyVersion = (typeof LEGACY_VERSIONS)[number];
+type ProtocolVersion = typeof PROTOCOL_VERSION | LegacyVersion;
+const SUPPORTED_VERSIONS = [PROTOCOL_VERSION, ...LEGACY_VERSIONS];
 
 /** What the host decides for every request, from the launch environment only. */
 export interface McpHost {
@@ -360,6 +366,19 @@ const TOOL_LIST = TOOLS.map(
   }),
 );
 
+function legacyTools(version: LegacyVersion): Json[] {
+  return TOOL_LIST.map(({ name, title, description, inputSchema, outputSchema, annotations }) => ({
+    name,
+    description,
+    inputSchema,
+    ...(version >= "2025-06-18"
+      ? { title, ...(outputSchema === undefined ? {} : { outputSchema }), annotations }
+      : version === "2025-03-26"
+        ? { annotations: { ...annotations, title } }
+        : {}),
+  }));
+}
+
 /**
  * Why `args` breaks `schema`, or undefined. The advertised schema is the one enforced. A problem
  * names a declared argument, never a value or an undeclared name, both of which are input.
@@ -428,8 +447,13 @@ function errorResponse(id: Id | undefined, code: number, message: string, data?:
   };
 }
 
-function resultResponse(id: Id, body: Json): Json {
-  return { jsonrpc: "2.0", id, result: { resultType: "complete", ...body, _meta: RESULT_META } };
+function resultResponse(id: Id, body: Json, version: ProtocolVersion = PROTOCOL_VERSION): Json {
+  return {
+    jsonrpc: "2.0",
+    id,
+    result:
+      version === PROTOCOL_VERSION ? { resultType: "complete", ...body, _meta: RESULT_META } : body,
+  };
 }
 
 interface Request {
@@ -439,28 +463,95 @@ interface Request {
   readonly params: Params;
 }
 
+type BatchElement =
+  | { readonly request: Request }
+  | { readonly response: Json }
+  | { readonly notification: { readonly method: string; readonly params: unknown } };
+
+interface Batch {
+  readonly elements: BatchElement[];
+}
+
+function cancellationKey(method: string, params: unknown): string | undefined {
+  if (method !== "notifications/cancelled" || !isObject(params)) return undefined;
+  const { requestId } = params as Params;
+  return isId(requestId) ? idKey(requestId) : undefined;
+}
+
+/** A batch cancellation can name a preceding request, never a request not yet sent. */
+function batchCancellations(elements: readonly BatchElement[]): Set<Request> {
+  const prior: Request[] = [];
+  const cancelled = new Set<Request>();
+  for (const element of elements) {
+    if ("request" in element) prior.push(element.request);
+    else if ("notification" in element) {
+      const key = cancellationKey(element.notification.method, element.notification.params);
+      if (key === undefined) continue;
+      for (const request of prior) {
+        if (request.key === key) cancelled.add(request);
+      }
+    }
+  }
+  return cancelled;
+}
+
+function initializeResult(id: Id, version: LegacyVersion): Json {
+  return resultResponse(
+    id,
+    {
+      protocolVersion: version,
+      capabilities: { tools: {} },
+      serverInfo: {
+        name: "relembra",
+        version: RELEMBRA_VERSION,
+        ...(version >= "2025-06-18" ? { title: "relembra" } : {}),
+      },
+      instructions: INSTRUCTIONS,
+    },
+    version,
+  );
+}
+
+async function answerLegacy(
+  request: Request,
+  host: McpHost,
+  log: (message: string) => void,
+  version: LegacyVersion,
+): Promise<Json> {
+  const { id, method, params } = request;
+  switch (method) {
+    case "ping":
+      return resultResponse(id, {}, version);
+    case "tools/list":
+      if (Object.hasOwn(params, "cursor")) {
+        return errorResponse(id, INVALID_PARAMS, "Invalid params: unknown cursor");
+      }
+      return resultResponse(id, { tools: legacyTools(version) }, version);
+    case "tools/call":
+      return callTool(id, params, host, log, version);
+    default:
+      return errorResponse(id, METHOD_NOT_FOUND, "Method not found");
+  }
+}
+
 /** The answer to one request. Never throws. */
 async function answer(
   request: Request,
   host: McpHost,
   log: (message: string) => void,
+  legacyVersion: LegacyVersion | undefined,
 ): Promise<Json> {
   const { id, method, params } = request;
-  if (method === "initialize") {
-    // A legacy client's handshake. A modern-only server names its versions in the error
-    // (basic/versioning, "Backward Compatibility with Initialization-Based Versions").
-    const requested = typeof params.protocolVersion === "string" ? params.protocolVersion : "";
-    return errorResponse(
-      id,
-      UNSUPPORTED_PROTOCOL_VERSION,
-      `Unsupported protocol version: this server supports ${SUPPORTED_VERSIONS.join(", ")} only`,
-      { supported: SUPPORTED_VERSIONS, requested },
-    );
+  const meta = params._meta;
+  if (
+    legacyVersion !== undefined &&
+    !(isObject(meta) && Object.hasOwn(meta, PROTOCOL_VERSION_KEY))
+  ) {
+    return answerLegacy(request, host, log, legacyVersion);
   }
   if (method !== "server/discover" && method !== "tools/list" && method !== "tools/call") {
     return errorResponse(id, METHOD_NOT_FOUND, "Method not found");
   }
-  const meta = params._meta;
   if (!isObject(meta) || typeof meta[PROTOCOL_VERSION_KEY] !== "string") {
     return errorResponse(id, INVALID_PARAMS, `Invalid params: _meta needs ${PROTOCOL_VERSION_KEY}`);
   }
@@ -502,6 +593,7 @@ async function callTool(
   params: Params,
   host: McpHost,
   log: (message: string) => void,
+  version: ProtocolVersion = PROTOCOL_VERSION,
 ): Promise<Json> {
   const tool = typeof params.name === "string" ? TOOLS_BY_NAME.get(params.name) : undefined;
   if (tool === undefined) {
@@ -509,22 +601,31 @@ async function callTool(
     return errorResponse(id, INVALID_PARAMS, "Unknown tool");
   }
   const args = Object.hasOwn(params, "arguments") ? params.arguments : {};
-  if (!isObject(args)) {
-    return errorResponse(id, INVALID_PARAMS, "Invalid params: arguments must be an object");
+  const problem = isObject(args)
+    ? schemaProblem(tool.inputSchema, args)
+    : "arguments must be an object";
+  if (problem !== undefined) {
+    return version === "2025-11-25"
+      ? refusal(id, `invalid-arguments (${problem})`, version)
+      : errorResponse(id, INVALID_PARAMS, `Invalid params: ${problem}`);
   }
-  const problem = schemaProblem(tool.inputSchema, args);
-  if (problem !== undefined) return errorResponse(id, INVALID_PARAMS, `Invalid params: ${problem}`);
   try {
     const output = await tool.run(host, args as Args);
-    return resultResponse(id, {
-      content: [{ type: "text", text: output.text }],
-      ...(output.structured === undefined ? {} : { structuredContent: output.structured }),
-      isError: false,
-    });
+    return resultResponse(
+      id,
+      {
+        content: [{ type: "text", text: output.text }],
+        ...(output.structured === undefined || version < "2025-06-18"
+          ? {}
+          : { structuredContent: output.structured }),
+        isError: false,
+      },
+      version,
+    );
   } catch (error) {
     // A refusal is a tool execution error the model can act on (server/tools, Error Handling),
     // named by code and rule only: library messages never echo input, and these carry none.
-    if (error instanceof EgressDeniedError) return refusal(id, "egress-denied");
+    if (error instanceof EgressDeniedError) return refusal(id, "egress-denied", version);
     const failure = toCliError(error);
     if (failure.exit === 3) {
       // A store failure or a bug is a server error. The message can name a path: stderr only.
@@ -534,15 +635,17 @@ async function callTool(
     return refusal(
       id,
       failure.rule === undefined ? failure.code : `${failure.code} (${failure.rule})`,
+      version,
     );
   }
 }
 
-function refusal(id: Id, reason: string): Json {
-  return resultResponse(id, {
-    content: [{ type: "text", text: `refused: ${reason}` }],
-    isError: true,
-  });
+function refusal(id: Id, reason: string, version: ProtocolVersion): Json {
+  return resultResponse(
+    id,
+    { content: [{ type: "text", text: `refused: ${reason}` }], isError: true },
+    version,
+  );
 }
 
 /**
@@ -560,7 +663,8 @@ export async function serveMcp(
   host: McpHost,
 ): Promise<void> {
   const splitter = new LineSplitter(MAX_MESSAGE_BYTES);
-  const queue: Request[] = [];
+  const queue: (Request | Batch)[] = [];
+  let legacyVersion: LegacyVersion | undefined;
   /** Requests queued or running, by id key, with how many share the key. */
   const pending = new Map<string, number>();
   /** Requests queued or running in all: at most MAX_PENDING_REQUESTS. */
@@ -569,11 +673,11 @@ export async function serveMcp(
   let ended = false;
   let wake: (() => void) | undefined;
   let closed = false;
-  /** Answers written outside the queue that the client has not read yet. */
+  /** Immediate answers and batch lines not yet flushed; batches without requests need a bound too. */
   let unflushed = 0;
   let flushed: (() => void) | undefined;
 
-  const write = async (message: Json) => {
+  const write = async (message: Json | Json[]) => {
     if (closed) return;
     try {
       await output.write(`${JSON.stringify(message)}\n`);
@@ -582,15 +686,16 @@ export async function serveMcp(
       closed = true;
     }
   };
+  const markFlushed = () => {
+    unflushed--;
+    const resolve = flushed;
+    flushed = undefined;
+    resolve?.();
+  };
   /** An answer that runs no request (a malformed line, an overload): written at once. */
   const reply = (message: Json) => {
     unflushed++;
-    void write(message).finally(() => {
-      unflushed--;
-      const resolve = flushed;
-      flushed = undefined;
-      resolve?.();
-    });
+    void write(message).finally(markFlushed);
   };
   const untilFlushed = async (below: number) => {
     while (unflushed >= below) {
@@ -609,6 +714,68 @@ export async function serveMcp(
     }
   };
 
+  const enqueue = (job: Request | Batch) => {
+    queue.push(job);
+    const resolve = wake;
+    wake = undefined;
+    resolve?.();
+  };
+
+  /** Session changes happen here, in request order, before the answer is written. */
+  const respond = (request: Request): Promise<Json> | Json => {
+    if (request.method !== "initialize") return answer(request, host, output.log, legacyVersion);
+    if (legacyVersion !== undefined) {
+      return errorResponse(request.id, INVALID_REQUEST, "Invalid request: already initialized");
+    }
+    const requested = request.params.protocolVersion;
+    if (typeof requested !== "string") {
+      return errorResponse(
+        request.id,
+        INVALID_PARAMS,
+        "Invalid params: protocolVersion must be a string",
+      );
+    }
+    legacyVersion = LEGACY_VERSIONS.find((version) => version === requested) ?? LEGACY_VERSIONS[0];
+    return initializeResult(request.id, legacyVersion);
+  };
+
+  const runRequest = async (
+    request: Request,
+    cancelledInBatch = false,
+  ): Promise<Json | undefined> => {
+    // A cancelled request gets no further message (basic/transports/stdio, Cancellation).
+    if (cancelledInBatch || cancelled.has(request.key)) {
+      settle(request.key);
+      return undefined;
+    }
+    const response = await respond(request);
+    const drop = cancelled.has(request.key);
+    settle(request.key);
+    return drop ? undefined : response;
+  };
+
+  const runBatch = async (batch: Batch) => {
+    const { elements } = batch;
+    // Judge the whole line in the worker: initialize may have been pipelined ahead of it.
+    if (legacyVersion !== "2025-03-26" || elements.length === 0) {
+      for (const element of elements) {
+        if ("request" in element) settle(element.request.key);
+      }
+      await write(errorResponse(undefined, INVALID_REQUEST, "Invalid request"));
+      return;
+    }
+    const cancelledInBatch = batchCancellations(elements);
+    const responses: Json[] = [];
+    for (const element of elements) {
+      if ("response" in element) responses.push(element.response);
+      else if ("request" in element) {
+        const response = await runRequest(element.request, cancelledInBatch.has(element.request));
+        if (response !== undefined) responses.push(response);
+      }
+    }
+    if (responses.length > 0) await write(responses);
+  };
+
   const worker = (async () => {
     for (;;) {
       const request = queue.shift();
@@ -619,15 +786,13 @@ export async function serveMcp(
         });
         continue;
       }
-      // A cancelled request gets no further message (basic/transports/stdio, Cancellation).
-      if (cancelled.has(request.key)) {
-        settle(request.key);
+      if ("elements" in request) {
+        await runBatch(request);
+        markFlushed();
         continue;
       }
-      const response = await answer(request, host, output.log);
-      const drop = cancelled.has(request.key);
-      settle(request.key);
-      if (!drop) await write(response);
+      const response = await runRequest(request);
+      if (response !== undefined) await write(response);
     }
   })();
 
@@ -652,12 +817,31 @@ export async function serveMcp(
       reply(errorResponse(undefined, PARSE_ERROR, "Parse error"));
       return;
     }
+    if (Array.isArray(message)) {
+      const batch: Batch = { elements: [] };
+      // A line known to be ineligible must not consume request slots. A queued initialize can
+      // still establish the batching revision, so leave that decision to the worker.
+      const mayAccept =
+        legacyVersion === "2025-03-26" ||
+        (legacyVersion === undefined &&
+          queue.some((job) => !("elements" in job) && job.method === "initialize"));
+      if (mayAccept) {
+        for (const element of message) {
+          const response = triage(element, batch);
+          if (response !== undefined) batch.elements.push({ response });
+        }
+      }
+      // Count even a notification-only or invalid batch line until the worker handles it.
+      unflushed++;
+      enqueue(batch);
+      return;
+    }
     const immediate = triage(message);
     if (immediate !== undefined) reply(immediate);
   };
 
   /** The answer a message gets at once, or undefined when it is queued or a notification. */
-  const triage = (parsed: unknown): Json | undefined => {
+  const triage = (parsed: unknown, batch?: Batch): Json | undefined => {
     const invalid = (id?: Id) => errorResponse(id, INVALID_REQUEST, "Invalid request");
     if (!isObject(parsed)) return invalid();
     const message: Incoming = parsed;
@@ -668,9 +852,11 @@ export async function serveMcp(
     if (message.jsonrpc !== "2.0" || typeof method !== "string") return invalid(id);
     const params = Object.hasOwn(message, "params") ? message.params : {};
     if (id === undefined) {
-      notify(method, params);
+      if (batch === undefined) notify(method, params);
+      else batch.elements.push({ notification: { method, params } });
       return undefined;
     }
+    if (batch !== undefined && method === "initialize") return invalid(id);
     if (!isObject(params)) return errorResponse(id, INVALID_PARAMS, "Invalid params");
     if (pendingCount >= MAX_PENDING_REQUESTS) {
       return errorResponse(id, OVERLOADED, "Server overloaded: too many requests pending", {
@@ -680,20 +866,16 @@ export async function serveMcp(
     const key = idKey(id);
     pending.set(key, (pending.get(key) ?? 0) + 1);
     pendingCount++;
-    queue.push({ id, key, method, params });
-    const resolve = wake;
-    wake = undefined;
-    resolve?.();
+    const request = { id, key, method, params };
+    if (batch === undefined) enqueue(request);
+    else batch.elements.push({ request });
     return undefined;
   };
 
   /** Notifications: a cancellation marks a request still queued or running; others are ignored. */
   const notify = (method: string, params: unknown) => {
-    if (method !== "notifications/cancelled" || !isObject(params)) return;
-    const { requestId } = params as Params;
-    if (!isId(requestId)) return;
-    const key = idKey(requestId);
-    if (pending.has(key)) cancelled.add(key);
+    const key = cancellationKey(method, params);
+    if (key !== undefined && pending.has(key)) cancelled.add(key);
   };
 
   for await (const chunk of input) {
