@@ -134,7 +134,8 @@ which records every asset's sha256; and runs `scripts/stage-release.ts` on the r
 archive `release.yml` would refuse is caught before anything is public.
 
 `prd` publishes that plan and nothing else, in the order below, after rechecking every asset and
-`SHA256SUMS` against the hashes in `plan.json` and that HEAD is still the plan's commit: tag
+`SHA256SUMS` against the hashes in `plan.json` and that HEAD and `origin/main` are still the
+plan's commit (the Pages run deploys `main` as the remote has it): tag
 (annotated with the gate verdict), push the tag, draft release with every asset, download and
 check the draft's assets, publish, follow the `release.yml` run and bind the staged archive to the
 release's by sha1, dispatch and follow `pages.yml`, then download the published assets and check
@@ -142,7 +143,8 @@ them again, and write `.scratch/deploy/<version>/published.json` with what the e
 needs. Until the draft is published every step can be undone, and a failure prints the commands
 that undo it; after that a failure is reported and nothing is undone, because a published release
 is immutable. When publishing itself reports an error, the script reads the release back before
-deciding which of the two it is. The script runs on bash 3.2 or later, with `sha256sum` or
+deciding which of the two it is, and when that read fails too it reports the state as unknown and
+offers no undo. The script runs on bash 3.2 or later, with `sha256sum` or
 `shasum`.
 
 Before publishing, check that no `refs/tags/v<version>` exists yet, peeled ref included

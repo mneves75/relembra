@@ -34,6 +34,12 @@ those files cannot say: the mistake, the dead end, the thing that turned out to 
   live in a subshell; and dates compared as strings accept `"undefined"` and day-first dates as
   the future. Also: a stock Mac's `/usr/bin/env bash` is 3.2, where `${x^^}` is a bad substitution
   and `"${empty[@]}"` is unbound under `set -u`; the tests run the script with `/bin/bash` too.
+- The second review (Sol) added four: a checksum file verified as a whole need not name the file
+  you are about to ship (read the entry for that name, as `install.sh` does); `Date.parse` turns
+  2027-02-29 into March 1, so a date is valid only when it round-trips; when publishing fails and
+  the read-back fails too, the state is unknown and no undo may be offered; and `gh workflow run
+  --ref main` deploys what the remote's `main` is at that moment, so `prd` must check that
+  `origin/main` is still the planned commit before it publishes.
 - `check-release.sh` used to leave no proof that it finished: `identity-final.json` was created by
   redirection before the last checks ran. It now writes `release-check.json` last, naming the
   pinned manifest's sha256, and `deploy.sh` requires it.

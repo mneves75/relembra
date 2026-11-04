@@ -208,8 +208,10 @@ hmo() {
     if (r.verdict === "waived" && !(waivers && waivers.length > 0)) fail(`security gate is waived with no waivers (${p})`);
     for (const w of waivers ?? []) {
       if (typeof w.id !== "string" || w.id === "") fail(`a waiver has no id (${p})`);
-      const expires = typeof w.expires === "string" && /^\d{4}-\d{2}-\d{2}/.test(w.expires) ? Date.parse(w.expires) : NaN;
-      if (!Number.isFinite(expires)) fail(`waiver ${w.id} has no valid expiry (${JSON.stringify(w.expires)}, ${p})`);
+      // An ISO date, UTC, that exists on the calendar: Date.parse would turn 02-29 into 03-01.
+      const iso = typeof w.expires === "string" ? /^(\d{4}-\d{2}-\d{2})(T\d{2}:\d{2}:\d{2}(\.\d+)?Z)?$/.exec(w.expires) : null;
+      const expires = iso ? Date.parse(w.expires) : NaN;
+      if (!Number.isFinite(expires) || !new Date(expires).toISOString().startsWith(iso[1])) fail(`waiver ${w.id} has no valid expiry (${JSON.stringify(w.expires)}, ${p})`);
       if (expires <= Date.now()) fail(`waiver ${w.id} expired ${w.expires} (${p})`);
     }
     process.stdout.write([p, r.verdict, (waivers ?? []).map((w) => w.id).join(" ")].join("\n"));
@@ -262,7 +264,12 @@ hmo() {
     dir="$plan/dl/relembra-cli-$artifact"
     [ -f "$dir/$file" ] && [ -f "$dir/relembra.sha256" ] ||
       refuse "run $run has no relembra-cli-$artifact artifact with $file and relembra.sha256"
-    (cd "$dir" && check_sums relembra.sha256 >/dev/null 2>&1) ||
+    # The entry for this binary by name, as install.sh reads it: a checksum file that names other
+    # files cannot vouch for it.
+    local expected
+    expected=$(awk -v name="$file" '$2 == name || $2 == "*" name { print $1; exit }' "$dir/relembra.sha256")
+    [ -n "$expected" ] || refuse "relembra-cli-$artifact: relembra.sha256 has no entry for $file"
+    [ "$(hash_of "$dir/$file")" = "$expected" ] ||
       refuse "relembra-cli-$artifact: $file does not match its relembra.sha256"
     if ! { cp "$dir/$file" "$plan/$release" && cmp -s "$dir/$file" "$plan/$release"; }; then
       refuse "could not copy relembra-cli-$artifact/$file"
@@ -392,6 +399,12 @@ prd() {
     process.stdout.write(problems.join(" "));
   ' "$plan" 2>/dev/null) || refuse "cannot read $plan/plan.json's assets"
   [ -z "$changed" ] || refuse "assets changed since hmo: $changed; redo hmo"
+  # pages.yml runs on main as it is on the remote: it must still be this commit.
+  git fetch -q origin || refuse "cannot fetch origin"
+  local main
+  main=$(git rev-parse origin/main) || refuse "origin/main is unknown"
+  [ "$main" = "$head" ] ||
+    refuse "origin/main is now ${main:0:7}, not the plan's ${head:0:7}: pages.yml would publish it; redo hmo on the new main"
   no_tag_anywhere
 
   # The tag: annotated with the verdict, on the remote before the release so --verify-tag holds.
@@ -426,13 +439,19 @@ prd() {
   since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   tmp_view=$(mktemp) || exit 1
   if ! gh release edit "$tag" --draft=false >/dev/null; then
-    # The edit may have gone through before the error reached us; what GitHub holds decides.
-    if gh release view "$tag" --json tagName,isDraft,isPrerelease,publishedAt,url >"$tmp_view" 2>/dev/null &&
-      [ "$(json "$tmp_view" isDraft)" = false ]; then
-      refuse "publishing reported an error, but the release is live: nothing is undone; continue by hand from the release.yml step in docs/RELEASE.md"
+    # The edit may have gone through before the error reached us; what GitHub holds decides, and
+    # an undo is offered only when GitHub says the release is still a draft.
+    if ! gh release view "$tag" --json tagName,isDraft,isPrerelease,publishedAt,url >"$tmp_view" 2>/dev/null; then
+      refuse "publishing reported an error and the release cannot be read back: its state is unknown; run 'gh release view $tag' and undo nothing while it is not a draft"
     fi
-    rollback_hint
-    refuse "cannot publish the draft"
+    case $(json "$tmp_view" isDraft) in
+    false) refuse "publishing reported an error, but the release is live: nothing is undone; continue by hand from the release.yml step in docs/RELEASE.md" ;;
+    true)
+      rollback_hint
+      refuse "cannot publish the draft"
+      ;;
+    *) refuse "publishing reported an error and the release's state could not be read: run 'gh release view $tag' before undoing anything" ;;
+    esac
   fi
   local published_at url
   gh release view "$tag" --json tagName,isDraft,isPrerelease,publishedAt,url >"$tmp_view" || refuse "cannot read the release"

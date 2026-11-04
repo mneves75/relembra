@@ -81,6 +81,7 @@ case "$1 $2" in
     [ -f "$GH_FIXTURES/fail-edit" ] && { echo "HTTP 500" >&2; exit 1; }
     touch "$GH_FIXTURES/state-published" ;;
   "release view")
+    [ -f "$GH_FIXTURES/fail-view" ] && { echo "HTTP 503" >&2; exit 1; }
     if [ -f "$GH_FIXTURES/state-published" ]; then cat "$GH_FIXTURES/release-view.json"; else cat "$GH_FIXTURES/release-view-draft.json"; fi ;;
   "workflow run") touch "$GH_FIXTURES/state-pages-dispatched" ;;
   *) echo "gh shim: unexpected: $*" >&2; exit 97 ;;

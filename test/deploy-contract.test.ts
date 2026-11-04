@@ -33,6 +33,7 @@ import {
   RUN,
   regenerateSums,
   runView,
+  sha256,
   TAG,
   tagged,
   VERSION,
@@ -147,6 +148,36 @@ describe.skipIf(NO_RELEASE_TOOLING)("contract: hmo refuses a candidate it must n
           JSON.stringify({ passed: false, manifestSha256: "0".repeat(64) }),
         ),
       "release check did not pass",
+    ],
+    [
+      // A checksum file that names other files, each correct, vouches for nothing about relembra.
+      "a hosted artifact whose checksum file names another file",
+      (f) => {
+        const dir = join(f.fixtures, "artifacts", "relembra-cli-linux-x64");
+        writeFileSync(join(dir, "other"), "x");
+        writeFileSync(join(dir, "relembra.sha256"), `${sha256("x")}  other\n`);
+        writeFileSync(join(dir, "relembra"), "altered binary\n");
+      },
+      "relembra-cli-linux-x64: relembra.sha256 has no entry for relembra",
+    ],
+    [
+      // Date.parse turns 2027-02-29 into March 1; a date that does not exist is not an expiry.
+      "a waiver expiring on an impossible calendar date",
+      (f) =>
+        editRecord(f, (r) => {
+          const [first] = r.waivers ?? [];
+          if (first) first.expires = "2027-02-29T00:00:00Z";
+        }),
+      "waiver SEC-20 has no valid expiry",
+    ],
+    [
+      "a waiver expiring at an hour with an offset, not UTC",
+      (f) =>
+        editRecord(f, (r) => {
+          const [first] = r.waivers ?? [];
+          if (first) first.expires = "2999-01-01T00:00:00-03:00";
+        }),
+      "waiver SEC-20 has no valid expiry",
     ],
   ];
   for (const [name, arrange, message] of refusals) {
@@ -296,6 +327,35 @@ describe.skipIf(NO_RELEASE_TOOLING)(
       expect(run.status).toBe(1);
       expect(run.stderr).toContain("release.yml run 900 failed");
       expect(run.stderr).toContain("gh run rerun 900");
+    });
+
+    test("a failed edit whose readback also fails is an unknown state, not a rollback", () => {
+      const f = fixture();
+      expect(hmo(f).status).toBe(0);
+      writeFileSync(join(f.fixtures, "fail-edit-applied"), "");
+      writeFileSync(join(f.fixtures, "fail-view"), "");
+      const run = prd(f);
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain("state is unknown");
+      expect(run.stderr).toContain(`gh release view ${TAG}`);
+      expect(run.stderr).not.toContain("nothing is published");
+      expect(run.stderr).not.toContain("git push --delete");
+    });
+
+    test("refuses when origin/main moved since hmo, before tagging", () => {
+      const f = fixture();
+      expect(hmo(f).status).toBe(0);
+      // The remote advances; this checkout stays on the planned commit.
+      git(f.repo, "commit", "-q", "--allow-empty", "-m", "someone else's merge");
+      git(f.repo, "push", "-q", "origin", "main");
+      git(f.repo, "reset", "-q", "--hard", "HEAD~1");
+      expect(git(f.repo, "rev-parse", "HEAD")).toBe(f.commit);
+      writeFileSync(f.log, "");
+      const run = prd(f);
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain("origin/main is now");
+      expect(run.stderr).toContain("pages.yml would publish it");
+      expect({ tagged: tagged(f), gh: ghCalls(f) }).toEqual({ tagged: false, gh: [] });
     });
   },
 );
