@@ -3,7 +3,7 @@
  * refusing an old or missing required tool and only noting an absent optional one. The tools are
  * fakes first on PATH here, so the result depends on nothing installed on this machine.
  */
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -11,6 +11,8 @@ import { join } from "node:path";
 import { NO_RELEASE_TOOLING } from "./platform-support.js";
 
 const script = join(import.meta.dir, "..", "scripts", "init.sh");
+// Each test spawns the script and its fake tools; a loaded runner needs more than 5 s.
+setDefaultTimeout(60_000);
 const dirs: string[] = [];
 
 afterEach(() => {

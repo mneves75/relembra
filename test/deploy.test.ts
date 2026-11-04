@@ -9,7 +9,7 @@
  * test/deploy-contract.test.ts holds the review's cases: what must be refused and how a failed
  * step is reported.
  */
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -36,6 +36,9 @@ import {
 import { NO_RELEASE_TOOLING } from "./platform-support.js";
 
 afterEach(cleanupFixtures);
+// Each test spawns the script, which spawns git, node and bun many times; on a loaded runner
+// (two cores, parallel workers) a run takes well over Bun's 5 s default.
+setDefaultTimeout(60_000);
 
 describe.skipIf(NO_RELEASE_TOOLING)("scripts/deploy.sh hmo", () => {
   test("lays out the seven assets, SHA256SUMS and notes bound to the gate (positive control)", () => {

@@ -4,7 +4,7 @@
  * portability. The first round of these found that prd checked SHA256SUMS against itself, that a
  * refusal inside `$(...)` left only a subshell, and that waiver expiry was compared as text.
  */
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -43,6 +43,9 @@ import {
 import { NO_RELEASE_TOOLING } from "./platform-support.js";
 
 afterEach(cleanupFixtures);
+// Each test spawns the script, which spawns git, node and bun many times; on a loaded runner
+// (two cores, parallel workers) a run takes well over Bun's 5 s default.
+setDefaultTimeout(60_000);
 
 describe.skipIf(NO_RELEASE_TOOLING)("contract: hmo refuses a candidate it must not accept", () => {
   test("positive control: the unmodified fixture is accepted", () => {
