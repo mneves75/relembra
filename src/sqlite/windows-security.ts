@@ -47,8 +47,10 @@ function Confirm-Rules($acl, [string] $what, [string[]] $owners) {
   }
   $rules
 }
-function Confirm-Folder([string] $path) {
-  [void](Read-Folder $path)
+# With $model, the folder must also carry the auto-inherit model (AI), under which the files made
+# in it carry its grants as inherited entries.
+function Confirm-Folder([string] $path, [bool] $model) {
+  $folder = Read-Folder $path
   $acl = [IO.Directory]::GetAccessControl($path)
   if (-not $acl.AreAccessRulesProtected) { throw "$path was not created private" }
   foreach ($rule in (Confirm-Rules $acl $path @($request.ownerSid))) {
@@ -58,6 +60,7 @@ function Confirm-Folder([string] $path) {
       throw "$path has unexpected access rules"
     }
   }
+  if ($model -and -not $folder.dacl.StartsWith('D:PAI')) { throw "$path did not take the auto-inherit model" }
 }
 function Confirm-File([string] $path) {
   $attributes = [IO.File]::GetAttributes($path)
@@ -96,9 +99,10 @@ try {
       if (-not $held) { throw 'another process is still creating the store folder' }
       if (Test-Entry $request.store) {
         # Another creator finished under this lock: its folder must be exactly what this one would
-        # have made. An abandoned lock never adopts an unfinished folder: the store is absent then.
+        # have made, model included. An abandoned lock never adopts an unfinished folder: the
+        # store is absent then.
         Confirm-File $request.store
-        Confirm-Folder $request.folder
+        Confirm-Folder $request.folder $true
         $result = 'exists'
       } else {
         foreach ($expected in $request.chain) {
@@ -110,28 +114,40 @@ try {
         foreach ($path in $request.paths) {
           if (Test-Entry $path) { throw "$path already exists; a new Windows store requires a new folder" }
         }
-        foreach ($path in $request.paths) {
-          # A fresh descriptor per call: Persist clears what a reused one would apply again.
-          $security = [Security.AccessControl.DirectorySecurity]::new()
-          $security.SetSecurityDescriptorSddlForm($request.sddl)
-          [void][IO.Directory]::CreateDirectory($path, $security)
-          Confirm-Folder $path
-          # Files made in the folder carry its grants as inherited entries only under the
-          # auto-inherit model (AI). Creation may hand the kernel a descriptor without it; setting
-          # the same descriptor again goes through SetNamedSecurityInfo, which adopts the model.
-          if (-not (Read-Folder $path).dacl.StartsWith('D:PAI')) {
-            $again = [Security.AccessControl.DirectorySecurity]::new()
-            $again.SetSecurityDescriptorSddlForm($request.sddl)
-            [IO.Directory]::SetAccessControl($path, $again)
-            Confirm-Folder $path
-            if (-not (Read-Folder $path).dacl.StartsWith('D:PAI')) { throw "$path did not take the auto-inherit model" }
+        # What this run made is removed when a later step fails, so a retry finds the leaf absent;
+        # nothing that existed before is ever removed.
+        $created = @()
+        $fileCreated = $false
+        try {
+          foreach ($path in $request.paths) {
+            # A fresh descriptor per call: Persist clears what a reused one would apply again.
+            $security = [Security.AccessControl.DirectorySecurity]::new()
+            $security.SetSecurityDescriptorSddlForm($request.sddl)
+            [void][IO.Directory]::CreateDirectory($path, $security)
+            $created += $path
+            Confirm-Folder $path $false
+            # Files made in the folder carry its grants as inherited entries only under the
+            # auto-inherit model (AI). Creation may hand the kernel a descriptor without it; setting
+            # the same descriptor again goes through SetNamedSecurityInfo, which adopts the model.
+            if (-not (Read-Folder $path).dacl.StartsWith('D:PAI')) {
+              $again = [Security.AccessControl.DirectorySecurity]::new()
+              $again.SetSecurityDescriptorSddlForm($request.sddl)
+              [IO.Directory]::SetAccessControl($path, $again)
+            }
+            Confirm-Folder $path $true
           }
+          foreach ($sidecar in $request.sidecars) {
+            if (Test-Entry $sidecar) { throw "$sidecar exists without its store; no store is created beside it" }
+          }
+          [IO.FileStream]::new($request.store, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None).Dispose()
+          $fileCreated = $true
+          Confirm-File $request.store
+        } catch {
+          $failure = $_.Exception
+          if ($fileCreated) { try { [IO.File]::Delete($request.store) } catch { } }
+          for ($i = $created.Count - 1; $i -ge 0; $i--) { try { [IO.Directory]::Delete($created[$i]) } catch { } }
+          throw $failure
         }
-        foreach ($sidecar in $request.sidecars) {
-          if (Test-Entry $sidecar) { throw "$sidecar exists without its store; no store is created beside it" }
-        }
-        [IO.FileStream]::new($request.store, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None).Dispose()
-        Confirm-File $request.store
         $result = 'created'
       }
     } finally {
