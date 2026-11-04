@@ -511,7 +511,13 @@ prd() {
   local homepage site_status mentions
   homepage=$(json package.json homepage) || refuse "package.json has no homepage"
   site_status=$(curl -fsS -o "$plan/page.html" -w '%{http_code}' "$homepage") || refuse "the site did not answer"
-  mentions=$(grep -o -F -- "$version" "$plan/page.html" | wc -l | tr -d ' ')
+  # The whole version, not a prefix of another: a page still naming 1.2.3-beta.1 does not name 1.2.3.
+  mentions=$(node -e '
+    const [file, version] = process.argv.slice(1);
+    const escaped = version.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&");
+    const whole = new RegExp(`(?<![0-9A-Za-z.-])${escaped}(?![0-9A-Za-z-]|\\.\\d)`, "g");
+    process.stdout.write(String((require("node:fs").readFileSync(file, "utf8").match(whole) ?? []).length));
+  ' "$plan/page.html" "$version") || refuse "cannot read $plan/page.html"
   [ "$mentions" -gt 0 ] || refuse "the site does not name $version (it may not have deployed yet: $homepage)"
   echo "site: $homepage $site_status, names $version $mentions time(s)"
 

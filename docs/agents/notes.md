@@ -42,6 +42,8 @@ those files cannot say: the mistake, the dead end, the thing that turned out to 
   `origin/main` is still the planned commit before it publishes, and again right before the
   dispatch, since npm staging takes minutes. A third pass added that a plan saved by `hmo` is
   stale evidence: `prd` re-runs the gate record check, because a waiver can expire in between.
+  A fourth: a substring match on the site (`grep -F 1.2.3`) is satisfied by a stale page naming
+  `1.2.3-beta.1`; count the whole version, with boundaries on both sides.
 - `check-release.sh` used to leave no proof that it finished: `identity-final.json` was created by
   redirection before the last checks ran. It now writes `release-check.json` last, naming the
   pinned manifest's sha256, and `deploy.sh` requires it.

@@ -320,6 +320,35 @@ describe.skipIf(NO_RELEASE_TOOLING)(
       expect(ghCalls(f)).not.toContainEqual("run watch  --exit-status");
     });
 
+    test("a site still naming only a prerelease does not count as naming the stable version", () => {
+      const f = fixture({ version: "1.2.3" });
+      expect(hmo(f).status).toBe(0);
+      writeFileSync(
+        join(f.fixtures, "page.html"),
+        "<html><body>Version 1.2.3-beta.1. Also 1.2.34 and 1.2.3.9 and v1.2.3x.</body></html>",
+      );
+      const run = prd(f);
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain("the site does not name 1.2.3");
+      expect(existsSync(join(planDir(f, "1.2.3"), "published.json"))).toBe(false);
+    });
+
+    test("the stable version is counted whole, with punctuation around it", () => {
+      const f = fixture({ version: "1.2.3" });
+      expect(hmo(f).status).toBe(0);
+      writeFileSync(
+        join(f.fixtures, "page.html"),
+        '<html><body>Version 1.2.3. Install relembra 1.2.3, or "1.2.3"; not 1.2.3-beta.1.</body></html>',
+      );
+      const run = prd(f);
+      expect(run.stderr).toBe("");
+      expect(run.status).toBe(0);
+      expect(
+        JSON.parse(readFileSync(join(planDir(f, "1.2.3"), "published.json"), "utf8"))
+          .siteVersionMentions,
+      ).toBe(3);
+    });
+
     test("a failed release.yml run is reported with the rerun command", () => {
       const f = fixture();
       expect(hmo(f).status).toBe(0);
