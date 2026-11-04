@@ -23,8 +23,9 @@ This is a security correction, without an interview. No store schema or export f
 
 Use the Windows PowerShell 5.1 installed in System32 with .NET Framework filesystem APIs.
 The program is constant; paths and descriptors travel as JSON over stdin, and observations
-return as JSON on stdout. No profile, interactive prompt, Get-Acl provider, script file,
-compilation, icacls save file, TEMP or TMP directory participates.
+return as JSON on stdout. relembra uses no profile, interactive prompt, Get-Acl provider,
+script file, compilation, icacls save file, TEMP or TMP directory (PowerShell's own startup
+may create a missing TEMP; see below).
 
 JSON uses the strongly named Framework System.Web.Extensions assembly directly. The Windows
 arm64 control timed out while running ConvertFrom-Json; the security helper
