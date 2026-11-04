@@ -134,8 +134,9 @@ which records every asset's sha256; and runs `scripts/stage-release.ts` on the r
 archive `release.yml` would refuse is caught before anything is public.
 
 `prd` publishes that plan and nothing else, in the order below, after rechecking every asset and
-`SHA256SUMS` against the hashes in `plan.json` and that HEAD and `origin/main` are still the
-plan's commit (the Pages run deploys `main` as the remote has it): tag
+`SHA256SUMS` against the hashes in `plan.json`, the gate record (a waiver may have expired since
+`hmo`), and that HEAD and `origin/main` are still the plan's commit; `origin/main` is checked
+again right before the Pages dispatch, which deploys `main` as the remote has it at that moment: tag
 (annotated with the gate verdict), push the tag, draft release with every asset, download and
 check the draft's assets, publish, follow the `release.yml` run and bind the staged archive to the
 release's by sha1, dispatch and follow `pages.yml`, then download the published assets and check

@@ -106,6 +106,47 @@ assets=(
   "relembra-$version.tgz"
 )
 
+# gate_check: the security gate record for HEAD's tree, into gate_record_path, gate_verdict and
+# gate_waivers (ids, space-separated), or a refusal. A production record, pass or waived,
+# independently accepted, every waiver with a valid expiry still ahead. Records are kept under a
+# commit's or a tree's name, so they are found by content, this commit's first. Run by hmo and
+# again by prd: a waiver can expire between the two.
+gate_record_path='' gate_verdict='' gate_waivers=''
+gate_check() {
+  local record
+  if ! record=$(node -e '
+    const fs = require("node:fs"), path = require("node:path");
+    const dir = ".scratch/security-gate";
+    const [tree, commit] = process.argv.slice(1);
+    const fail = (m) => { console.error(m); process.exit(1); };
+    const records = fs.existsSync(dir)
+      ? fs.readdirSync(dir).map((d) => path.join(dir, d, "production.json")).filter((p) => fs.existsSync(p))
+          .map((p) => ({ p, r: JSON.parse(fs.readFileSync(p, "utf8")) }))
+          .filter(({ r }) => r.target === "production" && r.tree === tree)
+      : [];
+    records.sort((a, b) => (b.r.commit === commit) - (a.r.commit === commit) || String(b.r.created_at).localeCompare(String(a.r.created_at)));
+    const found = records[0];
+    if (!found) fail(`no security gate record for tree ${tree} under ${dir}`);
+    const { r, p } = found;
+    if (r.verdict !== "pass" && r.verdict !== "waived") fail(`security gate verdict is ${r.verdict} (${p})`);
+    if (r.independent_acceptance !== "pass") fail(`independent acceptance is ${r.independent_acceptance} (${p})`);
+    const waivers = Array.isArray(r.waivers) ? r.waivers : undefined;
+    if (r.verdict === "waived" && !(waivers && waivers.length > 0)) fail(`security gate is waived with no waivers (${p})`);
+    for (const w of waivers ?? []) {
+      if (typeof w.id !== "string" || w.id === "") fail(`a waiver has no id (${p})`);
+      // An ISO date, UTC, that exists on the calendar: Date.parse would turn 02-29 into 03-01.
+      const iso = typeof w.expires === "string" ? /^(\d{4}-\d{2}-\d{2})(T\d{2}:\d{2}:\d{2}(\.\d+)?Z)?$/.exec(w.expires) : null;
+      const expires = iso ? Date.parse(w.expires) : NaN;
+      if (!Number.isFinite(expires) || !new Date(expires).toISOString().startsWith(iso[1])) fail(`waiver ${w.id} has no valid expiry (${JSON.stringify(w.expires)}, ${p})`);
+      if (expires <= Date.now()) fail(`waiver ${w.id} expired ${w.expires} (${p})`);
+    }
+    process.stdout.write([p, r.verdict, (waivers ?? []).map((w) => w.id).join(" ")].join("\n"));
+  ' "$tree" "$head" 2>&1); then
+    refuse "$record"
+  fi
+  { read -r gate_record_path; read -r gate_verdict; read -r gate_waivers; } <<<"$record"
+}
+
 # ---------------------------------------------------------------------------------------------
 # hmo
 # ---------------------------------------------------------------------------------------------
@@ -184,42 +225,9 @@ hmo() {
     refuse "cannot compare the inputs with the release check's ($check/gate/identity-before.json)"
   [ -z "$changed" ] || refuse "inputs changed since the release check: $changed"
 
-  # The security gate: a production record for this tree, pass or waived, independently accepted,
-  # every waiver with a valid expiry still ahead. Records are kept under a commit's or a tree's
-  # name, so they are found by content, this commit's first. The reason comes back on one stream.
-  local record record_path verdict waivers
-  if ! record=$(node -e '
-    const fs = require("node:fs"), path = require("node:path");
-    const dir = ".scratch/security-gate";
-    const [tree, commit] = process.argv.slice(1);
-    const fail = (m) => { console.error(m); process.exit(1); };
-    const records = fs.existsSync(dir)
-      ? fs.readdirSync(dir).map((d) => path.join(dir, d, "production.json")).filter((p) => fs.existsSync(p))
-          .map((p) => ({ p, r: JSON.parse(fs.readFileSync(p, "utf8")) }))
-          .filter(({ r }) => r.target === "production" && r.tree === tree)
-      : [];
-    records.sort((a, b) => (b.r.commit === commit) - (a.r.commit === commit) || String(b.r.created_at).localeCompare(String(a.r.created_at)));
-    const found = records[0];
-    if (!found) fail(`no security gate record for tree ${tree} under ${dir}`);
-    const { r, p } = found;
-    if (r.verdict !== "pass" && r.verdict !== "waived") fail(`security gate verdict is ${r.verdict} (${p})`);
-    if (r.independent_acceptance !== "pass") fail(`independent acceptance is ${r.independent_acceptance} (${p})`);
-    const waivers = Array.isArray(r.waivers) ? r.waivers : undefined;
-    if (r.verdict === "waived" && !(waivers && waivers.length > 0)) fail(`security gate is waived with no waivers (${p})`);
-    for (const w of waivers ?? []) {
-      if (typeof w.id !== "string" || w.id === "") fail(`a waiver has no id (${p})`);
-      // An ISO date, UTC, that exists on the calendar: Date.parse would turn 02-29 into 03-01.
-      const iso = typeof w.expires === "string" ? /^(\d{4}-\d{2}-\d{2})(T\d{2}:\d{2}:\d{2}(\.\d+)?Z)?$/.exec(w.expires) : null;
-      const expires = iso ? Date.parse(w.expires) : NaN;
-      if (!Number.isFinite(expires) || !new Date(expires).toISOString().startsWith(iso[1])) fail(`waiver ${w.id} has no valid expiry (${JSON.stringify(w.expires)}, ${p})`);
-      if (expires <= Date.now()) fail(`waiver ${w.id} expired ${w.expires} (${p})`);
-    }
-    process.stdout.write([p, r.verdict, (waivers ?? []).map((w) => w.id).join(" ")].join("\n"));
-  ' "$tree" "$head" 2>&1); then
-    refuse "$record"
-  fi
-  { read -r record_path; read -r verdict; read -r waivers; } <<<"$record"
-  local gate_line
+  # The security gate record for this tree.
+  gate_check
+  local record_path=$gate_record_path verdict=$gate_verdict waivers=$gate_waivers gate_line
   gate_line=$(upper "$verdict")
   [ -z "$waivers" ] || gate_line="$gate_line $waivers"
 
@@ -323,7 +331,7 @@ EOF
     const assets = Object.fromEntries(require("node:fs").readFileSync(0, "utf8").split("\n").filter(Boolean).map((line) => line.split("=")));
     require("node:fs").writeFileSync(out, `${JSON.stringify({
       version, tag, commit, tree, run, prerelease: prerelease === "1",
-      releaseCheck: check, manifest, gateRecord: record, verdict, waivers: waivers ? waivers.split(" ") : [],
+      releaseCheck: check, manifest, gateRecord: record, verdict, waivers: waivers ? waivers.split(" ") : [], waiverIds: waivers,
       binarySha256: binary, archiveSha256: archive, assets, sumsSha256: sums, tagMessage: message, notes,
       createdAt: new Date().toISOString(),
     }, null, 2)}\n`);
@@ -399,6 +407,12 @@ prd() {
     process.stdout.write(problems.join(" "));
   ' "$plan" 2>/dev/null) || refuse "cannot read $plan/plan.json's assets"
   [ -z "$changed" ] || refuse "assets changed since hmo: $changed; redo hmo"
+  # The gate record again: a waiver may have expired since hmo, or the record may have changed.
+  gate_check
+  if [ "$gate_verdict" != "$(json "$plan/plan.json" verdict)" ] ||
+    [ "$gate_waivers" != "$(json "$plan/plan.json" waiverIds)" ]; then
+    refuse "the security gate record changed since hmo (now $gate_verdict${gate_waivers:+ $gate_waivers}); redo hmo"
+  fi
   # pages.yml runs on main as it is on the remote: it must still be this commit.
   git fetch -q origin || refuse "cannot fetch origin"
   local main
@@ -477,8 +491,12 @@ prd() {
   integrity="sha512-$(openssl dgst -sha512 -binary "$plan/relembra-$version.tgz" | base64 | tr -d '\n')"
   echo "npm: relembra@$version staged with id $stage_id, tag $dist_tag, shasum $staged_sha1 (run $release_run)"
 
-  # Pages, from main, which is this commit.
+  # Pages, from main: the dispatch runs the remote's tip, which may have moved while npm staged.
   local pages_run
+  git fetch -q origin || refuse "cannot fetch origin"
+  main=$(git rev-parse origin/main) || refuse "origin/main is unknown"
+  [ "$main" = "$head" ] ||
+    refuse "origin/main moved to ${main:0:7} during publication: the release is live and npm is staged ($stage_id), but pages.yml was not dispatched; gate the new main and run it by hand (gh workflow run pages.yml --ref main)"
   gh workflow run pages.yml --ref main || refuse "cannot dispatch pages.yml"
   find_run pages.yml workflow_dispatch "$since"
   pages_run=$found_run

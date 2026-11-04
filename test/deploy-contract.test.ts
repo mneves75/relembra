@@ -7,6 +7,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
+  chmodSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -340,6 +341,49 @@ describe.skipIf(NO_RELEASE_TOOLING)(
       expect(run.stderr).toContain(`gh release view ${TAG}`);
       expect(run.stderr).not.toContain("nothing is published");
       expect(run.stderr).not.toContain("git push --delete");
+    });
+
+    test("stops before the Pages dispatch when origin/main moves during publication", () => {
+      const f = fixture();
+      expect(hmo(f).status).toBe(0);
+      // While the release.yml run is watched, someone else's merge reaches main.
+      writeFileSync(
+        join(f.fixtures, "on-watch"),
+        `#!/bin/sh\nset -e\ncd '${f.repo}'\ngit commit -q --allow-empty -m "merged meanwhile"\ngit push -q origin main\ngit reset -q --hard HEAD~1\n`,
+      );
+      chmodSync(join(f.fixtures, "on-watch"), 0o755);
+      const run = prd(f);
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain("origin/main moved");
+      expect(run.stderr).toContain("the release is live");
+      expect(ghCalls(f)).not.toContain("workflow run pages.yml --ref main");
+      expect(existsSync(join(planDir(f), "published.json"))).toBe(false);
+    });
+
+    test("refuses to publish when a waiver expired since hmo", () => {
+      const f = fixture();
+      expect(hmo(f).status).toBe(0);
+      editRecord(f, (r) => {
+        const [first] = r.waivers ?? [];
+        if (first) first.expires = "2026-01-01T00:00:00Z";
+      });
+      writeFileSync(f.log, "");
+      const run = prd(f);
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain("waiver SEC-20 expired 2026-01-01T00:00:00Z");
+      expect({ tagged: tagged(f), gh: ghCalls(f) }).toEqual({ tagged: false, gh: [] });
+    });
+
+    test("refuses to publish when the gate record changed since hmo", () => {
+      const f = fixture();
+      expect(hmo(f).status).toBe(0);
+      editRecord(f, (r) => {
+        r.waivers = [{ id: "SEC-20", expires: "2999-01-01T00:00:00Z" }];
+      });
+      const run = prd(f);
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain("security gate record changed since hmo");
+      expect(tagged(f)).toBe(false);
     });
 
     test("refuses when origin/main moved since hmo, before tagging", () => {

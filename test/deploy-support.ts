@@ -66,6 +66,8 @@ case "$1 $2" in
   "run list")
     cat "$GH_FIXTURES/run-list-$(value --workflow "$@").json" ;;
   "run watch")
+    # An executable on-watch in the fixtures runs while a run is "watched": the world moves.
+    [ -x "$GH_FIXTURES/on-watch" ] && "$GH_FIXTURES/on-watch" "$3"
     [ -f "$GH_FIXTURES/fail-watch-$3" ] && { echo "run $3 failed" >&2; exit 1; }; exit 0 ;;
   "release create")
     [ -f "$GH_FIXTURES/fail-release-create" ] && { echo "HTTP 422: Validation Failed" >&2; exit 1; }

@@ -39,7 +39,9 @@ those files cannot say: the mistake, the dead end, the thing that turned out to 
   2027-02-29 into March 1, so a date is valid only when it round-trips; when publishing fails and
   the read-back fails too, the state is unknown and no undo may be offered; and `gh workflow run
   --ref main` deploys what the remote's `main` is at that moment, so `prd` must check that
-  `origin/main` is still the planned commit before it publishes.
+  `origin/main` is still the planned commit before it publishes, and again right before the
+  dispatch, since npm staging takes minutes. A third pass added that a plan saved by `hmo` is
+  stale evidence: `prd` re-runs the gate record check, because a waiver can expire in between.
 - `check-release.sh` used to leave no proof that it finished: `identity-final.json` was created by
   redirection before the last checks ran. It now writes `release-check.json` last, naming the
   pinned manifest's sha256, and `deploy.sh` requires it.
