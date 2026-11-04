@@ -37,6 +37,7 @@ import {
   sha256,
   TAG,
   tagged,
+  toolsEnv,
   VERSION,
 } from "./deploy-support.js";
 import { NO_RELEASE_TOOLING } from "./platform-support.js";
@@ -439,10 +440,18 @@ describe.skipIf(NO_RELEASE_TOOLING)("contract: quoting and portability", () => {
     expect(fullRun(f, f.env)).toEqual({ hmo: 0, prd: 0, stderr: "" });
   });
 
-  test("the shasum branch (no sha256sum on PATH)", () => {
+  test("the shasum branch (no sha256sum or sha1sum on PATH)", { timeout: 120_000 }, () => {
     const f = fixture();
-    const env = pathEnv(f, [], ["sha256sum"]);
+    const env = toolsEnv(f, ["sha256sum", "sha1sum"]);
     expect(spawnSync("bash", ["-c", "command -v sha256sum"], { env }).status).not.toBe(0);
+    expect(spawnSync("bash", ["-c", "command -v shasum"], { env }).status).toBe(0);
+    expect(fullRun(f, env)).toEqual({ hmo: 0, prd: 0, stderr: "" });
+  });
+
+  test("the sha256sum branch, with only the tools the script names", { timeout: 120_000 }, () => {
+    const f = fixture();
+    const env = toolsEnv(f, []);
+    if (spawnSync("bash", ["-c", "command -v sha256sum"], { env }).status !== 0) return;
     expect(fullRun(f, env)).toEqual({ hmo: 0, prd: 0, stderr: "" });
   });
 
@@ -459,8 +468,10 @@ describe.skipIf(NO_RELEASE_TOOLING)("contract: quoting and portability", () => {
   });
 
   // The shebang is `/usr/bin/env bash`, which on a stock Mac is bash 3.2: the script runs there.
+  // Collected on every platform, so the name must not touch stdout where /bin/bash is absent.
   const system = spawnSync("/bin/bash", ["-c", 'echo "$BASH_VERSINFO"'], { encoding: "utf8" });
-  test.skipIf(system.status !== 0)(`the system /bin/bash (major ${system.stdout.trim()})`, () => {
+  const major = system.status === 0 ? system.stdout.trim() : "absent";
+  test.skipIf(system.status !== 0)(`the system /bin/bash (major ${major})`, () => {
     const f = fixture({ version: "1.2.3" });
     expect(fullRun(f, f.env, "/bin/bash")).toEqual({ hmo: 0, prd: 0, stderr: "" });
   });

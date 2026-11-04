@@ -433,6 +433,61 @@ export function pathEnv(f: Fixture, first: string[], hide: string[]): NodeJS.Pro
   return { ...f.env, PATH: [...first, ...kept].join(":") };
 }
 
+/**
+ * An env whose PATH holds only the fixture's shims and one wrapper per tool the script needs,
+ * minus `without`: the way to take a tool away without taking its whole directory (on Linux,
+ * sha256sum lives in /usr/bin beside everything else).
+ */
+export function toolsEnv(f: Fixture, without: readonly string[]): NodeJS.ProcessEnv {
+  const dir = mkdtempSync(join(tmpdir(), "relembra-deploy-tools-"));
+  dirs.push(dir);
+  const needed = [
+    "bash",
+    "sh",
+    "env",
+    "git",
+    "node",
+    "bun",
+    "tar",
+    "gzip",
+    "openssl",
+    "base64",
+    "shasum",
+    "sha256sum",
+    "sha1sum",
+    "awk",
+    "sed",
+    "cut",
+    "tr",
+    "basename",
+    "dirname",
+    "cmp",
+    "cp",
+    "mkdir",
+    "rm",
+    "mktemp",
+    "sleep",
+    "date",
+    "head",
+    "wc",
+    "grep",
+    "cat",
+    "sort",
+    "uniq",
+    "ls",
+    "touch",
+  ];
+  for (const tool of needed) {
+    if (without.includes(tool)) continue;
+    const real = spawnSync("sh", ["-c", `command -v ${tool}`], { encoding: "utf8" }).stdout.trim();
+    if (real === "") continue;
+    writeFileSync(join(dir, tool), `#!/bin/sh\nexec '${real}' "$@"\n`);
+    chmodSync(join(dir, tool), 0o755);
+  }
+  const shims = (f.env["PATH"] ?? "").split(":")[0] as string;
+  return { ...f.env, PATH: `${shims}:${dir}` };
+}
+
 /** hmo then prd, with the given env and shell; the statuses and both runs' stderr. */
 export function fullRun(f: Fixture, env: NodeJS.ProcessEnv, shell = "bash") {
   const h = hmo(f, env, shell);
