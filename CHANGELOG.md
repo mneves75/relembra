@@ -3,6 +3,10 @@
 All notable changes to relembra. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+No changes yet.
+
 ## [1.0.0-beta.4] - 2026-11-04
 
 Windows stores are created private from birth, and two processes opening a missing store at
