@@ -7,6 +7,17 @@ those files cannot say: the mistake, the dead end, the thing that turned out to 
 
 ## 2026-11-04: release tooling (scripts/deploy.sh, scripts/init.sh)
 
+- First real use (1.0.0-beta.5, the same day): `hmo` and `prd` ran end to end with no refusal
+  and no manual step, about four minutes for `prd`, most of it waiting for `release.yml` and
+  `pages.yml`. Real `gh` output matched the shim. The one message the tests did not model is
+  GitHub's "Bypassed rule violations for refs/tags/v…: Cannot create ref due to creations being
+  restricted" on the tag push: the ruleset restricts tag creation and the owner's role bypasses
+  it. Before the run, compare the clock with GitHub's `Date` header (1 s here).
+- Hosted CI red while the Mac is green usually means the test, not the script: a test name that
+  touched `spawnSync("/bin/bash").stdout` where there is no `/bin/bash` (Windows collects skipped
+  files too), a PATH that hid `/usr/bin` to remove one tool (Linux keeps everything there), and
+  process-spawning tests over Bun's 5 s default on two-core runners (`setDefaultTimeout`). A
+  `node:24-bookworm` container with `npm i -g bun` reproduces the Linux lane in a minute.
 - Three releases (beta.2 to beta.4) were published by hand from `docs/RELEASE.md`, and two
   sessions once held the same "go" for the same tag at the same time. The immutable tag is the one
   step that cannot be undone, so `scripts/deploy.sh hmo` refuses a tag that exists on origin before
