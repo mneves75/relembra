@@ -5,7 +5,13 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
-No changes yet.
+### Fixed
+
+- `relembra mcp` negotiates initialize-based versions 2025-11-25, 2025-06-18, 2025-03-26 and
+  2024-11-05 alongside stateless 2026-07-28 requests, falling back to 2025-11-25 for unknown
+  initialize versions. Fields and input-validation errors follow the selected revision;
+  JSON-RPC batching is supported only for 2025-03-26. Scope and principal still come only from
+  the launch environment.
 
 ## [1.0.0-beta.5] - 2026-11-04
 

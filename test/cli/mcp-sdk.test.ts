@@ -8,10 +8,11 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
+import { SUPPORTED_VERSIONS } from "./mcp-support.js";
 import { BINARY, cliTest, ok, sandbox, sandboxEnv } from "./support.js";
 
 const { PATH } = process.env;
-const PINNED = { versionNegotiation: { mode: { pin: "2026-07-28" } } } as const;
+const PINNED = { versionNegotiation: { mode: { pin: SUPPORTED_VERSIONS[0] } } } as const;
 const box = sandbox();
 afterAll(() => box.remove());
 
@@ -47,6 +48,46 @@ describe("relembra mcp ends with its client", () => {
       const code = await Promise.race([server.exited, Bun.sleep(10_000).then(() => "running")]);
       if (code === "running") server.kill("SIGKILL");
       expect(code).toBe(0);
+    },
+    30_000,
+  );
+});
+
+describe("a legacy stdio round trip through the official MCP client 2.4.0", () => {
+  cliTest(
+    "negotiates 2025-11-25 with initialize and lists all five tools",
+    async () => {
+      const legacyBox = sandbox();
+      const mcp = new Client(
+        { name: "relembra-legacy-round-trip", version: "1" },
+        {
+          versionNegotiation: { mode: "legacy" },
+          supportedProtocolVersions: [SUPPORTED_VERSIONS[1]],
+        },
+      );
+      try {
+        ok(legacyBox, ["init"]);
+        const transport = new StdioClientTransport({
+          command: BINARY,
+          args: ["mcp"],
+          cwd: legacyBox.repo,
+          env: sandboxEnv(legacyBox),
+          stderr: "pipe",
+        });
+        await mcp.connect(transport);
+        expect(mcp.getProtocolEra()).toBe("legacy");
+        expect(mcp.getNegotiatedProtocolVersion()).toBe(SUPPORTED_VERSIONS[1]);
+        expect((await mcp.listTools()).tools.map((tool) => tool.name)).toEqual([
+          "note",
+          "find",
+          "brief",
+          "wake",
+          "retract",
+        ]);
+      } finally {
+        await mcp.close();
+        legacyBox.remove();
+      }
     },
     30_000,
   );

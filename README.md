@@ -238,8 +238,11 @@ Commands, flags, exit codes and the JSON envelope: [docs/CLI.md](docs/CLI.md).
 
 ## MCP
 
-`relembra mcp` is an MCP server over stdio for clients that speak protocol revision 2026-07-28
-(older revisions are refused with the supported list). It is a subcommand of the same binary,
+`relembra mcp` is a dual-era MCP server over stdio supporting 2026-07-28, 2025-11-25,
+2025-06-18, 2025-03-26 and 2024-11-05. Modern requests carry their version and capabilities in
+`_meta` and stay stateless, even after a legacy `initialize` in the same process. Legacy clients
+negotiate once with `initialize`: a supported legacy version is returned unchanged; any other
+string falls back to 2025-11-25. It is a subcommand of the same binary,
 so it takes its scope, principal and store from the launch environment exactly as the CLI does,
 and no tool argument changes them. It writes at `agent`
 trust at most and never asks for owner trust. Its tools are `note`, `find`, `brief`, `wake` and
@@ -251,7 +254,7 @@ project's directory or with `RELEMBRA_SCOPE` set. The contract (methods, tools, 
 framing, pending requests) is in [docs/CLI.md](docs/CLI.md#relembra-mcp).
 
 The server holds at most 64 requests queued or running. One more gets the error `-31000`,
-`data: { maxPending: 64 }`, at once and is never queued. The revision defines no overload code and
+`data: { maxPending: 64 }`, at once and is never queued. The modern revision defines no overload code and
 reserves `-32020` to `-32099` for its own, so `-31000` sits outside `-32768` to `-32000`, as its
 Error Codes section asks. A client that stops reading its responses stops being read.
 
@@ -259,11 +262,18 @@ Qualified with the official MCP TypeScript SDK client, `@modelcontextprotocol/cl
 (with `@modelcontextprotocol/core` 2.4.0), pinned to protocol revision 2026-07-28
 (`versionNegotiation: { mode: { pin: "2026-07-28" } }`): `test/cli/mcp-sdk.test.ts` runs a stdio
 round trip through it against the built binary. It is a development dependency only; the library
-and the binary have no runtime dependencies. A client that speaks only the earlier,
-`initialize`-based revisions cannot use this server: `initialize` is refused with `-32022`, which
-names the supported version.
+and the binary have no runtime dependencies. The motivating initialize-based clients are codex
+0.166.0 (2025-06-18) and opencode 1.19.5 (2025-11-25); the SDK test also covers legacy negotiation.
 
-Implemented from these pages of the specification (read 2026-10-31):
+Legacy results omit modern result and cache metadata. The 2024-11-05 tool definitions contain
+only `name`, `description` and `inputSchema`; 2025-03-26 adds annotations with `annotations.title`
+and alone accepts JSON-RPC batches. From 2025-06-18, tools also have top-level titles and output
+schemas where defined, results may carry structured content, and `serverInfo` has a title.
+Only 2025-11-25 returns input-schema failures as tool execution errors; earlier revisions and
+modern requests return `-32602`. Legacy sessions support `ping`, `tools/list` and `tools/call`.
+A modern `_meta` naming another version gets `-32022` with all five supported versions.
+
+Implemented from these pages of the specification:
 
 - [Key Changes](https://modelcontextprotocol.io/specification/2026-07-28/changelog): no
   `initialize` handshake, per-request `_meta`, required `server/discover`, `resultType`, `ttlMs`
@@ -273,8 +283,19 @@ Implemented from these pages of the specification (read 2026-10-31):
   ("Per-request protocol fields", "Per-response protocol fields").
 - [Versioning and Compatibility](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning):
   Protocol Version Negotiation, and "Backward Compatibility with Initialization-Based Versions"
-  for the answer to `initialize`. The revision has no lifecycle page:
+  for dual-era operation. The revision has no lifecycle page:
   `/specification/2026-07-28/basic/lifecycle` redirects here.
+- Legacy lifecycle: [2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle),
+  [2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle),
+  [2025-03-26](https://modelcontextprotocol.io/specification/2025-03-26/basic/lifecycle) and
+  [2024-11-05](https://modelcontextprotocol.io/specification/2024-11-05/basic/lifecycle):
+  initialization and version negotiation.
+- Legacy key changes: [2025-03-26](https://modelcontextprotocol.io/specification/2025-03-26/changelog)
+  adds annotations and requires batching;
+  [2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18/changelog) adds structured
+  output, output schemas and titles, and removes batching;
+  [2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25/changelog) makes input
+  validation failures tool execution errors (SEP-1303).
 - [stdio](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio): the
   framing, stdout and stderr rules, Cancellation and Shutdown.
 - [Cancellation](https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/cancellation).
@@ -291,8 +312,8 @@ Implemented from these pages of the specification (read 2026-10-31):
 
 Where these pages go beyond the ticket, the server follows them: cache fields go on
 `server/discover` and `tools/list` only (the Caching page lists no other operation this server
-offers), `serverInfo` is in every result's `_meta` (a SHOULD), and `initialize` is answered with
-`-32022` naming the supported version (a SHOULD for a server that speaks no legacy revision).
+offers), and `serverInfo` is in every modern result's `_meta` (a SHOULD). Legacy results follow
+their negotiated revision; initialize params never change the environment's scope or principal.
 
 The 2026-07-28 revision has no per-call identifier a server could derive an op id from, and the
 JSON-RPC id changes on every retry. So instead of the plan's `[host, conversation, task, call]`

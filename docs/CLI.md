@@ -502,7 +502,8 @@ Codex hooks page does not say so outright, but its own examples rely on shell pa
 
 ### `relembra mcp`
 
-An MCP server over stdio, protocol revision 2026-07-28: an MCP client launches `relembra mcp` as a
+An MCP server over stdio supporting 2026-07-28, 2025-11-25, 2025-06-18, 2025-03-26 and
+2024-11-05: an MCP client launches `relembra mcp` as a
 subprocess and talks to it through stdin and stdout (the README lists the specification pages and
 the client it was qualified with).
 
@@ -511,7 +512,7 @@ the client it was qualified with).
   the OS user at trust ceiling `agent`, `RELEMBRA_HOME`, and the global scope
   `RELEMBRA_GLOBAL_SCOPE`: `find`, `brief` and `wake` read it beside the session's scope, `note`
   and `retract` stay on the session's scope (retracting a global memory is `refused:
-  scope-denied`). No tool argument and no `_meta` field
+  scope-denied`). No initialize param, tool argument or `_meta` field
   changes them: every tool's input schema refuses an argument it does not declare, none declares a
   scope, principal, home or ceiling, and `trust` takes `agent` or `untrusted` only. Owner trust is
   never available: it needs a person at the controlling terminal, and the server has none.
@@ -522,17 +523,30 @@ the client it was qualified with).
   startup error, it writes `relembra mcp: <message> (<rule>)` on stderr and exits with the error's
   code (Exit codes), writing nothing on stdout. Otherwise it serves until stdin ends, answers the
   requests it has read, and exits 0.
-- **Methods.** `server/discover`, `tools/list` and `tools/call`; every other method is `-32601`.
-  Each request must carry `io.modelcontextprotocol/protocolVersion` and
+- **Modern methods.** `server/discover`, `tools/list` and `tools/call`; every other method is `-32601`.
+  A modern request must carry `io.modelcontextprotocol/protocolVersion` and
   `io.modelcontextprotocol/clientCapabilities` in `_meta` (`-32602` otherwise), and the version
-  must be `2026-07-28` (`-32022`, with `data.supported` and `data.requested`, otherwise). A legacy
-  `initialize` gets the same `-32022`. Every result carries `resultType: "complete"` and
+  must be `2026-07-28` (`-32022`, with all five versions in `data.supported` and the requested
+  version in `data.requested`, otherwise). Every modern result carries `resultType: "complete"` and
   `_meta["io.modelcontextprotocol/serverInfo"]`; `server/discover` and `tools/list` carry
   `ttlMs: 3600000` and `cacheScope: "public"` (neither names a user or scope). `tools/list` returns
   every tool in one page, so any `cursor` is `-32602`.
+- **Legacy sessions.** `initialize` requires a string `protocolVersion` (`-32602` otherwise),
+  returns that version if it is one of the four legacy revisions, else falls back to 2025-11-25.
+  The result holds `protocolVersion`, `capabilities: { tools: {} }`, `serverInfo` and instructions.
+  A second initialize is `-32600` and leaves the first negotiation unchanged. Requests without
+  a modern protocol-version `_meta` key then use that revision: `ping` returns `{}`, `tools/list`
+  and `tools/call` work, and every other method is `-32601`. Notifications are ignored except
+  cancellation. Modern `_meta` always selects stateless modern handling, even within a legacy
+  session. Legacy results omit `resultType`, `_meta`, `ttlMs` and `cacheScope`. Tool definitions
+  in 2024-11-05 contain only `name`, `description` and `inputSchema`; 2025-03-26 adds annotations
+  with `annotations.title`. From 2025-06-18 they have top-level titles, output schemas where
+  defined and annotations, tool results may carry `structuredContent`, and `serverInfo` has
+  `title: "relembra"`.
 - **Tools,** in this order:
   - `note`: `text` (required), `pin`, `trust`, `source`, `idempotencyKey` (1 to 256 characters).
-    Returns `{ memoryId }` as structured content and as JSON text. `pin` with `trust: "untrusted"`
+    Returns `{ memoryId }` as JSON text, and as structured content from 2025-06-18.
+    `pin` with `trust: "untrusted"`
     is stored, but wake never renders an untrusted memory pinned, as with `relembra note`.
   - `find`: `query` (required), `limit` (1 to 100, default 10), `budget`. The ranked memories,
     rendered as `<memory>` lines in a `<find>` frame.
@@ -544,7 +558,7 @@ the client it was qualified with).
   `budget` is the most UTF-8 bytes of a rendering, frame included: 1 to 1,000,000, default 9,500.
   A rendering is escaped, run through the egress filter and measured after it, omitting whole
   entries; no tool returns memory text any other way.
-- **Exposure.** The protocol is stateless, so the server process is the session: at start it
+- **Exposure.** The server process is the carrier for both eras: at start it
   picks the carrier id `mcp:` + a random UUID, kind `mcp`, and every `find`, `brief` and `wake`
   rendering that carries a memory is recorded for it (Store.recordExposure) before the response
   is written. A recording that fails is `-32603` (`data: { code: "store" }` or `internal`), so no
@@ -561,10 +575,12 @@ the client it was qualified with).
   passes the derived value on purpose shares the write). Without a key every call writes once more, a retry after a
   lost response included. `retract` takes no op id: retracting a retracted memory changes nothing.
 - **Errors.** A request that is not valid JSON or not UTF-8 is `-32700`; one that is not a single
-  JSON-RPC 2.0 request object (a batch array, an id that is null or not an integer or string, no
+  JSON-RPC 2.0 request object (an array outside a 2025-03-26 session, an id that is null or not an integer or string, no
   `method`) is `-32600`; both without an `id` when it could not be read. An unknown tool, or
   arguments the tool's input schema refuses, is `-32602`, and the message names neither the tool
-  nor a value. A refusal by relembra is a tool result with `isError: true` and the text
+  nor a value. In 2025-11-25 only, input-schema failures instead return a tool result with
+  `isError: true` and `refused: invalid-arguments (<problem>)`; unknown tools stay `-32602`.
+  A refusal by relembra is a tool result with `isError: true` and the text
   `refused: <code>` or `refused: <code> (<rule>)`, with the codes of the error table (exit 1 and
   2), plus `egress-denied` when the host's egress filter refuses a rendering; it never echoes the
   input or a memory. A store error or a bug (the exit-3 codes) is `-32603`, `data: { code }`.
@@ -576,13 +592,19 @@ the client it was qualified with).
   message and is never executed; the server logs it on stderr. Requests run one at a time in
   arrival order while reading continues, so `notifications/cancelled` for a request still queued or
   running means it gets no response; other notifications are ignored. Logs go to stderr only.
+- **Batches.** Only a negotiated 2025-03-26 session accepts arrays, decided in request order so
+  a batch may be pipelined after initialize. Responses form one array line in batch order;
+  notifications and cancelled requests have no response. A notification-only batch writes
+  nothing; an empty array gets one `-32600` error object. An initialize inside a batch gets
+  `-32600` for that element. Each request element counts toward the pending cap; excess elements
+  get `-31000` inside the response array.
 - **Pending requests.** At most 64 requests are queued or running at once. A request past that is
   answered at once with `-31000` (`Server overloaded`), `data: { maxPending: 64 }`, is never
   queued, and may be sent again once responses arrive. The 2026-07-28 revision defines no
   overload code and reserves `-32020` to `-32099` for the codes it defines, so this code sits
   outside `-32768` to `-32000`, as its Error Codes section asks of new codes. Errors answered
   without running a request (this one, and the framing and parse errors) are capped the same way:
-  while 64 of them are written and not yet read, the server stops reading stdin. It reads on as
+  together with queued or unflushed batch lines, at 64 the server stops reading stdin. It reads on as
   long as the client reads its responses, and a client that never reads cannot make it hold more.
 
 ### `relembra export`

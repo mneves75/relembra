@@ -1,5 +1,5 @@
 /**
- * `relembra mcp`: the MCP server over stdio, protocol revision 2026-07-28, end to end against the
+ * `relembra mcp`: modern requests and initialize-based sessions, end to end against the
  * compiled binary. Every run also checks that stdout carries JSON-RPC responses and nothing else
  * (mcp-support.ts). Spec pages: https://modelcontextprotocol.io/specification/2026-07-28/…
  */
@@ -10,8 +10,20 @@ import { integrationOpId } from "../../src/ops.js";
 import { createRelembra } from "../../src/relembra.js";
 import { openSqliteStore } from "../../src/sqlite/index.js";
 import { RELEMBRA_VERSION } from "../../src/version.js";
-import { call, type Id, lines, META, mcp, notification, request, toolText } from "./mcp-support.js";
-import { cliTest, ok, ROOT, run, type Sandbox, sandbox, USER } from "./support.js";
+import {
+  call,
+  type Id,
+  initialize,
+  legacyRequest,
+  lines,
+  META,
+  mcp,
+  notification,
+  request,
+  SUPPORTED_VERSIONS,
+  toolText,
+} from "./mcp-support.js";
+import { cliTest, exportedText, ok, ROOT, run, type Sandbox, sandbox, USER } from "./support.js";
 
 const MAX = 1_048_576;
 const boxes: Sandbox[] = [];
@@ -37,6 +49,452 @@ const noteId = (response: { result?: { structuredContent?: { memoryId?: string }
 /** A credential shape the guard refuses, built at run time so no scanner flags this file. */
 const SECRET = `gh${"p_"}${"A1b2".repeat(9)}`;
 
+interface AdvertisedTool {
+  readonly name: string;
+  readonly title: string;
+  readonly description: string;
+  readonly inputSchema: unknown;
+  readonly outputSchema?: unknown;
+  readonly annotations: Record<string, unknown>;
+}
+
+/** The modern tool definitions are the positive control for each older field projection. */
+function legacyTools(modern: readonly AdvertisedTool[], version: string) {
+  return modern.map(({ name, title, description, inputSchema, outputSchema, annotations }) => ({
+    name,
+    description,
+    inputSchema,
+    ...(version >= SUPPORTED_VERSIONS[2]
+      ? { title, ...(outputSchema === undefined ? {} : { outputSchema }), annotations }
+      : version === SUPPORTED_VERSIONS[3]
+        ? { annotations: { ...annotations, title } }
+        : {}),
+  }));
+}
+
+describe("initialize-based MCP sessions over the compiled binary", () => {
+  for (const version of SUPPORTED_VERSIONS.slice(1)) {
+    cliTest(
+      `${version}: initialize, initialized, ping, list, note and find with revision field gating`,
+      () => {
+        const box = ready();
+        // All messages are pipelined before reading any answer: session state must be set in order.
+        const result = mcp(
+          box,
+          lines(
+            initialize(0, version),
+            notification("notifications/initialized"),
+            legacyRequest(1, "ping"),
+            legacyRequest(2, "tools/list"),
+            legacyRequest(3, "tools/call", {
+              name: "note",
+              arguments: { text: "legacy lantern stays in the shed" },
+            }),
+            legacyRequest(4, "tools/call", {
+              name: "find",
+              arguments: { query: "legacy lantern" },
+            }),
+            request("modern-list", "tools/list"),
+            request("discover", "server/discover"),
+          ),
+          { legacyIds: [0, 1, 2, 3, 4] },
+        );
+        expect(result.status).toBe(0);
+        expect(result.stderr).toBe("");
+        expect(result.responses.map((response) => response.id)).toEqual([
+          0,
+          1,
+          2,
+          3,
+          4,
+          "modern-list",
+          "discover",
+        ]);
+        expect(result.byId(0).result).toEqual({
+          protocolVersion: version,
+          capabilities: { tools: {} },
+          serverInfo: {
+            name: "relembra",
+            version: RELEMBRA_VERSION,
+            ...(version >= SUPPORTED_VERSIONS[2] ? { title: "relembra" } : {}),
+          },
+          instructions: result.byId("discover").result.instructions,
+        });
+        expect(typeof result.byId(0).result.instructions).toBe("string");
+        expect(result.byId(0).result.instructions.length).toBeGreaterThan(0);
+        expect(result.byId(1).result).toEqual({});
+        const modern = result.byId("modern-list").result;
+        expect(modern.resultType).toBe("complete");
+        expect(modern.tools.map((tool: AdvertisedTool) => tool.name)).toEqual([
+          "note",
+          "find",
+          "brief",
+          "wake",
+          "retract",
+        ]);
+        expect(result.byId(2).result).toEqual({ tools: legacyTools(modern.tools, version) });
+        const memory = JSON.parse(toolText(result.byId(3))) as { memoryId: string };
+        expect(typeof memory.memoryId).toBe("string");
+        expect(result.byId(3).result).toEqual({
+          content: [{ type: "text", text: JSON.stringify(memory) }],
+          isError: false,
+          ...(version >= SUPPORTED_VERSIONS[2] ? { structuredContent: memory } : {}),
+        });
+        expect(result.byId(4).result).toEqual({
+          content: [{ type: "text", text: expect.stringContaining(`id="${memory.memoryId}"`) }],
+          isError: false,
+        });
+        expect(toolText(result.byId(4))).toContain("legacy lantern stays in the shed");
+      },
+    );
+  }
+
+  for (const requested of ["1900-01-01", SUPPORTED_VERSIONS[0], "", "x".repeat(5000)]) {
+    cliTest(
+      `initialize falls back to latest legacy for ${requested.length > 100 ? "very long version" : JSON.stringify(requested)}`,
+      () => {
+        const box = ready();
+        const result = mcp(box, lines(initialize(0, requested), legacyRequest(1, "ping")), {
+          legacyIds: [0, 1],
+        });
+        expect(result.byId(0).error).toBeUndefined();
+        expect(result.byId(0).result.protocolVersion).toBe(SUPPORTED_VERSIONS[1]);
+        expect(result.byId(1).result).toEqual({});
+      },
+    );
+  }
+
+  cliTest(
+    "non-string or missing initialize version is -32602; a valid initialize afterwards succeeds",
+    () => {
+      const box = ready();
+      const invalid = [undefined, null, 20251125, true, {}, []];
+      const result = mcp(
+        box,
+        lines(
+          ...invalid.map((value, id) => initialize(id, value)),
+          initialize("valid", SUPPORTED_VERSIONS[1]),
+          legacyRequest("ping", "ping"),
+        ),
+        { legacyIds: ["valid", "ping"] },
+      );
+      for (let id = 0; id < invalid.length; id++) expect(result.byId(id).error?.code).toBe(-32602);
+      expect(result.byId("valid").result.protocolVersion).toBe(SUPPORTED_VERSIONS[1]);
+      expect(result.byId("ping").result).toEqual({});
+    },
+  );
+
+  cliTest("second initialize is -32600 and tools/list retains the first version", () => {
+    const box = ready();
+    const first = SUPPORTED_VERSIONS[4];
+    const result = mcp(
+      box,
+      lines(
+        initialize(0, first),
+        initialize(1, SUPPORTED_VERSIONS[1]),
+        legacyRequest(2, "tools/list"),
+        request(3, "tools/list"),
+      ),
+      { legacyIds: [0, 2] },
+    );
+    expect(result.byId(1).error?.code).toBe(-32600);
+    expect(result.byId(0).result.protocolVersion).toBe(first);
+    expect(result.byId(2).result).toEqual({
+      tools: legacyTools(result.byId(3).result.tools, first),
+    });
+  });
+
+  cliTest(
+    "2025-03-26 pipelines a batch into one ordered array line and ignores notification-only batches",
+    () => {
+      const box = ready();
+      const batch = `[${legacyRequest(1, "tools/list")},${legacyRequest(2, "ping")},${notification("notifications/initialized")}]`;
+      const result = mcp(
+        box,
+        lines(
+          initialize(0, SUPPORTED_VERSIONS[3]),
+          batch,
+          `[${notification("notifications/initialized")}]`,
+          legacyRequest(3, "ping"),
+          request(4, "tools/list"),
+        ),
+        { legacyIds: [0, 1, 2, 3], batchLines: [1] },
+      );
+      expect(result.status).toBe(0);
+      expect(result.stdout.trimEnd().split("\n")).toHaveLength(4);
+      expect(result.responses.map((response) => response.id)).toEqual([0, 1, 2, 3, 4]);
+      expect(result.byId(1).result).toEqual({
+        tools: legacyTools(result.byId(4).result.tools, SUPPORTED_VERSIONS[3]),
+      });
+      expect(result.byId(2).result).toEqual({});
+      expect(result.byId(3).result).toEqual({});
+    },
+  );
+
+  cliTest("2025-03-26 empty batch is a single -32600 object; ping still works", () => {
+    const box = ready();
+    const result = mcp(
+      box,
+      lines(initialize(0, SUPPORTED_VERSIONS[3]), "[]", legacyRequest(1, "ping")),
+      { legacyIds: [0, 1] },
+    );
+    const errors = result.responses.filter((response) => response.error);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.error?.code).toBe(-32600);
+    expect(
+      result.stdout
+        .trimEnd()
+        .split("\n")
+        .map((line) => Array.isArray(JSON.parse(line))),
+    ).toEqual([false, false, false]);
+    expect(result.byId(1).result).toEqual({});
+  });
+
+  cliTest(
+    "2025-03-26 initialize inside a batch is a -32600 element and leaves the session intact",
+    () => {
+      const box = ready();
+      const result = mcp(
+        box,
+        lines(
+          initialize(0, SUPPORTED_VERSIONS[3]),
+          `[${initialize(1, SUPPORTED_VERSIONS[1])},${legacyRequest(2, "ping")}]`,
+          legacyRequest(3, "tools/list"),
+          request(4, "tools/list"),
+        ),
+        { legacyIds: [0, 2, 3], batchLines: [1] },
+      );
+      expect(result.responses.map((response) => response.id)).toEqual([0, 1, 2, 3, 4]);
+      expect(result.byId(1).error?.code).toBe(-32600);
+      expect(result.byId(2).result).toEqual({});
+      expect(result.byId(3).result).toEqual({
+        tools: legacyTools(result.byId(4).result.tools, SUPPORTED_VERSIONS[3]),
+      });
+    },
+  );
+
+  for (const version of [
+    undefined,
+    ...SUPPORTED_VERSIONS.slice(1).filter((value) => value !== SUPPORTED_VERSIONS[3]),
+  ]) {
+    cliTest(
+      `arrays are -32600 with ${version ?? "no session"}; a single request is answered`,
+      () => {
+        const box = ready();
+        const result = mcp(
+          box,
+          lines(
+            ...(version === undefined ? [] : [initialize(0, version)]),
+            `[${request(1, "tools/list")},${request(2, "tools/list")}]`,
+            request(3, "tools/list"),
+          ),
+          { legacyIds: version === undefined ? [] : [0] },
+        );
+        const errors = result.responses.filter((response) => response.error);
+        expect(errors).toHaveLength(1);
+        expect(errors[0]?.error?.code).toBe(-32600);
+        expect(result.responses.some((response) => response.id === 1 || response.id === 2)).toBe(
+          false,
+        );
+        expect(result.byId(3).result.tools).toHaveLength(5);
+        expect(result.byId(3).result.resultType).toBe("complete");
+      },
+    );
+  }
+
+  for (const version of SUPPORTED_VERSIONS.slice(1, 3)) {
+    cliTest(
+      `${version}: schema problems use the revision's error channel; unknown tools stay -32602`,
+      () => {
+        const box = ready();
+        const marker = "SCHEMA_INPUT_NOT_ECHOED";
+        const cases = [
+          { args: {}, problem: "missing argument text" },
+          { args: { text: 7 }, problem: "text must be a string" },
+          { args: { text: "x", [marker]: marker }, problem: "an argument this tool does not take" },
+          {
+            args: { text: "x", idempotencyKey: "" },
+            problem: "idempotencyKey must have at least 1 characters",
+          },
+          {
+            args: { text: "x", idempotencyKey: marker.repeat(30) },
+            problem: "idempotencyKey must have at most 256 characters",
+          },
+        ];
+        const result = mcp(
+          box,
+          lines(
+            initialize("init", version),
+            ...cases.map(({ args }, id) =>
+              legacyRequest(id, "tools/call", { name: "note", arguments: args }),
+            ),
+            legacyRequest("unknown", "tools/call", { name: marker, arguments: {} }),
+            legacyRequest("valid", "tools/call", {
+              name: "note",
+              arguments: { text: "valid schema control" },
+            }),
+          ),
+          {
+            legacyIds: [
+              "init",
+              "valid",
+              ...(version === SUPPORTED_VERSIONS[1] ? cases.map((_, id) => id) : []),
+            ],
+          },
+        );
+        for (const [id, { problem }] of cases.entries()) {
+          const response = result.byId(id);
+          if (version === SUPPORTED_VERSIONS[1]) {
+            expect(response.error).toBeUndefined();
+            expect(response.result).toEqual({
+              content: [{ type: "text", text: `refused: invalid-arguments (${problem})` }],
+              isError: true,
+            });
+          } else {
+            expect(response.error?.code).toBe(-32602);
+            expect(response.result).toBeUndefined();
+          }
+        }
+        expect(result.byId("unknown").error?.code).toBe(-32602);
+        expect(result.stdout).not.toContain(marker);
+        expect(result.byId("valid").result.isError).toBe(false);
+        expect(recall(box)).toHaveLength(1);
+      },
+    );
+
+    cliTest(
+      `${version}: blank and very long note text are refusals; a valid note is stored`,
+      () => {
+        const box = ready();
+        const result = mcp(
+          box,
+          lines(
+            initialize(0, version),
+            legacyRequest(1, "tools/call", { name: "note", arguments: { text: "" } }),
+            legacyRequest(2, "tools/call", {
+              name: "note",
+              arguments: { text: "LONG_INPUT_MARKER".repeat(1000) },
+            }),
+            legacyRequest(3, "tools/call", {
+              name: "note",
+              arguments: { text: "valid note control" },
+            }),
+          ),
+          { legacyIds: [0, 1, 2, 3] },
+        );
+        for (const id of [1, 2]) {
+          expect(result.byId(id).result.isError).toBe(true);
+          expect(toolText(result.byId(id))).toStartWith("refused: ");
+        }
+        expect(result.stdout).not.toContain("LONG_INPUT_MARKER");
+        expect(result.byId(3).result.isError).toBe(false);
+        expect(recall(box).map((memory) => memory.revision.text)).toEqual(["valid note control"]);
+      },
+    );
+  }
+
+  cliTest(
+    "initialize clientInfo and capabilities cannot replace environment scope or provenance",
+    () => {
+      const box = ready();
+      const env = {
+        RELEMBRA_SCOPE: "test/environment-scope",
+        RELEMBRA_AGENT: "env-agent",
+        RELEMBRA_HARNESS: "env-harness",
+        RELEMBRA_MODEL: "env-model",
+      };
+      const hostile = {
+        name: "hostile-client-name",
+        title: "hostile-client-title",
+        version: "hostile-client-version",
+      };
+      const result = mcp(
+        box,
+        lines(
+          legacyRequest(0, "initialize", {
+            protocolVersion: SUPPORTED_VERSIONS[1],
+            clientInfo: hostile,
+            capabilities: {
+              tools: {},
+              scope: hostile.title,
+              agent: hostile.name,
+              model: hostile.version,
+            },
+            scope: hostile.title,
+            principal: { id: hostile.name, trustCeiling: "owner" },
+            provenance: { agent: hostile.name, harness: hostile.title, model: hostile.version },
+            carrier: { id: hostile.name, kind: hostile.title },
+          }),
+          notification("notifications/initialized"),
+          legacyRequest(1, "tools/call", {
+            name: "note",
+            arguments: { text: "environment owns legacy provenance" },
+          }),
+        ),
+        { env, legacyIds: [0, 1] },
+      );
+      expect(result.byId(1).result.isError).toBe(false);
+      const memories = recall(box, env);
+      expect(memories).toHaveLength(1);
+      const [memory] = memories;
+      expect(memory.scope).toBe(env.RELEMBRA_SCOPE);
+      expect(memory.revision.provenance).toMatchObject({
+        agent: env.RELEMBRA_AGENT,
+        harness: env.RELEMBRA_HARNESS,
+        model: env.RELEMBRA_MODEL,
+        trust: "agent",
+      });
+      const storeJson = `${JSON.stringify(memories)}\n${exportedText(box)}`;
+      for (const value of Object.values(hostile)) expect(storeJson).not.toContain(value);
+      expect(recall(box)).toHaveLength(0);
+    },
+  );
+
+  cliTest("dual-era: modern META overrides the legacy session and does not change it", () => {
+    const box = ready();
+    const result = mcp(
+      box,
+      lines(
+        initialize(0, SUPPORTED_VERSIONS[4]),
+        request(1, "server/discover"),
+        request(2, "tools/list"),
+        request(3, "ping"),
+        legacyRequest(4, "tools/list", { _meta: { unrelated: "ignored" } }),
+        legacyRequest(5, "ping"),
+        legacyRequest(6, "server/discover"),
+        legacyRequest(7, "resources/list"),
+        legacyRequest(8, "tools/list", { cursor: "unknown" }),
+        request(9, "tools/list", {
+          _meta: { ...META, "io.modelcontextprotocol/protocolVersion": SUPPORTED_VERSIONS[1] },
+        }),
+        request(10, "tools/list", {
+          _meta: { ...META, "io.modelcontextprotocol/protocolVersion": "1900-01-01" },
+        }),
+        legacyRequest(11, "ping"),
+      ),
+      { legacyIds: [0, 4, 5, 11] },
+    );
+    expect(result.byId(1).result.resultType).toBe("complete");
+    expect(result.byId(1).result.supportedVersions).toEqual(SUPPORTED_VERSIONS);
+    expect(result.byId(2).result.resultType).toBe("complete");
+    expect(result.byId(3).error?.code).toBe(-32601);
+    expect(result.byId(4).result).toEqual({
+      tools: legacyTools(result.byId(2).result.tools, SUPPORTED_VERSIONS[4]),
+    });
+    expect(result.byId(5).result).toEqual({});
+    for (const id of [6, 7]) expect(result.byId(id).error?.code).toBe(-32601);
+    expect(result.byId(8).error?.code).toBe(-32602);
+    for (const [id, requested] of [
+      [9, SUPPORTED_VERSIONS[1]],
+      [10, "1900-01-01"],
+    ] as const) {
+      expect(result.byId(id).error?.code).toBe(-32022);
+      expect(result.byId(id).error?.data).toEqual({ supported: SUPPORTED_VERSIONS, requested });
+    }
+    expect(result.byId(11).result).toEqual({});
+  });
+});
+
 describe("startup: the scope and store come from the environment, failures go to stderr only", () => {
   cliTest("no store: exit 3, a line on stderr, nothing on stdout, even with --json", () => {
     const box = sandbox();
@@ -51,7 +509,7 @@ describe("startup: the scope and store come from the environment, failures go to
     ok(box, ["init"]);
     const control = mcp(box, lines(request(1, "server/discover")));
     expect(control.status).toBe(0);
-    expect(control.byId(1).result.supportedVersions).toEqual(["2026-07-28"]);
+    expect(control.byId(1).result.supportedVersions).toEqual(SUPPORTED_VERSIONS);
   });
 
   cliTest("outside a repository with no RELEMBRA_SCOPE: exit 2, stdout empty", () => {
@@ -93,7 +551,7 @@ describe("server/discover, tools/list: required metadata, resultType and cache f
   cliTest("server/discover answers with the DiscoverResult fields", () => {
     const { result } = mcp(box, lines(request("d", "server/discover"))).byId("d");
     expect(result.resultType).toBe("complete");
-    expect(result.supportedVersions).toEqual(["2026-07-28"]);
+    expect(result.supportedVersions).toEqual(SUPPORTED_VERSIONS);
     expect(result.capabilities).toEqual({ tools: {} });
     expect(result._meta).toEqual({
       "io.modelcontextprotocol/serverInfo": { name: "relembra", version: RELEMBRA_VERSION },
@@ -183,31 +641,24 @@ describe("the prescribed protocol errors", () => {
     expect(result.byId(6).result.resultType).toBe("complete");
   });
 
-  cliTest("an unsupported protocol version is -32022 with supported and requested", () => {
-    const old = mcp(
-      box,
-      lines(
-        request(1, "tools/list", {
-          _meta: { ...META, "io.modelcontextprotocol/protocolVersion": "2025-11-25" },
-        }),
-      ),
-    ).byId(1);
-    expect(old.error?.code).toBe(-32022);
-    expect(old.error?.data).toEqual({ supported: ["2026-07-28"], requested: "2025-11-25" });
-  });
-
-  cliTest("a legacy initialize is refused, naming the supported versions", () => {
-    const init = JSON.stringify({
-      jsonrpc: "2.0",
-      id: 0,
-      method: "initialize",
-      params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "x" } },
+  for (const requested of [SUPPORTED_VERSIONS[1], "1900-01-01"]) {
+    cliTest(`modern _meta requesting ${requested} is -32022 with all supported versions`, () => {
+      const result = mcp(
+        box,
+        lines(
+          request(1, "tools/list", {
+            _meta: { ...META, "io.modelcontextprotocol/protocolVersion": requested },
+          }),
+          request(2, "tools/list"),
+        ),
+      );
+      const old = result.byId(1);
+      expect(old.error?.code).toBe(-32022);
+      expect(old.error?.data).toEqual({ supported: SUPPORTED_VERSIONS, requested });
+      expect(result.byId(2).result.resultType).toBe("complete");
+      expect(result.byId(2).result.tools).toHaveLength(5);
     });
-    const { error } = mcp(box, lines(init)).byId(0);
-    expect(error?.code).toBe(-32022);
-    expect(error?.message).toContain("2026-07-28");
-    expect(error?.data).toEqual({ supported: ["2026-07-28"], requested: "2025-11-25" });
-  });
+  }
 
   cliTest("an unknown method, ping included, is -32601", () => {
     const result = mcp(box, lines(request(1, "ping"), request(2, "resources/list")));
@@ -337,7 +788,7 @@ describe("framing faults: malformed, oversized, interleaved, EOF", () => {
       expect(first?.error?.code).toBe(-32600);
       expect(first?.error?.data).toEqual({ maxBytes: MAX });
       expect("id" in (first as object)).toBe(false);
-      expect(result.byId(1).result.supportedVersions).toEqual(["2026-07-28"]);
+      expect(result.byId(1).result.supportedVersions).toEqual(SUPPORTED_VERSIONS);
       expect(result.byId(3).result.tools).toHaveLength(5);
     },
   );

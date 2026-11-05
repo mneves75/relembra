@@ -11,6 +11,66 @@ import { createRelembra, type Relembra } from "../src/relembra.js";
 import { createMemoryStore } from "../src/testing/index.js";
 import { call, parseResponses, type Response, request, toolText } from "./cli/mcp-support.js";
 
+describe("response parsing only permits explicitly expected legacy results and batch lines", () => {
+  const legacy = { jsonrpc: "2.0", id: "legacy", result: {} } as const;
+  const modern = { jsonrpc: "2.0", id: "modern", result: { resultType: "complete" } } as const;
+  const line = (value: unknown) => `${JSON.stringify(value)}\n`;
+
+  test("legacy results require their own id opt-in; modern responses remain strict in mixed output", () => {
+    expect(() => parseResponses(line(legacy))).toThrow();
+    expect(parseResponses(line(legacy), { legacyIds: ["legacy"] })).toEqual([legacy]);
+    expect(parseResponses(line(legacy) + line(modern), { legacyIds: ["legacy"] })).toEqual([
+      legacy,
+      modern,
+    ]);
+    expect(() =>
+      parseResponses(line({ ...modern, result: {} }), { legacyIds: ["legacy"] }),
+    ).toThrow();
+    expect(parseResponses(line(modern), { legacyIds: ["legacy"] })).toEqual([modern]);
+  });
+
+  test("batches require their exact line opt-in and each element still has its era checked", () => {
+    const stdout = line([legacy, modern]);
+    expect(() => parseResponses(stdout, { legacyIds: ["legacy"] })).toThrow();
+    expect(parseResponses(stdout, { legacyIds: ["legacy"], batchLines: [0] })).toEqual([
+      legacy,
+      modern,
+    ]);
+    expect(() =>
+      parseResponses(line([legacy, { ...modern, result: {} }]), {
+        legacyIds: ["legacy"],
+        batchLines: [0],
+      }),
+    ).toThrow();
+    expect(() => parseResponses(line(modern), { batchLines: [0] })).toThrow();
+    expect(() => parseResponses(line([]), { batchLines: [0] })).toThrow();
+    expect(() => parseResponses(line([modern]) + line([modern]), { batchLines: [0] })).toThrow();
+    expect(parseResponses(line(modern) + line([modern]), { batchLines: [1] })).toEqual([
+      modern,
+      modern,
+    ]);
+  });
+
+  test("legacy opt-in still rejects modern result metadata and malformed envelopes", () => {
+    const expected = { legacyIds: ["legacy"], batchLines: [0] };
+    for (const field of ["resultType", "_meta", "ttlMs", "cacheScope"]) {
+      expect(() =>
+        parseResponses(line([{ ...legacy, result: { [field]: "unexpected" } }]), expected),
+      ).toThrow();
+    }
+    for (const value of [
+      null,
+      7,
+      { ...legacy, jsonrpc: "1.0" },
+      { ...legacy, method: "ping" },
+      { ...legacy, error: { code: -32600, message: "Invalid request" } },
+    ]) {
+      expect(() => parseResponses(line([value]), expected)).toThrow();
+    }
+    expect(parseResponses(line([legacy]), expected)).toEqual([legacy]);
+  });
+});
+
 const SCOPE = "test/mcp";
 const principal: Principal = {
   id: "uid-1",
