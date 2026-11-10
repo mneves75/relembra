@@ -16,9 +16,10 @@
 #
 # prd (produção) publishes that plan and nothing else, in docs/RELEASE.md's order: rechecks every
 # asset against plan.json, tags HEAD with the gate verdict, pushes the tag, creates the draft
-# release with every asset, downloads the draft's assets and checks them, publishes, follows the
-# release.yml run and binds the staged npm archive to the release's by its sha1, dispatches
-# pages.yml and follows it, then downloads the published assets and checks them again.
+# release with every asset, downloads the draft's assets and checks them, reads GitHub's clock,
+# publishes, follows the release.yml run and binds the staged npm archive to the release's by its
+# sha1, dispatches pages.yml and follows it, then downloads the published assets and checks them
+# again.
 # published.json holds what the evidence record needs. Until the release is published every step
 # can be undone, and a failure prints the commands that undo it; after it, a failure is reported
 # and nothing is undone, because a published release is immutable.
@@ -447,9 +448,32 @@ prd() {
   fi
   echo "draft release created and its assets verified"
 
+  # The runs publication starts are found by createdAt from `since`, on GitHub's clock: a local
+  # clock ahead of it would hide them, and the wait would come after the step that cannot be
+  # undone. So `since` is the Date header of an authenticated call, read while a refusal can still
+  # be undone. An HTTP date is valid only when it prints back unchanged (30 Feb would not).
+  local since headers
+  if ! headers=$(gh api -i rate_limit); then
+    rollback_hint
+    refuse "cannot read GitHub's clock (gh api -i rate_limit)"
+  fi
+  if ! since=$(printf '%s\n' "$headers" | node -e '
+    const head = require("node:fs").readFileSync(0, "utf8").split(/\r?\n\r?\n/)[0];
+    const line = head.split(/\r?\n/).find((l) => /^date:/i.test(l));
+    const value = line === undefined ? "" : line.replace(/^date:[ \t]*/i, "").trim();
+    const http = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT$/;
+    const time = http.test(value) ? Date.parse(value) : NaN;
+    if (!Number.isFinite(time) || new Date(time).toUTCString() !== value) {
+      console.error(`no valid Date header (${JSON.stringify(line ?? null)})`);
+      process.exit(1);
+    }
+    process.stdout.write(new Date(time).toISOString().replace(/\.\d{3}Z$/, "Z"));
+  ' 2>&1); then
+    rollback_hint
+    refuse "cannot read GitHub's clock: $since"
+  fi
+
   # Publication. From here nothing is undone: a published release is immutable.
-  local since
-  since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   tmp_view=$(mktemp) || exit 1
   if ! gh release edit "$tag" --draft=false >/dev/null; then
     # The edit may have gone through before the error reached us; what GitHub holds decides, and

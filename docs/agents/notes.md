@@ -5,6 +5,15 @@ Dated entries, newest first. Keep out secrets, local paths, private names and se
 the repository is public. Code and procedure live in their own files; this file holds only what
 those files cannot say: the mistake, the dead end, the thing that turned out to matter.
 
+## 2026-11-10: deploy.sh follow-ups
+
+- A bare `mktemp` on this macOS ignores `TMPDIR`, so a test that points `TMPDIR` at an empty
+  directory and checks it stays empty passes whether or not the script leaks. A `mktemp` shim
+  first on PATH that writes into the test's directory and logs each file is the reliable check.
+- `prd`'s `since` comes from the `Date` header of `gh api -i rate_limit`, which the `gh` shim
+  serves from `date-header` in the fixtures; a fake `date` ahead of real time is how the skew is
+  tested.
+
 ## 2026-11-04: release tooling (scripts/deploy.sh, scripts/init.sh)
 
 - First real use (1.0.0-beta.5, the same day): `hmo` and `prd` ran end to end with no refusal
@@ -12,7 +21,7 @@ those files cannot say: the mistake, the dead end, the thing that turned out to 
   `pages.yml`. Real `gh` output matched the shim. The one message the tests did not model is
   GitHub's "Bypassed rule violations for refs/tags/v…: Cannot create ref due to creations being
   restricted" on the tag push: the ruleset restricts tag creation and the owner's role bypasses
-  it. Before the run, compare the clock with GitHub's `Date` header (1 s here).
+  it. The clock was 1 s off GitHub's `Date` header; `prd` now reads that header itself (G-6).
 - Hosted CI red while the Mac is green usually means the test, not the script: a test name that
   touched `spawnSync("/bin/bash").stdout` where there is no `/bin/bash` (Windows collects skipped
   files too), a PATH that hid `/usr/bin` to remove one tool (Linux keeps everything there), and

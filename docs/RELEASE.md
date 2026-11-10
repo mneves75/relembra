@@ -138,7 +138,10 @@ archive `release.yml` would refuse is caught before anything is public.
 `hmo`), and that HEAD and `origin/main` are still the plan's commit; `origin/main` is checked
 again right before the Pages dispatch, which deploys `main` as the remote has it at that moment: tag
 (annotated with the gate verdict), push the tag, draft release with every asset, download and
-check the draft's assets, publish, follow the `release.yml` run and bind the staged archive to the
+check the draft's assets, read GitHub's clock (the `Date` header of `gh api -i rate_limit`; the
+runs publication starts are found from that time, so a local clock ahead of GitHub's cannot hide
+them, and a header that cannot be read is refused while the tag and draft can still be undone),
+publish, follow the `release.yml` run and bind the staged archive to the
 release's by sha1, dispatch and follow `pages.yml`, then download the published assets and check
 them again, and write `.scratch/deploy/<version>/published.json` with what the evidence record
 needs. Until the draft is published every step can be undone, and a failure prints the commands

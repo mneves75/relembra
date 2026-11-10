@@ -29,6 +29,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
   the launch environment.
 - `scripts/deploy.sh hmo` no longer leaves a temporary file behind when it refuses while reading
   the CI run.
+- `scripts/deploy.sh prd` finds the `release.yml` and `pages.yml` runs from GitHub's clock (the
+  `Date` header) instead of the local one, so a local clock ahead of GitHub's no longer misses them
+  after publication; a header it cannot read is refused before publishing.
 
 ## [1.0.0-beta.5] - 2026-11-04
 

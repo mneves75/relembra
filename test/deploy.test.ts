@@ -400,11 +400,13 @@ describe.skipIf(NO_RELEASE_TOOLING)("scripts/deploy.sh prd", () => {
     );
     // The draft's assets are downloaded and checked before anything becomes public.
     expect(calls[1]).toBe(`release download ${TAG} --dir ${join(dir, "draft")}`);
-    expect(calls[2]).toBe(`release edit ${TAG} --draft=false`);
-    expect(calls[3]).toBe(
+    // GitHub's clock, before publication: the runs it starts are found from that time on.
+    expect(calls[2]).toBe("api -i rate_limit");
+    expect(calls[3]).toBe(`release edit ${TAG} --draft=false`);
+    expect(calls[4]).toBe(
       `release view ${TAG} --json tagName,isDraft,isPrerelease,publishedAt,url`,
     );
-    expect(calls.slice(4)).toEqual([
+    expect(calls.slice(5)).toEqual([
       "run list --workflow release.yml --event release --json databaseId,headSha,event,createdAt,status,conclusion --limit 10",
       "run watch 900 --exit-status",
       "run view 900 --log",
