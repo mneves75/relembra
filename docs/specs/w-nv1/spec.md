@@ -1,6 +1,7 @@
 # W-NV1: create a Windows store privately and verify its ancestry
 
-Status: beta.4 implementation; Windows acceptance and security review pending.
+Status: shipped in 1.0.0-beta.4 and accepted at its security gate; the residual (b′) is under an
+owner waiver to 2026-11-30 (`docs/eval/release-1.0.0-beta.4.md`).
 
 ## Assumptions and boundary
 

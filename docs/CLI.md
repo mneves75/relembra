@@ -295,7 +295,7 @@ The newest memories of the scope and the global scope first.
 
 | Flag | Meaning |
 |---|---|
-| `--limit <n>` | At most n memories; default 50 |
+| `--limit <n>` | At most n memories, 1 to 100,000; default 50 |
 | `--retracted` | The owner view: retracted memories too, marked |
 
 `data`: `{ memories }`.
@@ -306,7 +306,7 @@ The bounded block a session starts with: pinned memories, recent ones, summaries
 
 | Flag | Meaning |
 |---|---|
-| `--budget <bytes>` | The most UTF-8 bytes, frame included; default 9,500 |
+| `--budget <bytes>` | The most UTF-8 bytes, frame included, 1 to 1,000,000; default 9,500 |
 
 `data`: `{ text, memoryIds }`. Text: the rendering.
 
@@ -334,7 +334,7 @@ summaries, over the scope and the global scope.
 
 | Flag | Meaning |
 |---|---|
-| `--budget <bytes>` | The most UTF-8 bytes, frame included; default 9,500 |
+| `--budget <bytes>` | The most UTF-8 bytes, frame included, 1 to 1,000,000; default 9,500 |
 
 `data`: `{ text, memoryIds }`.
 
@@ -391,7 +391,7 @@ sources must be in the summary's scope.
 
 | Flag | Meaning |
 |---|---|
-| `--limit <n>` | At most n memories; default 50 |
+| `--limit <n>` | At most n memories, 1 to 100,000; default 50 |
 
 `data`: `{ memories }`.
 
