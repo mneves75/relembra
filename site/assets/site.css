@@ -782,16 +782,23 @@ select {
 .er.is-retracted .er__text {
   color: var(--ink-2);
 }
+.er__stone,
+.status--unsupported {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
 .er__stone {
-  display: inline-block;
-  padding: 0 8px;
-  background: var(--hatch);
   font-family: var(--mono);
   font-size: 0.875rem;
 }
-.er__stone span {
-  background: var(--ground);
-  padding-inline: 4px;
+.er__stone::before,
+.status--unsupported::before {
+  content: "";
+  inline-size: 18px;
+  block-size: 14px;
+  border: 1px solid var(--ink-2);
+  background: var(--hatch);
 }
 .er__state {
   font-size: 0.875rem;
@@ -826,9 +833,6 @@ select {
 }
 .status--acknowledged {
   border-color: var(--ink);
-}
-.status--unsupported {
-  background: var(--hatch);
 }
 
 /* ---------- Install ---------- */
@@ -1050,6 +1054,9 @@ select {
   .proof .proof__group {
     display: block;
     padding-block: 32px 8px;
+  }
+  .proof .proof__group th {
+    padding: 0;
   }
 }
 

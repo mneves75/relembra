@@ -664,9 +664,7 @@
         meta.append(el("span", "er__state", t().rowState[z.status] ?? z.status));
         const text = el("p", "er__text");
         if (z.status === "redacted") {
-          const stone = el("span", "er__stone");
-          stone.append(el("span", "", t().tombstone(z.seq)));
-          text.append(stone);
+          text.append(el("span", "er__stone", t().tombstone(z.seq)));
         } else {
           text.textContent = z.revision?.text ?? "";
         }
