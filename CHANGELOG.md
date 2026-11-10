@@ -11,6 +11,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
   read, and merging a pull request asks first. A Stop hook runs `typecheck`, `lint` and `bun test` (Postgres
   skipped) when the tree changed since the last green run.
 
+### Removed
+
+- The npm package no longer ships `dist/cli/` (20 files): no export pointed at it, and the CLI
+  ships as a native binary.
+
 ### Fixed
 
 - `relembra supersede` on a summary is refused with the new code `summary-supersede` (exit 1); it

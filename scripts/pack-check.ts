@@ -18,6 +18,8 @@ const FORBIDDEN = [
   /\.db(-wal|-shm)?$/,
   /(^|\/)\.env/,
   /fixture/i,
+  // The CLI ships as a native binary and no export points at it: its compiled sources stay out.
+  /^dist\/cli\//,
 ];
 const REQUIRED_EXPORTS = [".", "./pi-durable", "./postgres", "./sqlite", "./testing"];
 const ALLOWED = [/^dist\//, /^package\.json$/, /^README\.md$/, /^LICENSE$/, /^docs\/FORMAT\.md$/];

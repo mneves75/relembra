@@ -95,6 +95,15 @@ describe.skipIf(NO_RELEASE_TOOLING)("scripts/pack-smoke.ts --tarball", () => {
     expect(sha256(tarball)).toBe(before);
   }, 360_000);
 
+  test("the archive ships no CLI sources: the CLI is a native binary, not an export", () => {
+    const listed = spawnSync("tar", ["-tzf", tarball], { encoding: "utf8" });
+    expect(listed.status).toBe(0);
+    const entries = listed.stdout.split("\n").filter(Boolean);
+    // Positive control: the library itself is there.
+    expect(entries).toContain("package/dist/index.js");
+    expect(entries.filter((entry) => entry.startsWith("package/dist/cli/"))).toEqual([]);
+  });
+
   test("a missing or broken archive fails", () => {
     const missing = join(copy, "absent.tgz");
     const absent = spawnSync("node", [SMOKE, "--tarball", missing], { encoding: "utf8", env });
