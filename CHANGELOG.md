@@ -27,6 +27,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
   initialize versions. Fields and input-validation errors follow the selected revision;
   JSON-RPC batching is supported only for 2025-03-26. Scope and principal still come only from
   the launch environment.
+- `scripts/deploy.sh hmo` no longer leaves a temporary file behind when it refuses while reading
+  the CI run.
 
 ## [1.0.0-beta.5] - 2026-11-04
 

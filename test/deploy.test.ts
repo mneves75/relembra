@@ -10,7 +10,16 @@
  * step is reported.
  */
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import {
   cleanupFixtures,
@@ -21,6 +30,7 @@ import {
   ghCalls,
   git,
   hmo,
+  pathEnv,
   planDir,
   prd,
   RUN,
@@ -316,6 +326,37 @@ describe.skipIf(NO_RELEASE_TOOLING)("scripts/deploy.sh hmo", () => {
       expect(existsSync(join(planDir(f), "plan.json"))).toBe(false);
       expect(git(f.repo, "ls-remote", "origin")).toBe(remoteBefore);
     });
+  }
+
+  // The CI run is read into a temporary file; a refusal there must not leave it behind. A mktemp
+  // shim puts every temporary file in one fresh directory and logs it (a bare mktemp on macOS
+  // ignores TMPDIR).
+  for (const shell of ["bash", "/bin/bash"]) {
+    test.skipIf(shell !== "bash" && !existsSync(shell))(
+      `a refusal while reading the CI run leaves no temporary file (${shell})`,
+      () => {
+        const realMktemp = spawnSync("sh", ["-c", "command -v mktemp"], { encoding: "utf8" });
+        const f = fixture();
+        writeFileSync(join(f.fixtures, `run-view-${RUN}.json`), runView("0".repeat(40)));
+        const top = join(f.fixtures, "..");
+        const tmp = join(top, "tmp");
+        const shim = join(top, "mktemp-shim");
+        const made = join(top, "mktemp.log");
+        mkdirSync(tmp);
+        mkdirSync(shim);
+        writeFileSync(
+          join(shim, "mktemp"),
+          `#!/bin/sh\nf=$('${realMktemp.stdout.trim()}' '${tmp}/tmp.XXXXXX') || exit 1\necho "$f" >>'${made}'\necho "$f"\n`,
+        );
+        chmodSync(join(shim, "mktemp"), 0o755);
+        const run = hmo(f, pathEnv(f, [shim], []), shell);
+        expect(run.stderr).toContain(`run ${RUN} is for 0000000, not HEAD`);
+        expect(run.status).toBe(1);
+        // Positive control: the script made its temporary files through the shim.
+        expect(readFileSync(made, "utf8").trim().split("\n").length).toBeGreaterThanOrEqual(2);
+        expect(readdirSync(tmp)).toEqual([]);
+      },
+    );
   }
 
   test("refuses a plan directory that already exists", () => {

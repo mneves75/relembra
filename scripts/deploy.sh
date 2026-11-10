@@ -23,7 +23,7 @@
 # can be undone, and a failure prints the commands that undo it; after it, a failure is reported
 # and nothing is undone, because a published release is immutable.
 #
-# Needs bash 3.2 or later, git, gh (signed in), bun and node, curl, tar, openssl, and sha256sum
+# Needs bash 3.2 or later, git, gh (signed in), bun and node, curl, openssl, and sha256sum
 # and sha1sum or shasum. Exit codes: 0 done, 1 refused or failed (the reason on stderr), 2 usage.
 # RELEMBRA_DEPLOY_POLL (seconds between polls, default 20) and RELEMBRA_DEPLOY_TIMEOUT (seconds to
 # wait for a workflow run, default 1200) exist for the tests.
@@ -77,9 +77,9 @@ case $version in *-*) prerelease=1 ;; *) prerelease=0 ;; esac
 head=$(git rev-parse HEAD) || exit 1
 tree=$(git rev-parse 'HEAD^{tree}') || exit 1
 # Temporary files, and the plan directory while hmo is still filling it, go when the script ends.
-tmp_now='' tmp_view='' plan_created=''
+tmp_now='' tmp_view='' run_json='' plan_created=''
 # shellcheck disable=SC2154  # rc is assigned inside the trap
-trap 'rc=$?; rm -f "$tmp_now" "$tmp_view"; [ "$rc" = 0 ] || [ -z "$plan_created" ] || rm -rf "$plan"' EXIT
+trap 'rc=$?; rm -f "$tmp_now" "$tmp_view" "$run_json"; [ "$rc" = 0 ] || [ -z "$plan_created" ] || rm -rf "$plan"' EXIT
 
 # ---------------------------------------------------------------------------------------------
 # Shared by both stages
@@ -232,7 +232,7 @@ hmo() {
   [ -z "$waivers" ] || gate_line="$gate_line $waivers"
 
   # The hosted run: the ci workflow's push to main, for this commit, finished, every job green.
-  local run_json run_sha run_status run_event run_workflow run_branch jobs red
+  local run_sha run_status run_event run_workflow run_branch jobs red
   run_json=$(mktemp) || exit 1
   gh run view "$run" --json headSha,status,conclusion,jobs,workflowName,event,headBranch >"$run_json" ||
     refuse "cannot read run $run"
@@ -259,7 +259,6 @@ hmo() {
   *) refuse "run $run: $red" ;;
   esac
   [ "$(json "$run_json" conclusion)" = success ] || refuse "run $run concluded $(json "$run_json" conclusion)"
-  rm -f "$run_json"
 
   # From here the plan directory exists; a refusal removes it so a retry starts clean.
   mkdir -p "$plan/dl" || exit 1
