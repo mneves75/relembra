@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { createRelembra, MemoryNotFoundError, type Principal } from "relembra";
+import { createRelembra, MemoryNotFoundError, type Principal, type StoredMemory } from "relembra";
+import { zoomSources } from "../src/cli/main.js";
+import { StoreBusyError } from "../src/errors.js";
 import { createMemoryStore } from "../src/testing/memory-store.js";
 import { OTHER_SCOPE, provenance, SCOPE } from "./support.js";
 
@@ -89,5 +91,35 @@ describe("zoom: one memory by id, as the principal may see it", () => {
     expect(await relembra.zoom("reader", { memoryId: summary.id })).toMatchObject({
       sources: [{ memoryId: source.id, revision: 1 }],
     });
+  });
+});
+
+describe("the CLI's zoom lists a summary's sources", () => {
+  const summary = {
+    status: "live",
+    sources: [
+      { memoryId: "seen", revision: 1 },
+      { memoryId: "hidden", revision: 2 },
+    ],
+  } as unknown as StoredMemory;
+  const seen = { id: "seen", status: "live" } as unknown as StoredMemory;
+
+  test("a source the principal may not see is listed as not visible", async () => {
+    const zoom = async (memoryId: string) => {
+      if (memoryId === "hidden") throw new MemoryNotFoundError();
+      return seen;
+    };
+    expect(await zoomSources(zoom, summary)).toEqual([
+      { memoryId: "seen", revision: 1, memory: seen },
+      { memoryId: "hidden", revision: 2, memory: null },
+    ]);
+  });
+
+  test("a store failure while reading a source is reported, never shown as not visible", async () => {
+    const zoom = async (memoryId: string) => {
+      if (memoryId === "hidden") throw new StoreBusyError(100, { cause: undefined });
+      return seen;
+    };
+    await expect(zoomSources(zoom, summary)).rejects.toBeInstanceOf(StoreBusyError);
   });
 });

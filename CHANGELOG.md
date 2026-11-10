@@ -13,6 +13,15 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `relembra supersede` on a summary is refused with the new code `summary-supersede` (exit 1); it
+  was reported as `internal` (exit 3).
+- A memory id holding a lone surrogate is refused as `invalid-argument` (`memory-id:ill-formed`);
+  over MCP it was an Internal error (`-32603`).
+- `relembra zoom` lists a summary's source as not visible only when the principal may not see it;
+  a store failure while reading one is now reported instead of hidden.
+- Opening a SQLite store reads the 20-byte header to check for WAL instead of the whole file,
+  which Node refused outright for a store of 2 GiB or more.
+- pi-durable: `memory_note`'s description states the 280-byte limit.
 - `relembra mcp` negotiates initialize-based versions 2025-11-25, 2025-06-18, 2025-03-26 and
   2024-11-05 alongside stateless 2026-07-28 requests, falling back to 2025-11-25 for unknown
   initialize versions. Fields and input-validation errors follow the selected revision;

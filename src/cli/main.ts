@@ -25,7 +25,7 @@ import {
 import { hostname } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { ImportError, PlanChangedError } from "../errors.js";
+import { ImportError, MemoryNotFoundError, PlanChangedError } from "../errors.js";
 import { guardText } from "../guard.js";
 import {
   LATEST_EVENT_FORMAT,
@@ -213,6 +213,26 @@ interface ZoomSource {
   readonly memory: StoredMemory | null;
 }
 
+/**
+ * The sources of a summary, each as `zoom` gives it. One this principal may not see is listed with
+ * no memory; any other failure (a busy store) is the command's failure.
+ */
+export async function zoomSources(
+  zoom: (memoryId: string) => Promise<StoredMemory>,
+  memory: StoredMemory,
+): Promise<ZoomSource[]> {
+  const sources: ZoomSource[] = [];
+  if (memory.status === "redacted") return sources;
+  for (const { memoryId, revision } of memory.sources ?? []) {
+    const source = await zoom(memoryId).catch((error: unknown) => {
+      if (error instanceof MemoryNotFoundError) return null;
+      throw error;
+    });
+    sources.push({ memoryId, revision, memory: source });
+  }
+  return sources;
+}
+
 function shellQuote(path: string): string {
   return /^[A-Za-z0-9_./-]+$/.test(path) ? path : `'${path.replaceAll("'", "'\\''")}'`;
 }
@@ -376,13 +396,7 @@ async function runStoreCommand(
     }
     case "zoom": {
       const memory = await relembra.zoom(null, { memoryId: first as string });
-      const sources: ZoomSource[] = [];
-      if (memory.status !== "redacted") {
-        for (const { memoryId, revision } of memory.sources ?? []) {
-          const source = await relembra.zoom(null, { memoryId }).catch(() => null);
-          sources.push({ memoryId, revision, memory: source });
-        }
-      }
+      const sources = await zoomSources((memoryId) => relembra.zoom(null, { memoryId }), memory);
       return { data: { memory, sources }, text: zoomText(memory, sources) };
     }
     case "retract": {

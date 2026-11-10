@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+} from "node:fs";
 import { dirname, win32 } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
@@ -355,9 +363,15 @@ function switchToWal(db: DatabaseSync, timeoutMs: number): void {
 }
 
 /** Whether the store file's header says WAL (bytes 18 and 19 are 2). A new, empty file does not. */
-function walInHeader(path: string): boolean {
-  const header = readFileSync(path).subarray(0, 20);
-  return header.length === 20 && header[18] === 2 && header[19] === 2;
+export function walInHeader(path: string): boolean {
+  // The header only: the file is the whole store, and every open comes through here.
+  const header = new Uint8Array(20);
+  const fd = openSync(path, "r");
+  try {
+    return readSync(fd, header, 0, 20, 0) === 20 && header[18] === 2 && header[19] === 2;
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /**

@@ -3,13 +3,22 @@
  * write and read back through a fresh file. Run with `bun run test:node`.
  */
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  ftruncateSync,
+  openSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, test } from "node:test";
 import { openSqliteStore, SchemaTooNewError } from "relembra/sqlite";
 import { createMemoryStore, storeConformanceCases } from "relembra/testing";
-import { createOwnerOnly, OWNER_MODES, openDatabase } from "../src/sqlite/database.js";
+import { createOwnerOnly, OWNER_MODES, openDatabase, walInHeader } from "../src/sqlite/database.js";
 import { MIGRATIONS } from "../src/sqlite/migrations.js";
 import { windowsSid, windowsTool } from "./platform-support.js";
 import { INTERLEAVINGS, openDuringUpgrade } from "./sqlite-race-support.js";
@@ -178,6 +187,32 @@ test("under node a store that stays torn is retried for the busy timeout, then r
     // Positive control: the whole file opens.
     writeFileSync(path, full);
     await openSqliteStore({ path, busyTimeoutMs: 300 }).close();
+  } finally {
+    dir.remove();
+  }
+});
+
+// A sparse file: instant on POSIX file systems. Windows would write every byte.
+test("the WAL check reads the header only, whatever the store's size", {
+  skip: process.platform === "win32",
+}, () => {
+  const dir = tempDir();
+  try {
+    const path = join(dir.path, "large.db");
+    const header = new Uint8Array(20);
+    header[18] = 2;
+    header[19] = 2;
+    const fd = openSync(path, "w");
+    try {
+      writeSync(fd, header);
+      // One byte past what Node reads into a single buffer.
+      ftruncateSync(fd, 2 ** 31);
+    } finally {
+      closeSync(fd);
+    }
+    assert.equal(walInHeader(path), true);
+    writeFileSync(join(dir.path, "empty.db"), "");
+    assert.equal(walInHeader(join(dir.path, "empty.db")), false);
   } finally {
     dir.remove();
   }

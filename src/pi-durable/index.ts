@@ -15,6 +15,7 @@ import type {
   ToolExecutionResult,
   ToolRegistration,
 } from "@earendil-works/pi-durable";
+import { MAX_MEMORY_BYTES } from "../guard.js";
 import type { Scope } from "../model.js";
 import { integrationOpId } from "../ops.js";
 import type { Carrier } from "../ports.js";
@@ -60,6 +61,7 @@ export const MEMORY_SECTION_KEY = "relembra_memory";
 /** What the memory section shows when the wake cannot be rendered: no memory text at all. */
 export const WAKE_UNAVAILABLE = '<wake unavailable="true"/>';
 
+/** The most an argument may hold before the guard reads it; the guard's own limit is far lower. */
 const MAX_TEXT = 4_000;
 const MAX_QUERY = 1_000;
 const MAX_LIMIT = 100;
@@ -92,7 +94,8 @@ export function createMemoryExtension<Context>(
   const note: ToolRegistration = {
     name: "memory_note",
     description:
-      "Save one durable fact for later sessions: a decision, preference or lesson, as one line.",
+      "Save one durable fact for later sessions: a decision, preference or lesson, as one line " +
+      `of at most ${MAX_MEMORY_BYTES} bytes.`,
     parameters: {
       type: "object",
       required: ["text"],

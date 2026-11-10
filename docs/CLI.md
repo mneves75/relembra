@@ -199,6 +199,7 @@ is the library's host: it decides the scope and the principal, never the agent c
 | `scope-denied` | 1 | The principal lacks an access right | `read`, `write`, `pin`, `own` |
 | `not-found` | 1 | No memory this principal may see has the id, including one in another scope | |
 | `memory-state` | 1 | The memory's status refuses the operation | `retracted`, `superseded`, `redacted` |
+| `summary-supersede` | 1 | `supersede` named a summary: retract it and submit a new one | |
 | `op-conflict` | 1 | The op id was used for a different payload | |
 | `budget` | 1 | `--budget` cannot hold the rendering's frame | |
 | `source-changed` | 1 | A summary source is no longer at the given revision | |

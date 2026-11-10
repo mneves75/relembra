@@ -178,6 +178,11 @@ describe("every command, end to end against the compiled binary", () => {
     refused(box, ["supersede", ids.cache as string, "Again."], 1, "memory-state");
   });
 
+  cliTest("superseding a summary is a refusal, not a store error", () => {
+    refused(box, ["supersede", ids.summary as string, "A new summary."], 1, "summary-supersede");
+    expect(ok(box, ["zoom", ids.summary as string]).memory.status).toBe("live");
+  });
+
   cliTest("retract hides a memory from agents and keeps it in the owner view", () => {
     expect(ok(box, ["retract", ids.migrations as string])).toEqual({ memoryId: ids.migrations });
     expect(ok(box, ["find", "migrations"]).results).toEqual([]);
