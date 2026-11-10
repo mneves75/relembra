@@ -24,8 +24,8 @@
 # can be undone, and a failure prints the commands that undo it; after it, a failure is reported
 # and nothing is undone, because a published release is immutable.
 #
-# Needs bash 3.2 or later, git, gh (signed in), bun and node, curl, openssl, and sha256sum
-# and sha1sum or shasum. Exit codes: 0 done, 1 refused or failed (the reason on stderr), 2 usage.
+# Needs bash 3.2 or later, git, gh (signed in), bun and node, curl, tar (for
+# scripts/stage-release.ts), openssl, and sha256sum and sha1sum or shasum. Exit codes: 0 done, 1 refused or failed (the reason on stderr), 2 usage.
 # RELEMBRA_DEPLOY_POLL (seconds between polls, default 20) and RELEMBRA_DEPLOY_TIMEOUT (seconds to
 # wait for a workflow run, default 1200) exist for the tests.
 #
