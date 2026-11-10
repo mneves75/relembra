@@ -7,6 +7,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The landing page is rebuilt as a measuring instrument: dark only, the live note line with a byte
+  ruler in the first viewport, the scope, wake-budget and erasure demos in one row, one proof table,
+  Instrument Sans and Martian Mono self-hosted (`PRODUCT.md`, `DESIGN.md`).
 - `.claude/settings.json` (new) makes two contributor rules code for agents: the retired OptMem checkout is never
   read, and merging a pull request asks first. A Stop hook runs `typecheck`, `lint` and `bun test` (Postgres
   skipped) when the tree changed since the last green run.
