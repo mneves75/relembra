@@ -102,8 +102,8 @@ describe("the benchmark store", () => {
     expect(a.bytes).toBeGreaterThan(0);
     // Only the database file remains once the store is closed.
     expect(readdirSync(join(scratch, "a"))).toEqual(["relembra.db"]);
-    // Three builds outlast bun's 5 s default on a loaded machine.
-  }, 60_000);
+    // Three builds outlast bun's 5 s default on a loaded machine, and a minute on hosted Windows.
+  }, process.platform === "win32" ? 180_000 : 60_000);
 });
 
 test("ticket 19's budget is judged only on 20,000 memories from the pinned seed", () => {
