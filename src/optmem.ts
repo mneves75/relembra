@@ -26,7 +26,6 @@ import {
   owns,
   trustCeiling,
 } from "./relembra.js";
-import { MAX_SCOPE_BYTES, utf8Bytes } from "./render.js";
 import {
   type ImportRefusal,
   type ImportReport,
@@ -95,9 +94,6 @@ export async function importOptmem(
   checkPrincipal(principal);
   if (!owns(principal, scope)) throw new ScopeDeniedError("own");
   if (!principal.writable.includes(scope)) throw new ScopeDeniedError("write");
-  if (typeof scope !== "string" || scope === "" || utf8Bytes(scope) > MAX_SCOPE_BYTES) {
-    throw new RangeError(`a scope must be 1 to ${MAX_SCOPE_BYTES} UTF-8 bytes`);
-  }
   checkName("scope", scope);
   if (typeof name !== "string" || !STORE_NAME.test(name)) {
     throw new RangeError("an OptMem store name is 1 to 64 letters, digits, '.', '_' or '-'");
