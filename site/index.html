@@ -3,461 +3,299 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-uI7ygUolJBvK8iUlKUECkvx+zUYBXgcm9nRQfxjmedk='; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-8Ag6yEkTKwnJUwjFj0Gj/4ooYgCrV7JNd4DU4LE3oX0='; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
-<meta name="color-scheme" content="light dark">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#101418">
 <title>relembra: seu agente de IA com memória</title>
 <meta name="description" content="relembra é a memória que todos os seus agentes de IA leem ao começar a sessão: um fato por linha, separado por projeto, apagável de verdade e medido. Código MIT, zero dependências.">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="preload" href="assets/fonts/stack-sans-headline-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="assets/fonts/stack-sans-text-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/instrument-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/martian-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="assets/site.css">
-<script>(function(){var d=document.documentElement,l=null,t=null,m=null;d.classList.add("js");try{l=localStorage.getItem("relembra-lang");t=localStorage.getItem("relembra-theme");m=localStorage.getItem("relembra-motion")}catch(e){}try{var q=new URLSearchParams(location.search).get("lang");if(q==="en"||q==="pt-BR")l=q}catch(e){}if(l!=="en"&&l!=="pt-BR"){l=/^pt\b/i.test(navigator.language||"")?"pt-BR":"en"}d.lang=l;if(t!=="dark"&&t!=="light"){t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}d.setAttribute("data-theme",t);if(m!=="full"&&m!=="reduced"){m=matchMedia("(prefers-reduced-motion: reduce)").matches?"reduced":"full"}d.setAttribute("data-motion",m)})();</script>
+<script>(function(){var d=document.documentElement,l=null;d.classList.add("js");try{l=localStorage.getItem("relembra-lang")}catch(e){}try{var q=new URLSearchParams(location.search).get("lang");if(q==="en"||q==="pt-BR")l=q}catch(e){}if(l!=="en"&&l!=="pt-BR"){l=/^pt\b/i.test(navigator.language||"")?"pt-BR":"en"}d.lang=l})();</script>
 <script defer src="assets/relembra.js"></script>
 <script defer src="assets/site.js"></script>
 </head>
 <body>
 <a class="skip" href="#main"><span lang="pt-BR">Pular para o conteúdo</span><span lang="en">Skip to content</span></a>
 
-<header class="bar on-ground" id="top">
-  <a class="bar__mark" href="#top"><span class="chev" aria-hidden="true"></span>relembra</a>
-  <nav class="bar__nav" aria-label="Seções" data-label-pt="Seções" data-label-en="Sections">
-    <a class="link" href="#explica"><span lang="pt-BR">Como funciona</span><span lang="en">How it works</span></a>
-    <a class="link" href="#ao-vivo"><span lang="pt-BR">Ao vivo</span><span lang="en">Live</span></a>
-    <a class="link" href="#numeros"><span lang="pt-BR">Números</span><span lang="en">Numbers</span></a>
-    <a class="link" href="#perguntas"><span lang="pt-BR">Perguntas</span><span lang="en">FAQ</span></a>
-  </nav>
-  <div class="bar__tools">
-    <div class="seg" role="group" aria-label="Idioma" data-label-pt="Idioma" data-label-en="Language">
-      <button type="button" data-set-lang="pt-BR" aria-pressed="true">PT</button>
-      <button type="button" data-set-lang="en" aria-pressed="false">EN</button>
+<header class="bar" id="top">
+  <div class="wrap bar__in">
+    <a class="bar__mark" href="#top" aria-label="relembra"><span class="bar__ticks" aria-hidden="true"></span>relembra</a>
+    <div class="bar__tools">
+      <div class="seg" role="group" aria-label="Idioma" data-label-pt="Idioma" data-label-en="Language">
+        <button type="button" data-set-lang="pt-BR" aria-pressed="true">PT</button>
+        <button type="button" data-set-lang="en" aria-pressed="false">EN</button>
+      </div>
+      <a class="bar__link" href="https://github.com/mneves75/relembra" rel="noopener">GitHub</a>
+      <a class="btn btn--primary" href="#instalar"><span lang="pt-BR">Instalar</span><span lang="en">Install</span></a>
     </div>
-    <button class="tog" type="button" id="theme" aria-pressed="false"><span lang="pt-BR">Escuro</span><span lang="en">Dark</span></button>
-    <button class="tog bar__motion" type="button" data-motion-toggle aria-pressed="false"><span lang="pt-BR">Movimento</span><span lang="en">Motion</span></button>
-    <span class="cutwrap bar__cta"><a class="btn btn--small" href="#teste"><span lang="pt-BR">Testar agora</span><span lang="en">Try it now</span></a></span>
   </div>
 </header>
 
 <main id="main">
 
-<section class="hero on-ground" aria-labelledby="hero-title">
-  <h1 class="hero__title" id="hero-title">
-    <span class="ml"><span class="ml__in"><span lang="pt-BR">Seu agente tem</span><span lang="en">Stop paying the</span></span></span>
-    <span class="ml ml--mark"><span class="ml__in"><span class="mark"><span lang="pt-BR">memória de peixe.</span><span lang="en">amnesia tax.</span><span class="mark__bar" aria-hidden="true"><span lang="pt-BR">memória de peixe.</span><span lang="en">amnesia tax.</span></span></span></span></span>
-  </h1>
-  <div class="hero__foot">
-    <p class="hero__lead"><span lang="pt-BR">O relembra é o caderno que todos os seus agentes de IA leem ao acordar: um fato por linha, separado por projeto, e apagável de verdade.</span><span lang="en">relembra is one memory every AI agent you run reads at startup: one fact per line, scoped per project, erasable for real.</span></p>
-    <span class="cutwrap hero__cta"><a class="btn" href="#teste"><span lang="pt-BR">Testar agora</span><span lang="en">Try it now</span></a></span>
-  </div>
-</section>
+<section class="hero" id="teste" aria-labelledby="hero-title">
+  <div class="wrap">
+    <h1 class="hero__title" id="hero-title"><span lang="pt-BR">A memória que todos os seus agentes de IA leem ao começar a sessão, um fato medido por linha.</span><span lang="en">One memory every AI agent on your machine reads at session start, one measured fact per line.</span></h1>
 
-<section class="try on-deep" id="teste" aria-labelledby="try-title">
-  <h2 class="try__title" id="try-title" data-reveal><span lang="pt-BR">Anota aqui. Roda de verdade.</span><span lang="en">Type a fact. It runs for real.</span></h2>
-  <div class="try__line" data-ui data-reveal data-d="1">
-    <label class="sr-only" for="fact"><span lang="pt-BR">Um fato pro seu agente lembrar</span><span lang="en">A fact for your agent to remember</span></label>
-    <textarea class="try__input" id="fact" rows="2" autocomplete="off" spellcheck="false" aria-describedby="try-verdict try-bytes">Os testes precisam de TZ=UTC</textarea>
-  </div>
-  <div class="try__grid">
-    <div class="try__answer" data-ui data-reveal data-d="2">
-      <p class="verdict" id="try-verdict" aria-live="polite"><span class="chip chip--ok" data-verdict><span lang="pt-BR">A guarda aceita</span><span lang="en">The guard accepts it</span></span></p>
-      <p class="bytes" id="try-bytes"><span class="num" data-bytes>28</span> <span class="num">/ 280 bytes</span></p>
-      <div class="meter" aria-hidden="true"><span class="meter__fill" data-meter></span></div>
-      <pre class="term term--line" data-rendered tabindex="0" aria-label="Memória renderizada" data-label-pt="Memória renderizada" data-label-en="Rendered memory"><code>&lt;memory id="…" scope="projeto-a" rev="1" at="…" trust="agent"&gt;Os testes precisam de TZ=UTC&lt;/memory&gt;</code></pre>
-      <div class="try__save">
-        <span class="cutwrap"><button class="btn" type="button" id="try-save"><span lang="pt-BR">Guardar no projeto A</span><span lang="en">Save to project A</span></button></span>
-        <p class="try__saved" data-saved role="status"></p>
+    <div class="inst" data-inst>
+      <label class="inst__label" for="fact"><span lang="pt-BR">Anote um fato</span><span lang="en">Note a fact</span></label>
+      <textarea class="inst__input" id="fact" rows="2" autocomplete="off" spellcheck="false" aria-describedby="try-bytes try-verdict">Os testes precisam de TZ=UTC</textarea>
+      <div class="ruler" data-ruler aria-hidden="true">
+        <span class="ruler__fill" data-ruler-fill></span>
       </div>
-    </div>
-    <div class="try__side">
-      <div class="try__examples" role="group" aria-label="Exemplos" data-label-pt="Exemplos" data-label-en="Examples" data-reveal data-d="3">
-        <button class="example" type="button" data-example="ok"><span lang="pt-BR">O Redis local escuta na 6380, não na 6379</span><span lang="en">Local Redis listens on 6380, not 6379</span></button>
-        <button class="example" type="button" data-example="secret"><span lang="pt-BR">Uma senha colada sem querer</span><span lang="en">A password pasted by accident</span></button>
-        <button class="example" type="button" data-example="invisible"><span lang="pt-BR">Uma frase com um caractere invisível</span><span lang="en">A sentence hiding an invisible character</span></button>
+      <div class="ruler__scale" aria-hidden="true"><span>0</span><span>70</span><span>140</span><span>210</span><span>280</span></div>
+      <div class="inst__read">
+        <p class="inst__bytes" id="try-bytes"><span class="num" data-bytes>28</span><span class="num"> / 280 bytes</span></p>
+        <p class="inst__verdict" id="try-verdict" aria-live="polite"><span lang="pt-BR">A guarda aceita</span><span lang="en">The guard accepts it</span></p>
       </div>
-      <p class="try__why" data-reveal data-d="4"><span lang="pt-BR">Por que uma linha só? Porque se não cabe num tweet, não é fato: é redação. São 280 bytes, não letras, então acento conta dois.</span><span lang="en">Why one line? If it doesn't fit in a tweet, it's not a fact. It's an essay. The limit is 280 bytes, not letters, so accents count double.</span></p>
+      <pre class="inst__line" data-rendered tabindex="0" aria-label="Linha que o agente lê" data-label-pt="Linha que o agente lê" data-label-en="The line the agent reads"><code>&lt;memory id="…" scope="projeto-a" rev="1" at="…" trust="agent"&gt;Os testes precisam de TZ=UTC&lt;/memory&gt;</code></pre>
+      <div class="inst__acts">
+        <button class="btn btn--primary" type="button" id="try-save"><span lang="pt-BR">Guardar no projeto A</span><span lang="en">Save to project A</span></button>
+        <div class="inst__examples" role="group" aria-label="Exemplos" data-label-pt="Exemplos" data-label-en="Examples">
+          <button class="btn" type="button" data-example="ok"><span lang="pt-BR">Um fato</span><span lang="en">A fact</span></button>
+          <button class="btn" type="button" data-example="secret"><span lang="pt-BR">Uma senha colada</span><span lang="en">A pasted password</span></button>
+          <button class="btn" type="button" data-example="invisible"><span lang="pt-BR">Um caractere invisível</span><span lang="en">An invisible character</span></button>
+        </div>
+      </div>
+      <p class="inst__saved" data-saved role="status"></p>
     </div>
   </div>
 </section>
 
-<section class="live on-ground" id="ao-vivo" aria-labelledby="live-title">
-  <div class="live__col">
-    <h2 class="live__title" id="live-title" data-reveal><span lang="pt-BR">Segunda você conta. Terça ele sabe.</span><span lang="en">Tell it Monday. It knows Tuesday.</span></h2>
-    <p class="live__pain" data-reveal data-d="1"><span lang="pt-BR">Hoje é assim: toda sessão nova, você explica de novo que a migração roda com <code>bun run migrate</code>, que os testes precisam de <code>TZ=UTC</code>, que deploy de sexta só depois das 14h. O agente faz direitinho. Amanhã, esquece tudo. Não é falta de inteligência. É falta de caderno.</span><span lang="en">Here's the tax. Every new session you re-explain migrations, ports, test flags and deploy rules. If that costs five minutes a session and you open three sessions a day, that's 75 minutes a week. Every week. relembra charges it once.</span></p>
-    <ol class="calls">
-      <li class="call" data-reveal>
-        <p class="call__say"><span lang="pt-BR">Primeiro, instale e ligue o gancho.</span><span lang="en">First, install it and wire the hook.</span></p>
-        <div class="call__in">
-          <pre class="term" tabindex="0"><code data-copy-source>sh install.sh relembra-darwin-arm64 SHA256SUMS
-relembra init</code></pre>
-          <button class="copy" type="button" data-copy><span lang="pt-BR">Copiar</span><span lang="en">Copy</span></button>
-        </div>
-        <div class="call__out" data-ui>
-          <pre class="term term--out" tabindex="0"><code>{
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "startup|resume|clear|compact|fork",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/usr/bin/env -i … /path/to/relembra hook"
-          }
-        ]
-      }
-    ]
-  }
-}</code></pre>
-          <p class="call__where"><span lang="pt-BR">Cole em <code>.claude/settings.json</code> ou <code>.codex/hooks.json</code>.</span><span lang="en">Paste into <code>.claude/settings.json</code> or <code>.codex/hooks.json</code>.</span></p>
-        </div>
-      </li>
-      <li class="call" data-reveal>
-        <p class="call__say"><span lang="pt-BR">Depois, deixe o agente anotar.</span><span lang="en">Then let your agent take notes.</span></p>
-        <div class="call__in">
-          <pre class="term" tabindex="0"><code lang="pt-BR" data-copy-source>relembra note "As migrações rodam com bun run migrate, nunca na mão."</code><code lang="en" data-copy-source>relembra note "Migrations run with bun run migrate, never by hand."</code></pre>
-          <button class="copy" type="button" data-copy><span lang="pt-BR">Copiar</span><span lang="en">Copy</span></button>
-        </div>
-        <div class="call__out" data-ui>
-          <pre class="term term--out" tabindex="0"><code data-noted-id>5349d07d-13f7-4c6e-a9f9-d1f6a5af74dc</code></pre>
-        </div>
-      </li>
-      <li class="call call--wide" data-reveal>
-        <p class="call__say"><span lang="pt-BR">Na sessão seguinte, ele acorda sabendo.</span><span lang="en">Next session, it wakes up knowing.</span></p>
-        <div class="session" data-ui id="session">
-          <div class="session__bar">
-            <span class="session__when"><span lang="pt-BR">terça, 09:12, sessão nova</span><span lang="en">Tuesday 09:12, new session</span></span>
-            <button class="session__replay" type="button" data-replay><span lang="pt-BR">Ver de novo</span><span lang="en">Replay</span></button>
+<section class="sec" id="como" aria-labelledby="how-title">
+  <div class="wrap">
+    <h2 class="sec__title" id="how-title"><span lang="pt-BR">Como funciona</span><span lang="en">How it works</span></h2>
+    <div class="trio">
+
+      <article class="panel" id="gavetas" aria-labelledby="scope-title">
+        <h3 class="panel__title" id="scope-title"><span lang="pt-BR">Cada projeto, sua gaveta</span><span lang="en">Every project gets a drawer</span></h3>
+        <p class="panel__text"><span lang="pt-BR">O host define as gavetas e entrega as chaves; o modelo nunca escolhe onde lê. O filtro vem antes da busca: o que está fora do escopo nem entra no ranking.</span><span lang="en">Your host defines the drawers and hands out the keys; the model never picks where it reads. Filtering comes before ranking: out-of-scope memories never enter the score.</span></p>
+        <div class="demo" data-ui>
+          <div class="seg seg--wide" role="group" aria-label="Quem pergunta" data-label-pt="Quem pergunta" data-label-en="Who is asking">
+            <button type="button" data-who="a" aria-pressed="true"><span lang="pt-BR">Agente A</span><span lang="en">Agent A</span></button>
+            <button type="button" data-who="b" aria-pressed="false"><span lang="pt-BR">Agente B</span><span lang="en">Agent B</span></button>
           </div>
-          <ol class="session__body" data-session>
-            <li class="sl sl--sys"><code class="raw">SessionStart: relembra hook</code></li>
-            <li class="sl sl--wake"><code>&lt;wake&gt;
+          <label class="field"><span class="field__label"><span lang="pt-BR">Buscar</span><span lang="en">Search</span></span><input class="field__input" type="search" data-find maxlength="1000" autocomplete="off" spellcheck="false" value="deploy"></label>
+          <ul class="drawers" data-drawers></ul>
+          <p class="demo__out" data-find-out aria-live="polite"></p>
+          <button class="btn" type="button" data-peek><span lang="pt-BR">Tentar a gaveta do outro</span><span lang="en">Try the other drawer</span></button>
+        </div>
+      </article>
+
+      <article class="panel" id="bilhete" aria-labelledby="wake-title">
+        <h3 class="panel__title" id="wake-title"><span lang="pt-BR">Um orçamento de bytes por sessão</span><span lang="en">A byte budget per session</span></h3>
+        <p class="panel__text"><span lang="pt-BR">O wake é o bloco com que a sessão começa, dentro de um orçamento de bytes com moldura (9.500 por padrão). Primeiro as fixadas, depois as recentes, os resumos e um índice de ids; o que não cabe fica de fora, e nunca estoura.</span><span lang="en">Wake is the block a session starts with, inside a byte budget, frame included (9,500 by default). Pinned first, then recent memories, summaries and an index of ids; whatever doesn't fit is left out, and it never overflows.</span></p>
+        <div class="demo" data-ui>
+          <div class="budget">
+            <label class="budget__label" for="budget"><span lang="pt-BR">Orçamento</span><span lang="en">Budget</span></label>
+            <output class="num budget__out" for="budget" data-budget-out>600 bytes</output>
+            <input class="budget__range" type="range" id="budget" min="120" max="1800" step="20" value="600" data-budget>
+          </div>
+          <div class="gauge" aria-hidden="true"><span class="gauge__fill" data-wakebar></span></div>
+          <p class="demo__out" data-wake-sum aria-live="polite"></p>
+          <ol class="wakelist" data-wakelist></ol>
+        </div>
+      </article>
+
+      <article class="panel" id="apagar" aria-labelledby="erase-title">
+        <h3 class="panel__title" id="erase-title"><span lang="pt-BR">Apagar de verdade</span><span lang="en">Erase for real</span></h3>
+        <p class="panel__text"><span lang="pt-BR">Retirar esconde dos agentes; tarjar troca o texto por uma lápide em todo lugar, resumos e cópias promovidas incluídos, e limpa o WAL do SQLite. Quem já recebeu o texto fica pendente, e o relembra nunca diz “apagado”.</span><span lang="en">Retract hides it from agents; redact replaces the text with a tombstone everywhere, summaries and promoted copies included, then scrubs the SQLite WAL. Whoever already received the text stays pending, and relembra never says “erased”.</span></p>
+        <div class="demo" data-ui>
+          <ul class="erase" data-erase></ul>
+          <ul class="carriers" data-carriers aria-label="Portadores" data-label-pt="Portadores" data-label-en="Carriers"></ul>
+          <div class="demo__acts">
+            <button class="btn" type="button" data-erase-act="retract"><span lang="pt-BR">Retirar</span><span lang="en">Retract</span></button>
+            <button class="btn" type="button" data-erase-act="redact"><span lang="pt-BR">Tarjar</span><span lang="en">Redact</span></button>
+            <button class="btn" type="button" data-erase-act="deliver"><span lang="pt-BR">Avisar portadores</span><span lang="en">Notify carriers</span></button>
+            <button class="btn" type="button" data-erase-act="reset"><span lang="pt-BR">Recomeçar</span><span lang="en">Start over</span></button>
+          </div>
+          <p class="demo__out" data-erase-out aria-live="polite"></p>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="instalar" aria-labelledby="install-title">
+  <div class="wrap split">
+    <div class="split__main">
+      <h2 class="sec__title" id="install-title"><span lang="pt-BR">Instalar</span><span lang="en">Install</span></h2>
+      <ol class="steps">
+        <li class="step">
+          <p class="step__say"><span lang="pt-BR">O binário, verificado pelo checksum; <code>relembra init</code> imprime o gancho para <code>.claude/settings.json</code> ou <code>.codex/hooks.json</code>.</span><span lang="en">The binary, verified against its checksum; <code>relembra init</code> prints the hook for <code>.claude/settings.json</code> or <code>.codex/hooks.json</code>.</span></p>
+          <div class="cmd">
+            <pre class="cmd__code" tabindex="0"><code data-copy-source>sh install.sh relembra-darwin-arm64 SHA256SUMS
+relembra init</code></pre>
+            <button class="btn cmd__copy" type="button" data-copy><span lang="pt-BR">Copiar</span><span lang="en">Copy</span></button>
+          </div>
+        </li>
+        <li class="step">
+          <p class="step__say"><span lang="pt-BR">O servidor MCP: registre este comando no seu cliente, aberto na pasta do projeto ou com <code>RELEMBRA_SCOPE</code>.</span><span lang="en">The MCP server: register this command with your client, started in the project's folder or with <code>RELEMBRA_SCOPE</code> set.</span></p>
+          <div class="cmd">
+            <pre class="cmd__code" tabindex="0"><code data-copy-source>relembra mcp</code></pre>
+            <button class="btn cmd__copy" type="button" data-copy><span lang="pt-BR">Copiar</span><span lang="en">Copy</span></button>
+          </div>
+        </li>
+        <li class="step">
+          <p class="step__say"><span lang="pt-BR">A biblioteca, para Node 24.14+ ou Bun 1.4+.</span><span lang="en">The library, for Node 24.14+ or Bun 1.4+.</span></p>
+          <div class="cmd">
+            <pre class="cmd__code" tabindex="0"><code data-copy-source>npm i relembra@beta</code></pre>
+            <button class="btn cmd__copy" type="button" data-copy><span lang="pt-BR">Copiar</span><span lang="en">Copy</span></button>
+          </div>
+        </li>
+      </ol>
+      <p class="version"><span lang="pt-BR">Versão 1.0.0-beta.5. CLI para macOS arm64, Linux e Windows em x64 e arm64.</span><span lang="en">Version 1.0.0-beta.5. CLI for macOS arm64, Linux and Windows on x64 and arm64.</span></p>
+    </div>
+
+    <div class="split__side">
+      <h3 class="panel__title" id="session-title"><span lang="pt-BR">Segunda você conta. Terça ele sabe.</span><span lang="en">Tell it Monday. It knows Tuesday.</span></h3>
+      <div class="cmd">
+        <pre class="cmd__code" tabindex="0"><code lang="pt-BR" data-copy-source>relembra note "As migrações rodam com bun run migrate, nunca na mão."</code><code lang="en" data-copy-source>relembra note "Migrations run with bun run migrate, never by hand."</code></pre>
+        <button class="btn cmd__copy" type="button" data-copy><span lang="pt-BR">Copiar</span><span lang="en">Copy</span></button>
+      </div>
+      <pre class="cmd__out" tabindex="0" aria-label="Saída" data-label-pt="Saída" data-label-en="Output"><code data-noted-id>5349d07d-13f7-4c6e-a9f9-d1f6a5af74dc</code></pre>
+      <div class="session" data-ui aria-labelledby="session-title" role="group">
+        <p class="session__when"><span lang="pt-BR">terça, 09:12, sessão nova</span><span lang="en">Tuesday 09:12, new session</span></p>
+        <ol class="session__body">
+          <li class="sl sl--sys"><code>SessionStart: relembra hook</code></li>
+          <li class="sl sl--wake"><code>&lt;wake&gt;
 &lt;memory id="…" scope="projeto-a" rev="1" at="…" trust="owner"&gt;Nunca rode migração em produção sem backup.&lt;/memory&gt;
 &lt;memory id="…" scope="projeto-a" rev="1" at="…" trust="agent"&gt;As migrações rodam com bun run migrate, nunca na mão.&lt;/memory&gt;
 &lt;/wake&gt;</code></li>
-            <li class="sl sl--you"><span class="sl__who"><span lang="pt-BR">você</span><span lang="en">you</span></span><span lang="pt-BR">Roda as migrações pra mim?</span><span lang="en">Run the migrations for me?</span></li>
-            <li class="sl sl--agent"><span class="sl__who"><span lang="pt-BR">agente</span><span lang="en">agent</span></span><span lang="pt-BR">Antes, conferi o backup, como pede a regra fixada. Agora rodando <code>bun run migrate</code>, do jeito que está na memória do projeto, anotada na segunda.</span><span lang="en">Checked the backup first, per the pinned rule. Now running <code>bun run migrate</code>, exactly as the project memory says, noted Monday.</span></li>
-          </ol>
-        </div>
-      </li>
-    </ol>
+          <li class="sl"><span class="sl__who"><span lang="pt-BR">você</span><span lang="en">you</span></span><span lang="pt-BR">Roda as migrações pra mim?</span><span lang="en">Run the migrations for me?</span></li>
+          <li class="sl"><span class="sl__who"><span lang="pt-BR">agente</span><span lang="en">agent</span></span><span lang="pt-BR">Antes, conferi o backup, como pede a regra fixada. Agora rodando <code>bun run migrate</code>, do jeito que está na memória do projeto, anotada na segunda.</span><span lang="en">Checked the backup first, per the pinned rule. Now running <code>bun run migrate</code>, exactly as the project memory says, noted Monday.</span></li>
+        </ol>
+      </div>
+    </div>
   </div>
 </section>
 
-<section class="explain" id="explica" aria-labelledby="explain-title" data-depth="kid">
-  <div class="explain__head on-accent">
-    <h2 class="explain__title" id="explain-title" data-reveal><span lang="pt-BR">Explica como se eu tivesse 12 anos</span><span lang="en">Explain it like I'm 12</span></h2>
-    <p class="explain__lead" data-reveal data-d="1"><span lang="pt-BR">Sem jargão: cada ideia explicada como pra uma criança de dez anos. Se travar, a culpa é da explicação, não sua. Seis ideias, cada uma contada duas vezes, do jeito simples e do jeito técnico, e cada desenho ao lado roda a biblioteca de verdade.</span><span lang="en">No jargon. Every idea explained like you're ten. If it doesn't click, that's on the explanation, not you. Six ideas, each told twice: the simple way, then the engineer's way. Every panel next to them runs the real library.</span></p>
-    <div class="depth" role="group" aria-label="Nível da explicação" data-label-pt="Nível da explicação" data-label-en="Explanation level">
-      <button type="button" data-depth-set="kid" aria-pressed="true"><span lang="pt-BR">12 anos</span><span lang="en">Age 12</span></button>
-      <button type="button" data-depth-set="eng" aria-pressed="false"><span lang="pt-BR">Engenheiro</span><span lang="en">Engineer</span></button>
+<section class="sec" id="medido" aria-labelledby="proof-title">
+  <div class="wrap">
+    <h2 class="sec__title" id="proof-title"><span lang="pt-BR">Medido, não prometido</span><span lang="en">Measured, not promised</span></h2>
+    <div class="table-wrap">
+      <table class="proof">
+        <caption class="sr-only"><span lang="pt-BR">Resultados medidos em 31/10/2026</span><span lang="en">Results measured on 2026-10-31</span></caption>
+        <thead><tr><th scope="col"><span lang="pt-BR">O quê</span><span lang="en">What</span></th><th scope="col"><span lang="pt-BR">Como</span><span lang="en">How</span></th><th scope="col" class="proof__n"><span lang="pt-BR">Resultado</span><span lang="en">Result</span></th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><span lang="pt-BR">Vazamentos no eval</span><span lang="en">Leaks in the eval</span></th><td><span lang="pt-BR">conjunto sintético, lojas SQLite e em memória</span><span lang="en">synthetic set, SQLite and in-memory stores</span></td><td class="proof__n">0</td></tr>
+          <tr><th scope="row"><span lang="pt-BR">Negação de escopo</span><span lang="en">Scope denial</span></th><td><span lang="pt-BR">perguntas a escopos sem acesso</span><span lang="en">questions aimed at scopes without access</span></td><td class="proof__n">100%</td></tr>
+          <tr><th scope="row"><span lang="pt-BR">hit@5 e MRR</span><span lang="en">hit@5 and MRR</span></th><td><span lang="pt-BR">a resposta certa entre as cinco primeiras, e em que posição</span><span lang="en">the right answer in the top five, and at which rank</span></td><td class="proof__n"><span lang="pt-BR">1,00 e 1,00</span><span lang="en">1.00 and 1.00</span></td></tr>
+          <tr><th scope="row"><span lang="pt-BR">Controles negativos reprovados</span><span lang="en">Negative controls failed</span></th><td><span lang="pt-BR">vazio, vazador e 15 ocos</span><span lang="en">empty, leaky and 15 hollow</span></td><td class="proof__n"><span lang="pt-BR">17 de 17</span><span lang="en">17 of 17</span></td></tr>
+          <tr><th scope="row"><span lang="pt-BR">find a quente, p95, Bun</span><span lang="en">Warm find, p95, Bun</span></th><td><span lang="pt-BR">20.000 memórias, 500 buscas, máquina carregada</span><span lang="en">20,000 memories, 500 queries, loaded machine</span></td><td class="proof__n"><span lang="pt-BR">9,83 ms</span><span lang="en">9.83 ms</span></td></tr>
+          <tr><th scope="row"><span lang="pt-BR">find a quente, p95, Node</span><span lang="en">Warm find, p95, Node</span></th><td><span lang="pt-BR">o mesmo corpus no Node 26</span><span lang="en">the same corpus on Node 26</span></td><td class="proof__n"><span lang="pt-BR">42,1 ms</span><span lang="en">42.1 ms</span></td></tr>
+          <tr><th scope="row"><span lang="pt-BR">Dependências em runtime</span><span lang="en">Runtime dependencies</span></th><td><span lang="pt-BR">o que o package.json pede para rodar</span><span lang="en">what package.json needs at run time</span></td><td class="proof__n">0</td></tr>
+        </tbody>
+        <tbody class="proof__cands">
+          <tr class="proof__group"><th scope="rowgroup" colspan="3"><span lang="pt-BR">Candidatos do eval: o relembra e o gabarito passam; os 17 controles têm de reprovar.</span><span lang="en">Eval candidates: relembra and the answer key pass; the 17 controls must fail.</span></th></tr>
+          <tr><th scope="row"><code>relembra-sqlite</code></th><td><span lang="pt-BR">O relembra de verdade, na loja SQLite.</span><span lang="en">The real relembra on the SQLite store.</span></td><td class="proof__n"><span class="stamp stamp--pass">PASS</span></td></tr>
+          <tr><th scope="row"><code>relembra-memory</code></th><td><span lang="pt-BR">O mesmo relembra, na loja em memória.</span><span lang="en">The same relembra on the in-memory store.</span></td><td class="proof__n"><span class="stamp stamp--pass">PASS</span></td></tr>
+          <tr><th scope="row"><code>perfect</code></th><td><span lang="pt-BR">O gabarito: responde exatamente o que deveria.</span><span lang="en">The answer key: returns exactly what it should.</span></td><td class="proof__n"><span class="stamp stamp--pass">PASS</span></td></tr>
+          <tr><th scope="row"><code>empty</code></th><td><span lang="pt-BR">Não guarda nada: nunca vaza, nunca acha.</span><span lang="en">Stores nothing: never leaks, never finds.</span></td><td class="proof__n"><span class="stamp">FAIL</span></td></tr>
+          <tr><th scope="row"><code>leaky</code></th><td><span lang="pt-BR">O gabarito com uma memória proibida em cada superfície.</span><span lang="en">The answer key with one forbidden memory on every surface.</span></td><td class="proof__n"><span class="stamp">FAIL</span></td></tr>
+          <tr><th scope="row"><code>hollow-empty-brief</code></th><td><span lang="pt-BR">Todo bilhete sai vazio.</span><span lang="en">Every brief comes back empty.</span></td><td class="proof__n"><span class="stamp">FAIL</span></td></tr>
+          <tr><th scope="row"><code>hollow-empty-text</code></th><td><span lang="pt-BR">O id certo com o texto vazio.</span><span lang="en">The right id with empty text.</span></td><td class="proof__n"><span class="stamp">FAIL</span></td></tr>
+          <tr><th scope="row"><code>hollow-wrong-text</code></th><td><span lang="pt-BR">Troca dígitos ou acrescenta uma palavra.</span><span lang="en">Changes digits or adds a word.</span></td><td class="proof__n"><span class="stamp">FAIL</span></td></tr>
+          <tr><th scope="row"><code>hollow-wrong-scope</code></th><td><span lang="pt-BR">Um escopo que ninguém pode ler.</span><span lang="en">A scope nobody can read.</span></td><td class="proof__n"><span class="stamp">FAIL</span></td></tr>
+          <tr><th scope="row"><code>hollow-duplicate-conflict</code></th><td><span lang="pt-BR">O mesmo id com o texto falsificado.</span><span lang="en">The same id with forged text.</span></td><td class="proof__n"><span class="stamp">FAIL</span></td></tr>
+          <tr><th scope="row"><code>hollow-indented-conflict</code></th><td><span lang="pt-BR">A mesma falsificação, recuada um espaço.</span><span lang="en">The same forgery, indented one space.</span></td><td class="proof__n"><span class="stamp">FAIL</span></td></tr>
+          <tr><th scope="row"><code>hollow-index-text</code></th><td><span lang="pt-BR">O texto escondido numa linha de índice.</span><span lang="en">The text hidden in an index line.</span></td><td class="proof__n"><span class="stamp">FAIL</span></td></tr>
+          <tr><th scope="row"><code>hollow-wrapped-text</code></th><td><span lang="pt-BR">O texto quebrado em duas linhas.</span><span lang="en">The text wrapped onto two lines.</span></td><td class="proof__n"><span class="stamp">FAIL</span></td></tr>
+          <tr><th scope="row"><code>hollow-encoded-duplicate</code></th><td><span lang="pt-BR">Tags escapadas e um corpo falso.</span><span lang="en">Escaped tags and a false body.</span></td><td class="proof__n"><span class="stamp">FAIL</span></td></tr>
+          <tr><th scope="row"><code>hollow-extra-raw</code></th><td><span lang="pt-BR">Uma memória que o agente não pode ler, no primeiro resultado.</span><span lang="en">A memory the agent cannot read, in the first result.</span></td><td class="proof__n"><span class="stamp">FAIL</span></td></tr>
+          <tr><th scope="row"><code>hollow-extra-wrapped</code></th><td><span lang="pt-BR">O mesmo vazamento, em duas linhas.</span><span lang="en">The same leak, on two lines.</span></td><td class="proof__n"><span class="stamp">FAIL</span></td></tr>
+          <tr><th scope="row"><code>hollow-appended-raw</code></th><td><span lang="pt-BR">O texto proibido colado no fim do primeiro resultado.</span><span lang="en">The forbidden text appended to the first result.</span></td><td class="proof__n"><span class="stamp">FAIL</span></td></tr>
+          <tr><th scope="row"><code>hollow-appended-wrapped</code></th><td><span lang="pt-BR">O mesmo, em duas linhas.</span><span lang="en">The same, on two lines.</span></td><td class="proof__n"><span class="stamp">FAIL</span></td></tr>
+          <tr><th scope="row"><code>hollow-error-raw</code></th><td><span lang="pt-BR">Um erro interno cuja mensagem é o texto proibido.</span><span lang="en">An internal error whose message is the forbidden text.</span></td><td class="proof__n"><span class="stamp">FAIL</span></td></tr>
+          <tr><th scope="row"><code>hollow-error-wrapped</code></th><td><span lang="pt-BR">O mesmo erro, em duas linhas.</span><span lang="en">The same error, on two lines.</span></td><td class="proof__n"><span class="stamp">FAIL</span></td></tr>
+        </tbody>
+      </table>
     </div>
-    <figure class="film" data-reveal data-d="2">
-      <video class="film__video" controls preload="none" playsinline poster="assets/video/poster.jpg" width="1280" height="720" aria-labelledby="film-cap">
+    <p class="source"><span lang="pt-BR">Medido em 31/10/2026 num Apple M5 Pro de 18 núcleos, com Bun 1.4.4 e Node 26.12.1. Sem juiz LLM. Fonte: <code>docs/eval</code> e <code>docs/bench</code> do repositório.</span><span lang="en">Measured on 2026-10-31 on an 18-core Apple M5 Pro, Bun 1.4.4 and Node 26.12.1. No LLM judge. Source: the repository's <code>docs/eval</code> and <code>docs/bench</code>.</span></p>
+  </div>
+</section>
+
+<section class="sec" id="caixa" aria-labelledby="ships-title">
+  <div class="wrap split split--even">
+    <div class="split__main">
+      <h2 class="sec__title" id="ships-title"><span lang="pt-BR">O que vem e onde roda</span><span lang="en">What ships and where it runs</span></h2>
+      <dl class="facts">
+        <div class="facts__row"><dt><span lang="pt-BR">Memória</span><span lang="en">Memory</span></dt><dd><span lang="pt-BR">Uma linha de até 280 bytes UTF-8 com proveniência: agente, harness, modelo, host, fonte, confiança e op id. A guarda tem 10 regras e nunca repete o texto recusado.</span><span lang="en">One line, at most 280 UTF-8 bytes, with provenance: agent, harness, model, host, source, trust and op id. The guard has 10 rules and never echoes refused text.</span></dd></div>
+        <div class="facts__row"><dt><span lang="pt-BR">Biblioteca</span><span lang="en">Library</span></dt><dd><span lang="pt-BR"><code>note</code>, <code>find</code>, <code>wake</code>, <code>brief</code>, <code>recall</code>, <code>zoom</code> em TypeScript; retirar, tarjar, superar e promover com prévia; retenção por escopo, que o host agenda; <code>deliverErasures</code> para os portadores.</span><span lang="en"><code>note</code>, <code>find</code>, <code>wake</code>, <code>brief</code>, <code>recall</code>, <code>zoom</code> in TypeScript; retract, redact, supersede and promote with preview; per-scope retention your host schedules; <code>deliverErasures</code> for carriers.</span></dd></div>
+        <div class="facts__row"><dt><span lang="pt-BR">Repetição</span><span lang="en">Retries</span></dt><dd><span lang="pt-BR">Repetir uma escrita com o mesmo op id devolve o resultado gravado; o mesmo op id com outro texto é recusado (<code>OpConflictError</code>).</span><span lang="en">Retrying a write with the same op id returns the recorded result; the same op id with other text is refused (<code>OpConflictError</code>).</span></dd></div>
+        <div class="facts__row"><dt><span lang="pt-BR">Dependências</span><span lang="en">Dependencies</span></dt><dd><span lang="pt-BR">Zero em runtime além do Node 24.14+ ou do Bun 1.4+; a loja padrão usa o <code>node:sqlite</code> que já vem no runtime.</span><span lang="en">None at runtime beyond Node 24.14+ or Bun 1.4+; the default store uses the <code>node:sqlite</code> your runtime ships.</span></dd></div>
+        <div class="facts__row"><dt><span lang="pt-BR">Lojas</span><span lang="en">Stores</span></dt><dd><span lang="pt-BR">SQLite em WAL com <code>synchronous=FULL</code> numa máquina; o seu cliente Postgres em várias, sem driver instalado; em memória, com a suíte de conformidade que as duas passam.</span><span lang="en">SQLite in WAL with <code>synchronous=FULL</code> on one machine; your own Postgres client across many, no driver installed; in-memory, with the conformance suite both pass.</span></dd></div>
+        <div class="facts__row"><dt>CLI</dt><dd><span lang="pt-BR">Um binário só, feito com Bun; o gancho de início de sessão serve ao Claude Code e ao Codex.</span><span lang="en">One binary, built with Bun; the session-start hook serves Claude Code and Codex.</span></dd></div>
+        <div class="facts__row"><dt>MCP</dt><dd><span lang="pt-BR"><code>relembra mcp</code> em stdio, revisão 2026-07-28, com <code>note</code>, <code>find</code>, <code>brief</code>, <code>wake</code> e <code>retract</code>. Escopo e principal vêm do ambiente, nunca de um argumento do modelo.</span><span lang="en"><code>relembra mcp</code> over stdio, revision 2026-07-28: <code>note</code>, <code>find</code>, <code>brief</code>, <code>wake</code>, <code>retract</code>. Scope and principal come from the environment, never from a model's argument.</span></dd></div>
+        <div class="facts__row"><dt><span lang="pt-BR">Prova</span><span lang="en">Proof</span></dt><dd><span lang="pt-BR">Harness de eval com 17 controles negativos e 1 positivo; benchmark de latência com 20.000 memórias; exportar e importar num formato documentado; pi-durable 1.4.0.</span><span lang="en">Eval harness with 17 negative controls and 1 positive; latency benchmark on 20,000 memories; export and import in a documented format; pi-durable 1.4.0.</span></dd></div>
+        <div class="facts__row"><dt><span lang="pt-BR">Filme</span><span lang="en">Film</span></dt><dd><span lang="pt-BR">8 minutos, narrado em português, com legendas em inglês.</span><span lang="en">8 minutes, narrated in Portuguese with English captions.</span></dd></div>
+        <div class="facts__row"><dt><span lang="pt-BR">Preço</span><span lang="en">Price</span></dt><dd><span lang="pt-BR">Licença MIT. R$ 0.</span><span lang="en">MIT licence. $0.</span></dd></div>
+      </dl>
+    </div>
+    <div class="split__side">
+      <video class="film" controls preload="none" playsinline poster="assets/video/poster.jpg" width="1280" height="720" aria-label="O filme do relembra, 8 minutos, narrado em português" data-label-pt="O filme do relembra, 8 minutos, narrado em português" data-label-en="The relembra film, 8 minutes, narrated in Portuguese with English captions">
         <source src="assets/video/relembra-explicacao.mp4" type="video/mp4">
         <track kind="subtitles" srclang="pt-BR" label="Português" src="assets/video/relembra-explicacao.pt-BR.vtt">
         <track kind="subtitles" srclang="en" label="English" src="assets/video/relembra-explicacao.en.vtt">
       </video>
-      <figcaption class="film__cap" id="film-cap"><span lang="pt-BR">O filme, em 8 minutos, narrado em português</span><span lang="en">The 8-minute film, narrated in Portuguese with English captions</span></figcaption>
-    </figure>
-  </div>
-
-  <article class="ch on-ground" id="ch-linha" aria-labelledby="ch1-title">
-    <div class="ch__text">
-      <h3 class="ch__title" id="ch1-title" data-reveal><span lang="pt-BR">Uma linha por fato</span><span lang="en">One line per fact</span></h3>
-      <p class="ch__kid"><span lang="pt-BR">Pensa num post-it. Cabe uma frase. Se você precisa de mais espaço, provavelmente são duas ideias, ou é fofoca. O relembra só guarda o que cabe no post-it, e cada post-it diz quem escreveu, quando e o quanto dá pra confiar.</span><span lang="en">Think sticky note. One sentence fits. Need more room? That's two ideas, or gossip. relembra keeps only what fits on the note, and every note says who wrote it, when, and how far to trust it.</span></p>
-      <p class="ch__eng"><span lang="pt-BR">Uma memória é uma linha de até 280 bytes UTF-8 com proveniência: agente, harness, modelo, host, fonte, confiança e op id. As revisões contam a partir de 1. A guarda recusa quebra de linha, caracteres invisíveis, bidi e de controle, e formatos de credencial, sem nunca repetir o texto recusado. Na saída, cada memória vira evidência atribuída, escapada para não forjar a moldura.</span><span lang="en">A memory is one line, at most 280 UTF-8 bytes, with provenance: agent, harness, model, host, source, trust and op id. Revisions count from 1. The guard refuses line breaks, invisible, bidi and control characters and credential shapes, and never echoes the refused text. On the way out, each memory renders as attributed evidence, escaped so it cannot forge its frame.</span></p>
     </div>
-    <figure class="stage" data-ui aria-labelledby="ch1-cap">
-      <figcaption class="stage__cap" id="ch1-cap"><span lang="pt-BR">A última memória do projeto A, desmontada</span><span lang="en">Project A's latest memory, taken apart</span></figcaption>
-      <div class="anatomy" data-anatomy role="group" aria-label="Partes da memória" data-label-pt="Partes da memória" data-label-en="Parts of the memory"></div>
-      <p class="anatomy__say" data-anatomy-say aria-live="polite"></p>
-      <div class="ruler" aria-hidden="true"><span class="ruler__fill" data-ruler></span></div>
-      <p class="ruler__label" data-ruler-label></p>
-    </figure>
-  </article>
-
-  <article class="ch on-deep" id="ch-gavetas" aria-labelledby="ch2-title">
-    <div class="ch__text">
-      <h3 class="ch__title" id="ch2-title" data-reveal><span lang="pt-BR">Cada projeto, sua gaveta</span><span lang="en">Every project gets a drawer</span></h3>
-      <p class="ch__kid"><span lang="pt-BR">Cada projeto tem uma gaveta com chave. O agente do Projeto A tem a chave da gaveta A e da gaveta comum. A gaveta B? Ele nem sabe que existe. E quem entrega as chaves é você, nunca o agente.</span><span lang="en">Each project gets a locked drawer. Project A's agent holds the key to drawer A and to the shared drawer. Drawer B? It doesn't know it exists. You hand out the keys. Never the agent.</span></p>
-      <p class="ch__eng"><span lang="pt-BR">Escopo é uma chave opaca que o host define. A política do host transforma o contexto autenticado num principal com os escopos que ele pode ler, escrever, fixar, promover e ser dono. O filtro vem antes da busca: o que está fora do escopo nem entra no ranking, e o modelo nunca escolhe onde lê. Na CLI, <code>RELEMBRA_GLOBAL_SCOPE</code> soma uma gaveta comum que toda sessão lê; as escritas ficam no projeto.</span><span lang="en">A scope is an opaque key your host defines. The host's policy turns its authenticated context into a principal with the scopes it may read, write, pin, promote and own. Filtering comes before ranking: out-of-scope memories never enter the score, and the model never picks where it reads. In the CLI, <code>RELEMBRA_GLOBAL_SCOPE</code> adds a shared drawer every session reads; writes stay in the project.</span></p>
-    </div>
-    <figure class="stage" data-ui aria-labelledby="ch2-cap">
-      <figcaption class="stage__cap" id="ch2-cap"><span lang="pt-BR">Três gavetas, dois agentes, uma busca de verdade</span><span lang="en">Three drawers, two agents, one real search</span></figcaption>
-      <div class="who seg" role="group" aria-label="Quem pergunta" data-label-pt="Quem pergunta" data-label-en="Who is asking">
-        <button type="button" data-who="a" aria-pressed="true"><span lang="pt-BR">Agente do Projeto A</span><span lang="en">Project A's agent</span></button>
-        <button type="button" data-who="b" aria-pressed="false"><span lang="pt-BR">Agente do Projeto B</span><span lang="en">Project B's agent</span></button>
-      </div>
-      <label class="search"><span class="sr-only"><span lang="pt-BR">Buscar nas gavetas</span><span lang="en">Search the drawers</span></span><input type="search" data-find maxlength="1000" autocomplete="off" spellcheck="false" value="deploy"></label>
-      <div class="drawers" data-drawers></div>
-      <p class="stage__out" data-find-out aria-live="polite"></p>
-      <button class="ghost" type="button" data-peek><span lang="pt-BR">Tentar abrir a gaveta do outro</span><span lang="en">Try the other project's drawer</span></button>
-    </figure>
-  </article>
-
-  <article class="ch on-soft" id="ch-bilhete" aria-labelledby="ch3-title">
-    <div class="ch__text">
-      <h3 class="ch__title" id="ch3-title" data-reveal><span lang="pt-BR">O bilhete da manhã</span><span lang="en">The morning briefing</span></h3>
-      <p class="ch__kid"><span lang="pt-BR">Todo dia o agente acorda zerado e recebe um bilhete. O bilhete tem tamanho fixo. Primeiro vai o que você fixou, depois o mais novo, depois os resumos. O que não cabe entra no rodapé só com o número dele, pra buscar depois; se nem isso cabe, fica de fora. Nunca estoura. Arrasta a régua e vê.</span><span lang="en">Every morning your agent wakes up blank and gets a note. The note has a fixed size. Pinned stuff first, then the newest, then the summaries. Whatever doesn't fit goes at the bottom as just its ID, to look up later; if even that won't fit, it's left out. It never overflows. Drag the slider.</span></p>
-      <p class="ch__eng"><span lang="pt-BR">O wake é o bloco com que a sessão começa, dentro de um orçamento de bytes UTF-8 com moldura (9.500 por padrão). Ordem: fixadas, recentes que nenhum resumo cobre, resumos, as memórias que eles cobrem e um índice de ids. Memória não-confiável vem depois de toda confiável. Na CLI, com escopo global, cada parte reserva metade do orçamento e passa à outra o que sobrar.</span><span lang="en">Wake is the block a session starts with, inside a UTF-8 byte budget, frame included (9,500 by default). Order: pinned, recent memories no summary covers, summaries, the memories they cover, then an index of ids. Untrusted memories come after every trusted one. In the CLI, with a global scope, each part reserves half the budget and hands the other whatever it leaves.</span></p>
-    </div>
-    <figure class="stage" data-ui aria-labelledby="ch3-cap">
-      <figcaption class="stage__cap" id="ch3-cap"><span lang="pt-BR">O wake do projeto A, montado agora</span><span lang="en">Project A's wake, composed right now</span></figcaption>
-      <div class="budget">
-        <label for="budget"><span lang="pt-BR">Tamanho do bilhete</span><span lang="en">Briefing size</span></label>
-        <input type="range" id="budget" min="120" max="1800" step="20" value="600" data-budget>
-        <output class="num" for="budget" data-budget-out>600 bytes</output>
-      </div>
-      <div class="wakebar" aria-hidden="true"><span class="wakebar__fill" data-wakebar></span></div>
-      <p class="stage__out" data-wake-sum aria-live="polite"></p>
-      <ol class="wakelist" data-wakelist></ol>
-    </figure>
-  </article>
-
-  <article class="ch on-ground" id="ch-tarja" aria-labelledby="ch4-title">
-    <div class="ch__text">
-      <h3 class="ch__title" id="ch4-title" data-reveal><span lang="pt-BR">Caneta preta de verdade</span><span lang="en">A real black marker</span></h3>
-      <p class="ch__kid"><span lang="pt-BR">Dois jeitos de sumir com uma anotação. Esconder: vai pra gaveta de baixo, só o dono vê. Tarjar: caneta preta por cima, inclusive nas cópias e nos resumos. E se alguém levou uma cópia pra casa, o relembra te entrega a lista de quem levou. Ele não finge que sumiu.</span><span lang="en">Two ways to make a note disappear. Hide it: bottom drawer, only the owner sees it. Redact it: black marker over it, copies and summaries included. And if someone took a copy home, relembra hands you the list of who did. It doesn't pretend it vanished.</span></p>
-      <p class="ch__eng"><span lang="pt-BR">Retirar esconde a memória dos agentes; o dono ainda a vê, os resumos derivados saem junto e as cópias promovidas ficam. Tarjar troca o texto por uma lápide em todo lugar, resumos e cópias promovidas incluídos, e depois limpa o WAL do SQLite. Cada renderização pode registrar um portador; <code>deliverErasures</code> entrega ao host o que precisa ser apagado lá fora, até ele responder reconhecido ou sem suporte. Nunca “apagado”.</span><span lang="en">Retract hides a memory from agents; its owner still sees it, derived summaries go with it, promoted copies stay. Redact replaces the text with a tombstone everywhere, summaries and promoted copies included, then scrubs the SQLite WAL. Each rendering can record a carrier; <code>deliverErasures</code> hands the host what to erase out there until it answers acknowledged or unsupported. Never “erased”.</span></p>
-    </div>
-    <figure class="stage" data-ui aria-labelledby="ch4-cap">
-      <figcaption class="stage__cap" id="ch4-cap"><span lang="pt-BR">Uma memória que não devia estar ali</span><span lang="en">A memory that shouldn't be there</span></figcaption>
-      <ul class="erase" data-erase></ul>
-      <p class="carriers__title"><span lang="pt-BR">Quem já recebeu esse texto</span><span lang="en">Who already received this text</span></p>
-      <ul class="carriers" data-carriers></ul>
-      <div class="actions">
-        <button class="ghost" type="button" data-erase-act="retract"><span lang="pt-BR">Esconder</span><span lang="en">Retract</span></button>
-        <button class="ghost ghost--ink" type="button" data-erase-act="redact"><span lang="pt-BR">Tarjar</span><span lang="en">Redact</span></button>
-        <button class="ghost" type="button" data-erase-act="deliver"><span lang="pt-BR">Avisar os portadores</span><span lang="en">Notify the carriers</span></button>
-        <button class="ghost ghost--quiet" type="button" data-erase-act="reset"><span lang="pt-BR">Recomeçar</span><span lang="en">Start over</span></button>
-      </div>
-      <p class="stage__out" data-erase-out aria-live="polite"></p>
-    </figure>
-  </article>
-
-  <article class="ch on-deep" id="ch-luz" aria-labelledby="ch5-title">
-    <div class="ch__text">
-      <h3 class="ch__title" id="ch5-title" data-reveal><span lang="pt-BR">Caiu a luz? Nada duplica</span><span lang="en">Power cut? Nothing doubles</span></h3>
-      <p class="ch__kid"><span lang="pt-BR">Você tá anotando e a luz cai. Quando volta, anota de novo. Num caderno comum ficam duas linhas iguais. No relembra, cada anotação leva um número de protocolo: se ela chega duas vezes, ele devolve a primeira.</span><span lang="en">You're writing a note and the power cuts out. When it's back, you write it again. A normal notebook now has two copies. relembra gives every note a receipt number: if it arrives twice, you get the first one back.</span></p>
-      <p class="ch__eng"><span lang="pt-BR">Todo evento vai para um log append-only com um op id. Repetir uma escrita com o mesmo op id e o mesmo conteúdo devolve o resultado gravado, com o mesmo id e o mesmo horário; o mesmo op id com outro conteúdo é recusado (<code>OpConflictError</code>). Uma cerca de autoridade, chave e época, faz um escritor atrasado gravar nada. O SQLite roda em WAL com <code>synchronous=FULL</code>, arquivo 0600.</span><span lang="en">Every event lands in an append-only log with an op id. Retry a write with the same op id and payload and you get the recorded result: same id, same timestamp. Same op id, different payload: refused (<code>OpConflictError</code>). An authority fence, key plus epoch, makes a stale writer commit nothing. SQLite runs in WAL with <code>synchronous=FULL</code>, file mode 0600.</span></p>
-    </div>
-    <figure class="stage" data-ui aria-labelledby="ch5-cap">
-      <figcaption class="stage__cap" id="ch5-cap"><span lang="pt-BR">Uma escrita, uma queda, uma repetição</span><span lang="en">One write, one outage, one retry</span></figcaption>
-      <ol class="steps" data-steps>
-        <li><button class="ghost" type="button" data-step="1"><span lang="pt-BR">Anotar</span><span lang="en">Write the note</span></button></li>
-        <li><button class="ghost" type="button" data-step="2" disabled><span lang="pt-BR">A luz cai, repetir</span><span lang="en">Power cut, retry</span></button></li>
-        <li><button class="ghost" type="button" data-step="3" disabled><span lang="pt-BR">Repetir com outro texto</span><span lang="en">Retry with other text</span></button></li>
-      </ol>
-      <pre class="term term--log" data-retry-log tabindex="0" aria-live="polite" aria-label="Registro" data-label-pt="Registro" data-label-en="Log"><code></code></pre>
-      <p class="stage__out"><span lang="pt-BR">Memórias gravadas:</span><span lang="en">Memories stored:</span> <strong class="num" data-retry-count>0</strong></p>
-    </figure>
-  </article>
-
-  <article class="ch on-accent" id="ch-prova" aria-labelledby="ch6-title">
-    <div class="ch__text">
-      <h3 class="ch__title" id="ch6-title" data-reveal><span lang="pt-BR">Prova com pegadinha</span><span lang="en">A test with planted cheaters</span></h3>
-      <p class="ch__kid"><span lang="pt-BR">Antes de confiar num aluno, ele faz prova. Só que essa prova tem aluno-pegadinha: um entrega em branco, um cola a resposta errada, um vaza a gaveta dos outros. Se algum deles passar, quem reprova é a prova.</span><span lang="en">Before you trust a student, they take a test. This test has planted cheaters: one hands in a blank sheet, one copies a wrong answer, one leaks other kids' drawers. If any of them passes, the test is what fails.</span></p>
-      <p class="ch__eng"><span lang="pt-BR">O harness de eval faz as mesmas perguntas ao relembra e a candidatos de controle, num conjunto sintético com semente fixa, e conta vazamentos, negação de escopo, hit@5, MRR, abstenção, cobertura do wake, violações de rótulo e superadas servidas. Em 31/10/2026, o relembra passou em todas as metas nas duas lojas; o candidato perfeito passou; os 17 controles negativos reprovaram. Sem juiz LLM.</span><span lang="en">The eval harness asks relembra and a set of control candidates the same questions on a seeded synthetic set, and counts leaks, scope denial, hit@5, MRR, abstention, wake coverage, label violations and superseded memories served. On 2026-10-31 relembra passed every gate on both stores; the perfect candidate passed; all 17 negative controls failed. No LLM judge.</span></p>
-    </div>
-    <figure class="stage" data-ui aria-labelledby="ch6-cap">
-      <figcaption class="stage__cap" id="ch6-cap"><span lang="pt-BR">A prova de 31/10/2026, candidato por candidato</span><span lang="en">The 2026-10-31 run, candidate by candidate</span></figcaption>
-      <div class="exam__wrap">
-        <table class="exam" data-exam>
-          <thead><tr><th scope="col"><span lang="pt-BR">Candidato</span><span lang="en">Candidate</span></th><th scope="col"><span lang="pt-BR">Esperado</span><span lang="en">Expected</span></th><th scope="col"><span lang="pt-BR">Resultado</span><span lang="en">Result</span></th></tr></thead>
-          <tbody>
-            <tr tabindex="0" data-c="relembra-sqlite"><td><code class="raw">relembra-sqlite</code></td><td>PASS</td><td><span class="stamp stamp--pass">PASS</span></td></tr>
-            <tr tabindex="0" data-c="relembra-memory"><td><code class="raw">relembra-memory</code></td><td>PASS</td><td><span class="stamp stamp--pass">PASS</span></td></tr>
-            <tr tabindex="0" data-c="perfect"><td><code class="raw">perfect</code></td><td>PASS</td><td><span class="stamp stamp--pass">PASS</span></td></tr>
-            <tr tabindex="0" data-c="empty"><td><code class="raw">empty</code></td><td>FAIL</td><td><span class="stamp">FAIL</span></td></tr>
-            <tr tabindex="0" data-c="leaky"><td><code class="raw">leaky</code></td><td>FAIL</td><td><span class="stamp">FAIL</span></td></tr>
-            <tr tabindex="0" data-c="hollow-empty-brief"><td><code class="raw">hollow-empty-brief</code></td><td>FAIL</td><td><span class="stamp">FAIL</span></td></tr>
-            <tr tabindex="0" data-c="hollow-empty-text"><td><code class="raw">hollow-empty-text</code></td><td>FAIL</td><td><span class="stamp">FAIL</span></td></tr>
-            <tr tabindex="0" data-c="hollow-wrong-text"><td><code class="raw">hollow-wrong-text</code></td><td>FAIL</td><td><span class="stamp">FAIL</span></td></tr>
-            <tr tabindex="0" data-c="hollow-wrong-scope"><td><code class="raw">hollow-wrong-scope</code></td><td>FAIL</td><td><span class="stamp">FAIL</span></td></tr>
-            <tr tabindex="0" data-c="hollow-duplicate-conflict"><td><code class="raw">hollow-duplicate-conflict</code></td><td>FAIL</td><td><span class="stamp">FAIL</span></td></tr>
-            <tr tabindex="0" data-c="hollow-indented-conflict"><td><code class="raw">hollow-indented-conflict</code></td><td>FAIL</td><td><span class="stamp">FAIL</span></td></tr>
-            <tr tabindex="0" data-c="hollow-index-text"><td><code class="raw">hollow-index-text</code></td><td>FAIL</td><td><span class="stamp">FAIL</span></td></tr>
-            <tr tabindex="0" data-c="hollow-wrapped-text"><td><code class="raw">hollow-wrapped-text</code></td><td>FAIL</td><td><span class="stamp">FAIL</span></td></tr>
-            <tr tabindex="0" data-c="hollow-encoded-duplicate"><td><code class="raw">hollow-encoded-duplicate</code></td><td>FAIL</td><td><span class="stamp">FAIL</span></td></tr>
-            <tr tabindex="0" data-c="hollow-extra-raw"><td><code class="raw">hollow-extra-raw</code></td><td>FAIL</td><td><span class="stamp">FAIL</span></td></tr>
-            <tr tabindex="0" data-c="hollow-extra-wrapped"><td><code class="raw">hollow-extra-wrapped</code></td><td>FAIL</td><td><span class="stamp">FAIL</span></td></tr>
-            <tr tabindex="0" data-c="hollow-appended-raw"><td><code class="raw">hollow-appended-raw</code></td><td>FAIL</td><td><span class="stamp">FAIL</span></td></tr>
-            <tr tabindex="0" data-c="hollow-appended-wrapped"><td><code class="raw">hollow-appended-wrapped</code></td><td>FAIL</td><td><span class="stamp">FAIL</span></td></tr>
-            <tr tabindex="0" data-c="hollow-error-raw"><td><code class="raw">hollow-error-raw</code></td><td>FAIL</td><td><span class="stamp">FAIL</span></td></tr>
-            <tr tabindex="0" data-c="hollow-error-wrapped"><td><code class="raw">hollow-error-wrapped</code></td><td>FAIL</td><td><span class="stamp">FAIL</span></td></tr>
-          </tbody>
-        </table>
-      </div>
-      <p class="stage__out" data-exam-say aria-live="polite"></p>
-    </figure>
-  </article>
-</section>
-
-<section class="fields on-ground" id="onde" aria-labelledby="fields-title">
-  <div class="field on-deep">
-    <p class="field__text" data-reveal><span lang="pt-BR">Nada em runtime além do Node 24.14+ ou do Bun 1.4+. A biblioteca é TypeScript puro e a loja padrão usa o <code>node:sqlite</code> que já vem no runtime. Menos coisa pra atualizar, menos coisa pra quebrar.</span><span lang="en">Nothing at runtime but Node 24.14+ or Bun 1.4+. Plain TypeScript, and the default store uses the <code>node:sqlite</code> your runtime already ships. Nothing new to audit.</span></p>
-    <h2 class="field__phrase" id="fields-title" data-lines><span class="ml"><span class="ml__in"><span lang="pt-BR">Zero</span><span lang="en">Zero</span></span></span><span class="ml"><span class="ml__in"><span lang="pt-BR">dependências</span><span lang="en">dependencies</span></span></span></h2>
-  </div>
-  <div class="field on-accent">
-    <p class="field__text" data-reveal><span lang="pt-BR">A CLI é um binário só. <code>relembra init</code> imprime o gancho de início de sessão pro Claude Code e pro Codex. Você cola uma vez e o wake chega antes da sua primeira pergunta.</span><span lang="en">The CLI is one binary. <code>relembra init</code> prints the session-start hook for Claude Code and Codex. Paste it once; the wake lands before your first prompt.</span></p>
-    <h3 class="field__phrase" data-lines><span class="ml"><span class="ml__in"><span lang="pt-BR">Um binário.</span><span lang="en">One binary.</span></span></span><span class="ml"><span class="ml__in"><span lang="pt-BR">Um gancho.</span><span lang="en">One hook.</span></span></span></h3>
-  </div>
-  <div class="field on-soft">
-    <p class="field__text" data-reveal><span lang="pt-BR"><code>relembra mcp</code> é um servidor MCP em stdio, revisão 2026-07-28, com <code>note</code>, <code>find</code>, <code>brief</code>, <code>wake</code> e <code>retract</code>. Escopo e principal vêm do ambiente, nunca de um argumento que o modelo inventou.</span><span lang="en"><code>relembra mcp</code> is a stdio MCP server, revision 2026-07-28: <code>note</code>, <code>find</code>, <code>brief</code>, <code>wake</code>, <code>retract</code>. Scope and principal come from the environment, never from an argument the model made up.</span></p>
-    <h3 class="field__phrase" data-lines><span class="ml"><span class="ml__in"><span lang="pt-BR">Fala</span><span lang="en">Speaks</span></span></span><span class="ml"><span class="ml__in"><span lang="pt-BR">MCP</span><span lang="en">MCP</span></span></span></h3>
-  </div>
-  <div class="field on-deep">
-    <p class="field__text" data-reveal><span lang="pt-BR">Numa máquina, SQLite em WAL com <code>synchronous=FULL</code>. Em várias, você passa o seu cliente Postgres e o relembra não instala driver nenhum. As duas lojas passam pela mesma bateria de conformidade.</span><span lang="en">One machine: SQLite in WAL with <code>synchronous=FULL</code>. Many: hand it your own Postgres client; relembra installs no driver. Both stores pass the same conformance suite.</span></p>
-    <h3 class="field__phrase" data-lines><span class="ml"><span class="ml__in"><span lang="pt-BR">SQLite ou</span><span lang="en">SQLite or</span></span></span><span class="ml"><span class="ml__in"><span lang="pt-BR">Postgres</span><span lang="en">Postgres</span></span></span></h3>
   </div>
 </section>
 
-<section class="proof on-ground" id="numeros" aria-labelledby="proof-title">
-  <h2 class="proof__title" id="proof-title" data-lines><span class="ml"><span class="ml__in"><span lang="pt-BR">Medido,</span><span lang="en">Measured,</span></span></span><span class="ml proof__l2"><span class="ml__in"><span lang="pt-BR">não prometido</span><span lang="en">not promised</span></span></span></h2>
-  <div class="proof__wrap" data-reveal data-d="1">
-    <table class="proof__table">
-      <caption class="sr-only"><span lang="pt-BR">Resultados medidos em 31/10/2026</span><span lang="en">Results measured on 2026-10-31</span></caption>
-      <thead class="sr-only"><tr><th scope="col"><span lang="pt-BR">O quê</span><span lang="en">What</span></th><th scope="col"><span lang="pt-BR">Resultado</span><span lang="en">Result</span></th></tr></thead>
-      <tbody>
-        <tr><th scope="row"><span lang="pt-BR">Vazamentos no eval</span><span lang="en">Leaks in the eval</span><span class="proof__how"><span lang="pt-BR">conjunto sintético, lojas SQLite e em memória</span><span lang="en">synthetic set, SQLite and in-memory stores</span></span></th><td class="proof__n"><span class="num" data-roll="0">0</span></td></tr>
-        <tr><th scope="row"><span lang="pt-BR">Negação de escopo</span><span lang="en">Scope denial</span><span class="proof__how"><span lang="pt-BR">perguntas a escopos sem acesso</span><span lang="en">questions aimed at scopes without access</span></span></th><td class="proof__n"><span class="num" data-roll="100">100</span>%</td></tr>
-        <tr><th scope="row"><span lang="pt-BR">hit@5 e MRR</span><span lang="en">hit@5 and MRR</span><span class="proof__how"><span lang="pt-BR">a resposta certa entre as cinco primeiras, e em que posição</span><span lang="en">the right answer in the top five, and at which rank</span></span></th><td class="proof__n"><span lang="pt-BR">1,00 e 1,00</span><span lang="en">1.00 and 1.00</span></td></tr>
-        <tr><th scope="row"><span lang="pt-BR">Controles negativos reprovados</span><span lang="en">Negative controls failed</span><span class="proof__how"><span lang="pt-BR">vazio, vazador e 15 ocos</span><span lang="en">empty, leaky and 15 hollow</span></span></th><td class="proof__n"><span class="num" data-roll="17">17</span> <span lang="pt-BR">de 17</span><span lang="en">of 17</span></td></tr>
-        <tr><th scope="row"><span lang="pt-BR">find a quente, p95, Bun</span><span lang="en">Warm find, p95, Bun</span><span class="proof__how"><span lang="pt-BR">20.000 memórias, 500 buscas, máquina carregada</span><span lang="en">20,000 memories, 500 queries, loaded machine</span></span></th><td class="proof__n"><span lang="pt-BR">9,83 ms</span><span lang="en">9.83 ms</span></td></tr>
-        <tr><th scope="row"><span lang="pt-BR">find a quente, p95, Node</span><span lang="en">Warm find, p95, Node</span><span class="proof__how"><span lang="pt-BR">o mesmo corpus no Node 26</span><span lang="en">the same corpus on Node 26</span></span></th><td class="proof__n"><span lang="pt-BR">42,1 ms</span><span lang="en">42.1 ms</span></td></tr>
-        <tr><th scope="row"><span lang="pt-BR">Dependências em runtime</span><span lang="en">Runtime dependencies</span><span class="proof__how"><span lang="pt-BR">o que o package.json pede para rodar</span><span lang="en">what package.json needs at run time</span></span></th><td class="proof__n"><span class="num" data-roll="0">0</span></td></tr>
-      </tbody>
-    </table>
-    <p class="proof__src"><span lang="pt-BR">Medido em 31/10/2026 num Apple M5 Pro de 18 núcleos, com Bun 1.4.4 e Node 26.12.1. Fonte: <code>docs/eval</code> e <code>docs/bench</code> do repositório.</span><span lang="en">Measured on 2026-10-31 on an 18-core Apple M5 Pro, Bun 1.4.4 and Node 26.12.1. Source: the repository's <code>docs/eval</code> and <code>docs/bench</code>.</span></p>
+<section class="sec" id="perguntas" aria-labelledby="faq-title">
+  <div class="wrap faq">
+    <h2 class="sec__title" id="faq-title"><span lang="pt-BR">Perguntas justas</span><span lang="en">Fair questions</span></h2>
+    <div class="faq__list">
+      <details class="qa">
+        <summary><span lang="pt-BR">Precisa de servidor rodando?</span><span lang="en">Do I need a server running?</span></summary>
+        <p><span lang="pt-BR">Não. A CLI abre um arquivo SQLite, responde e sai. Sem daemon, sem porta aberta, sem conta na nuvem. Quer dividir entre máquinas? Aí você liga o Postgres que já tem.</span><span lang="en">No. The CLI opens a SQLite file, answers, and exits. No daemon, no open port, no cloud account. Want to share across machines? Point it at the Postgres you already run.</span></p>
+      </details>
+      <details class="qa">
+        <summary><span lang="pt-BR">Meus dados vão pra algum lugar?</span><span lang="en">Does my data go anywhere?</span></summary>
+        <p><span lang="pt-BR">Na CLI, ficam num arquivo na sua máquina, com permissão 0600. O relembra não faz chamada de rede. O que chega no modelo é o wake que você ligou no gancho, e só ele.</span><span lang="en">With the CLI, they stay in one file on your machine, mode 0600. relembra makes no network calls. What reaches the model is the wake you wired into the hook. Nothing else.</span></p>
+      </details>
+      <details class="qa">
+        <summary><span lang="pt-BR">E se o agente anotar besteira?</span><span lang="en">What if the agent writes garbage?</span></summary>
+        <p><span lang="pt-BR">Acontece. Por isso toda memória diz quem escreveu e o quanto confiar: owner, agent ou untrusted. O que o agente escreve entra como agent, no máximo, e chega no modelo como evidência com nome e data, não como ordem. Errou? Você supera com a versão certa ou <a href="#apagar">retira</a>.</span><span lang="en">It will. So every memory carries who wrote it and how far to trust it: owner, agent or untrusted. Agent writes cap at agent, and they reach the model as attributed evidence, not instructions. Wrong? Supersede it or <a href="#apagar">retract it</a>.</span></p>
+      </details>
+      <details class="qa">
+        <summary><span lang="pt-BR">Colei uma senha sem querer. E agora?</span><span lang="en">I pasted a password. Now what?</span></summary>
+        <p><span lang="pt-BR">Provavelmente a guarda nem deixou entrar: ela recusa os formatos de credencial conhecidos. Se algo sensível entrou, <a href="#apagar">tarje</a>. O texto vira lápide, nos resumos também, e o WAL é limpo. <a href="#teste">Testa lá em cima</a>.</span><span lang="en">The guard most likely refused it: it blocks known credential shapes. If something sensitive got in, <a href="#apagar">redact it</a>. The text becomes a tombstone, summaries included, and the WAL gets scrubbed. <a href="#teste">Try it above</a>.</span></p>
+      </details>
+      <details class="qa">
+        <summary><span lang="pt-BR">Funciona com qual agente?</span><span lang="en">Which agents does it work with?</span></summary>
+        <p><span lang="pt-BR">Com qualquer um que rode um gancho de início de sessão (Claude Code e Codex estão documentados), que fale MCP, ou que rode o seu código TypeScript no Node ou no Bun.</span><span lang="en">Anything that runs a session-start hook (Claude Code and Codex are documented), speaks MCP, or runs your TypeScript on Node or Bun.</span></p>
+      </details>
+      <details class="qa">
+        <summary><span lang="pt-BR">Por que não usa embeddings?</span><span lang="en">Why no embeddings?</span></summary>
+        <p><span lang="pt-BR">Porque ainda não precisou. A busca é BM25 com um tokenizador próprio de português e inglês, e o <a href="#medido">eval</a> mede se ela acha o que os agentes perguntam. Embeddings só entram no dia em que o eval mostrar a busca lexical falhando.</span><span lang="en">Because it hasn't needed them. Search is BM25 with its own Portuguese and English tokenizer, and the <a href="#medido">eval</a> measures whether it finds what agents ask. Embeddings come in the day the eval shows lexical search failing. Not before.</span></p>
+      </details>
+      <details class="qa">
+        <summary><span lang="pt-BR">Dá pra usar hoje?</span><span lang="en">Can I use it today?</span></summary>
+        <p><span lang="pt-BR">Dá. É a versão 1.0.0-beta.5, pública, licença MIT. A biblioteca tá no npm (<code>npm i relembra@beta</code>) e o CLI vem na release do GitHub: macOS arm64, Linux e Windows, em x64 e arm64. Beta quer dizer o seguinte: a API ainda pode mudar antes da 1.0. Se mudar, tá no CHANGELOG, com o caminho da migração. <a href="#instalar">Instalar</a>.</span><span lang="en">Yes. Version 1.0.0-beta.5, public, MIT. The library is on npm (<code>npm i relembra@beta</code>). The CLI ships on the GitHub release: macOS arm64, plus Linux and Windows on x64 and arm64. Beta means the API can still change before 1.0. If it does, the changelog tells you how to migrate. <a href="#instalar">Install</a>.</span></p>
+      </details>
+    </div>
   </div>
-</section>
-
-<section class="stack on-soft" id="caixa" aria-labelledby="stack-title">
-  <h2 class="stack__title" id="stack-title" data-reveal><span lang="pt-BR">Tudo que vem na caixa</span><span lang="en">Everything you get</span></h2>
-  <div class="stack__group" data-reveal data-d="1">
-    <p class="stack__name"><span lang="pt-BR">Biblioteca</span><span lang="en">Library</span></p>
-    <ul>
-      <li><span>note, find, wake, brief, recall, zoom</span><span class="stack__v">TypeScript</span></li>
-      <li><span><span lang="pt-BR">Guarda de escrita com 10 regras</span><span lang="en">A write guard with 10 rules</span></span><span class="stack__v"><span lang="pt-BR">antes de gravar</span><span lang="en">before any write</span></span></li>
-      <li><span><span lang="pt-BR">Retirar, tarjar, superar, promover</span><span lang="en">Retract, redact, supersede, promote</span></span><span class="stack__v"><span lang="pt-BR">com prévia</span><span lang="en">with preview</span></span></li>
-      <li><span><span lang="pt-BR">Retenção por escopo</span><span lang="en">Per-scope retention</span></span><span class="stack__v"><span lang="pt-BR">o host agenda</span><span lang="en">your host schedules it</span></span></li>
-      <li><span><span lang="pt-BR">Entrega de apagamento aos portadores</span><span lang="en">Erasure delivery to carriers</span></span><span class="stack__v">deliverErasures</span></li>
-    </ul>
-  </div>
-  <div class="stack__group" data-reveal data-d="1">
-    <p class="stack__name"><span lang="pt-BR">Lojas</span><span lang="en">Stores</span></p>
-    <ul>
-      <li><span>SQLite (node:sqlite)</span><span class="stack__v">WAL, synchronous=FULL</span></li>
-      <li><span>Postgres</span><span class="stack__v"><span lang="pt-BR">o seu cliente, sem driver</span><span lang="en">your client, no driver</span></span></li>
-      <li><span><span lang="pt-BR">Em memória e suíte de conformidade</span><span lang="en">In-memory store and conformance suite</span></span><span class="stack__v"><span lang="pt-BR">pra testar adaptadores</span><span lang="en">to test adapters</span></span></li>
-    </ul>
-  </div>
-  <div class="stack__group" data-reveal data-d="1">
-    <p class="stack__name"><span lang="pt-BR">Integrações</span><span lang="en">Integrations</span></p>
-    <ul>
-      <li><span><span lang="pt-BR">CLI em binário único</span><span lang="en">Single-binary CLI</span></span><span class="stack__v">Bun</span></li>
-      <li><span><span lang="pt-BR">Gancho de início de sessão</span><span lang="en">Session-start hook</span></span><span class="stack__v">Claude Code, Codex</span></li>
-      <li><span><span lang="pt-BR">Servidor MCP</span><span lang="en">MCP server</span></span><span class="stack__v">stdio, 2026-07-28</span></li>
-      <li><span>pi-durable</span><span class="stack__v">1.4.0</span></li>
-    </ul>
-  </div>
-  <div class="stack__group" data-reveal data-d="1">
-    <p class="stack__name"><span lang="pt-BR">Prova</span><span lang="en">Proof</span></p>
-    <ul>
-      <li><span><span lang="pt-BR">Harness de eval com controles</span><span lang="en">Eval harness with controls</span></span><span class="stack__v"><span lang="pt-BR">17 negativos, 1 positivo</span><span lang="en">17 negative, 1 positive</span></span></li>
-      <li><span><span lang="pt-BR">Benchmark de latência</span><span lang="en">Latency benchmark</span></span><span class="stack__v"><span lang="pt-BR">20.000 memórias</span><span lang="en">20,000 memories</span></span></li>
-      <li><span><span lang="pt-BR">Exportar e importar</span><span lang="en">Export and import</span></span><span class="stack__v"><span lang="pt-BR">formato documentado</span><span lang="en">documented format</span></span></li>
-    </ul>
-  </div>
-  <div class="stack__group stack__group--price" data-reveal data-d="1">
-    <p class="stack__name"><span lang="pt-BR">O preço</span><span lang="en">The price</span></p>
-    <ul>
-      <li><span><span lang="pt-BR">Licença do código</span><span lang="en">Code licence</span></span><span class="stack__v">MIT</span></li>
-      <li><span><span lang="pt-BR">Quanto custa</span><span lang="en">What it costs</span></span><span class="stack__v"><span lang="pt-BR">R$ 0</span><span lang="en">$0</span></span></li>
-    </ul>
-  </div>
-  <p class="stack__close" data-reveal><span lang="pt-BR">Total: zero real. O único preço é uma linha na config do seu gancho, e a vergonha de ter explicado a mesma coisa 40 vezes.</span><span lang="en">Total: $0. The only cost is one line in your hook config. The alternative costs you every session.</span></p>
-</section>
-
-<section class="faq on-ground" id="perguntas" aria-labelledby="faq-title">
-  <div class="faq__row faq__row--head">
-    <h2 class="faq__q faq__q--head" id="faq-title"><span lang="pt-BR">Perguntas justas</span><span lang="en">Fair questions</span></h2>
-  </div>
-  <div class="faq__row" data-reveal>
-    <h3 class="faq__q"><span lang="pt-BR">Precisa de servidor rodando?</span><span lang="en">Do I need a server running?</span></h3>
-    <p class="faq__a"><span lang="pt-BR">Não. A CLI abre um arquivo SQLite, responde e sai. Sem daemon, sem porta aberta, sem conta na nuvem. Quer dividir entre máquinas? Aí você liga o Postgres que já tem.</span><span lang="en">No. The CLI opens a SQLite file, answers, and exits. No daemon, no open port, no cloud account. Want to share across machines? Point it at the Postgres you already run.</span></p>
-  </div>
-  <div class="faq__row" data-reveal>
-    <h3 class="faq__q"><span lang="pt-BR">Meus dados vão pra algum lugar?</span><span lang="en">Does my data go anywhere?</span></h3>
-    <p class="faq__a"><span lang="pt-BR">Na CLI, ficam num arquivo na sua máquina, com permissão 0600. O relembra não faz chamada de rede. O que chega no modelo é o wake que você ligou no gancho, e só ele.</span><span lang="en">With the CLI, they stay in one file on your machine, mode 0600. relembra makes no network calls. What reaches the model is the wake you wired into the hook. Nothing else.</span></p>
-  </div>
-  <div class="faq__row" data-reveal>
-    <h3 class="faq__q"><span lang="pt-BR">E se o agente anotar besteira?</span><span lang="en">What if the agent writes garbage?</span></h3>
-    <p class="faq__a"><span lang="pt-BR">Acontece. Por isso toda memória diz quem escreveu e o quanto confiar: owner, agent ou untrusted. O que o agente escreve entra como agent, no máximo, e chega no modelo como evidência com nome e data, não como ordem. Errou? Você supera com a versão certa ou retira.</span><span lang="en">It will. So every memory carries who wrote it and how far to trust it: owner, agent or untrusted. Agent writes cap at agent, and they reach the model as attributed evidence, not instructions. Wrong? Supersede it or retract it.</span></p>
-  </div>
-  <div class="faq__row" data-reveal>
-    <h3 class="faq__q"><span lang="pt-BR">Colei uma senha sem querer. E agora?</span><span lang="en">I pasted a password. Now what?</span></h3>
-    <p class="faq__a"><span lang="pt-BR">Provavelmente a guarda nem deixou entrar: ela recusa os formatos de credencial conhecidos. Se algo sensível entrou, tarje. O texto vira lápide, nos resumos também, e o WAL é limpo. Testa lá em cima.</span><span lang="en">The guard most likely refused it: it blocks known credential shapes. If something sensitive got in, redact it. The text becomes a tombstone, summaries included, and the WAL gets scrubbed. Try it above.</span></p>
-  </div>
-  <div class="faq__row" data-reveal>
-    <h3 class="faq__q"><span lang="pt-BR">Funciona com qual agente?</span><span lang="en">Which agents does it work with?</span></h3>
-    <p class="faq__a"><span lang="pt-BR">Com qualquer um que rode um gancho de início de sessão (Claude Code e Codex estão documentados), que fale MCP, ou que rode o seu código TypeScript no Node ou no Bun.</span><span lang="en">Anything that runs a session-start hook (Claude Code and Codex are documented), speaks MCP, or runs your TypeScript on Node or Bun.</span></p>
-  </div>
-  <div class="faq__row" data-reveal>
-    <h3 class="faq__q"><span lang="pt-BR">Por que não usa embeddings?</span><span lang="en">Why no embeddings?</span></h3>
-    <p class="faq__a"><span lang="pt-BR">Porque ainda não precisou. A busca é BM25 com um tokenizador próprio de português e inglês, e o eval mede se ela acha o que os agentes perguntam. Embeddings só entram no dia em que o eval mostrar a busca lexical falhando.</span><span lang="en">Because it hasn't needed them. Search is BM25 with its own Portuguese and English tokenizer, and the eval measures whether it finds what agents ask. Embeddings come in the day the eval shows lexical search failing. Not before.</span></p>
-  </div>
-  <div class="faq__row" data-reveal>
-    <h3 class="faq__q"><span lang="pt-BR">Dá pra usar hoje?</span><span lang="en">Can I use it today?</span></h3>
-    <p class="faq__a"><span lang="pt-BR">Dá. É a versão 1.0.0-beta.5, pública, licença MIT. A biblioteca tá no npm (<code>npm i relembra@beta</code>) e o CLI vem na release do GitHub: macOS arm64, Linux e Windows, em x64 e arm64. Beta quer dizer o seguinte: a API ainda pode mudar antes da 1.0. Se mudar, tá no CHANGELOG, com o caminho da migração.</span><span lang="en">Yes. Version 1.0.0-beta.5, public, MIT. The library is on npm (<code>npm i relembra@beta</code>). The CLI ships on the GitHub release: macOS arm64, plus Linux and Windows on x64 and arm64. Beta means the API can still change before 1.0. If it does, the changelog tells you how to migrate.</span></p>
-  </div>
-</section>
-
-<section class="cta" aria-labelledby="cta-word">
-  <a class="band on-accent" href="#teste">
-    <span class="band__say"><span lang="pt-BR">Anota um fato e vê a guarda, o wake e a tarja rodando aqui, no seu navegador.</span><span lang="en">Write one fact. Watch the guard, the wake and the redaction run right here, in your browser.</span></span>
-    <svg class="band__arrow" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path d="M12 36 36 12M16 12h20v20" fill="none" stroke="currentColor" stroke-width="4"/></svg>
-    <span class="band__word" id="cta-word"><span lang="pt-BR">Testar</span><span lang="en">Try it</span></span>
-  </a>
 </section>
 
 </main>
 
-<footer class="foot on-deep">
-  <div class="foot__cols">
-    <div>
-      <p class="foot__h"><span lang="pt-BR">Entenda</span><span lang="en">Learn</span></p>
-      <ul>
-        <li><a class="link" href="#explica"><span lang="pt-BR">Como funciona</span><span lang="en">How it works</span></a></li>
-        <li><a class="link" href="#ao-vivo"><span lang="pt-BR">Ao vivo</span><span lang="en">Live</span></a></li>
-      </ul>
-    </div>
-    <div>
-      <p class="foot__h"><span lang="pt-BR">Confira</span><span lang="en">Check</span></p>
-      <ul>
-        <li><a class="link" href="#numeros"><span lang="pt-BR">Números</span><span lang="en">Numbers</span></a></li>
-        <li><a class="link" href="#caixa"><span lang="pt-BR">Na caixa</span><span lang="en">What you get</span></a></li>
-      </ul>
-    </div>
-    <div>
-      <p class="foot__h"><span lang="pt-BR">Pergunte</span><span lang="en">Ask</span></p>
-      <ul>
-        <li><a class="link" href="#perguntas"><span lang="pt-BR">Perguntas</span><span lang="en">FAQ</span></a></li>
-        <li><a class="link" href="https://github.com/mneves75/relembra" rel="noopener"><span lang="pt-BR">GitHub</span><span lang="en">GitHub</span></a></li>
-        <li><a class="link" href="https://www.npmjs.com/package/relembra" rel="noopener"><span lang="pt-BR">npm</span><span lang="en">npm</span></a></li>
-        <li><a class="link" href="https://github.com/mneves75/relembra/security/policy" rel="noopener"><span lang="pt-BR">Segurança</span><span lang="en">Security</span></a></li>
-      </ul>
-    </div>
-    <div>
-      <p class="foot__h"><span lang="pt-BR">Situação</span><span lang="en">Status</span></p>
-      <ul>
-        <li><span lang="pt-BR">Versão 1.0.0-beta.5</span><span lang="en">Version 1.0.0-beta.5</span></li>
-        <li><span lang="pt-BR">Beta pública</span><span lang="en">Public beta</span></li>
-      </ul>
-    </div>
+<footer class="foot">
+  <div class="wrap foot__in">
+    <p class="foot__mark"><span class="bar__ticks" aria-hidden="true"></span>relembra</p>
+    <ul class="foot__links">
+      <li><a href="https://github.com/mneves75/relembra" rel="noopener">GitHub</a></li>
+      <li><a href="https://www.npmjs.com/package/relembra" rel="noopener">npm</a></li>
+      <li><a href="https://github.com/mneves75/relembra/tree/main/docs" rel="noopener"><span lang="pt-BR">Documentação</span><span lang="en">Docs</span></a></li>
+      <li><a href=".well-known/security.txt">security.txt</a></li>
+      <li><a href="https://github.com/mneves75/relembra/blob/main/LICENSE" rel="noopener"><span lang="pt-BR">Licença MIT</span><span lang="en">MIT licence</span></a></li>
+    </ul>
+    <p class="foot__legal"><span lang="pt-BR">Versão 1.0.0-beta.5, beta pública. Fontes Instrument Sans e Martian Mono sob a SIL Open Font License.</span><span lang="en">Version 1.0.0-beta.5, public beta. Instrument Sans and Martian Mono fonts under the SIL Open Font License.</span></p>
   </div>
-  <p class="foot__prefs"><button class="tog" type="button" data-motion-toggle aria-pressed="false"><span lang="pt-BR">Movimento</span><span lang="en">Motion</span></button></p>
-  <p class="foot__mark" aria-hidden="true" data-lines><span class="ml"><span class="ml__in" data-fit>relembra</span></span></p>
-  <p class="foot__legal"><span lang="pt-BR">© 2026 relembra. Código sob licença MIT. Fontes Stack Sans sob a SIL Open Font License.</span><span lang="en">© 2026 relembra. Code under the MIT licence. Stack Sans fonts under the SIL Open Font License.</span></p>
 </footer>
 </body>
 </html>
