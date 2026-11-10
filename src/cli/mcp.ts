@@ -20,7 +20,7 @@ import { EgressDeniedError } from "../errors.js";
 import type { Trust } from "../model.js";
 import { integrationOpId } from "../ops.js";
 import type { Carrier } from "../ports.js";
-import type { NoteProvenance, Relembra } from "../relembra.js";
+import { MAX_FIND_LIMIT, type NoteProvenance, type Relembra } from "../relembra.js";
 import { DEFAULT_BUDGET_BYTES } from "../render.js";
 import { RELEMBRA_VERSION } from "../version.js";
 import { toCliError } from "./errors.js";
@@ -257,7 +257,7 @@ const TOOLS: readonly Tool[] = [
           type: "integer",
           description: "At most this many memories; default 10",
           minimum: 1,
-          maximum: 100,
+          maximum: MAX_FIND_LIMIT,
         },
         budget,
       },

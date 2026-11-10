@@ -404,8 +404,10 @@ export interface BriefInput extends RenderingTarget {
 
 const DEFAULT_RECALL_LIMIT = 50;
 const DEFAULT_FIND_LIMIT = 10;
-const MAX_FIND_LIMIT = 100;
-const MAX_QUERY_LENGTH = 1_000;
+/** The most results one find may return. */
+export const MAX_FIND_LIMIT = 100;
+/** The most characters a find query or a brief topic may have. */
+export const MAX_QUERY_LENGTH = 1_000;
 
 export function createRelembra<Context>(options: RelembraOptions<Context>): Relembra<Context> {
   const { store } = options;
@@ -1117,7 +1119,7 @@ function checkRetention(given: readonly RetentionRule[]): readonly RetentionRule
 }
 
 /** The most sources one summary may have. */
-const MAX_SUMMARY_SOURCES = 100;
+export const MAX_SUMMARY_SOURCES = 100;
 
 /**
  * The sources copied once, checked (1 to 100, each a memory id and a positive revision, no memory
