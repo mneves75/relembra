@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(//Users/mneves/dev/OptMem/**)",
+      "Bash(*dev/OptMem*)"
+    ],
+    "ask": [
+      "Bash(gh pr merge*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ ! -x \"$HOME/.claude/hooks/claude-gate\" ] || \"$HOME/.claude/hooks/claude-gate\" baseline"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ ! -x \"$HOME/.claude/hooks/claude-gate\" ] || \"$HOME/.claude/hooks/claude-gate\" stop -- 'bun run typecheck && bun run lint && RELEMBRA_SKIP_POSTGRES=1 bun test'",
+            "timeout": 900
+          }
+        ]
+      }
+    ]
+  }
+}

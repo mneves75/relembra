@@ -5,6 +5,12 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+### Changed
+
+- `.claude/settings.json` (new) makes two contributor rules code for agents: the retired OptMem checkout is never
+  read, and merging a pull request asks first. A Stop hook runs `typecheck`, `lint` and `bun test` (Postgres
+  skipped) when the tree changed since the last green run.
+
 ### Fixed
 
 - `relembra mcp` negotiates initialize-based versions 2025-11-25, 2025-06-18, 2025-03-26 and
