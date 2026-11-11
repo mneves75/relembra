@@ -560,4 +560,45 @@ describe("a batch read before negotiation counts against the cap only if it can 
     const after = (written as any[]).find((r) => !Array.isArray(r) && r.id === "after");
     expect(after.error.code).toBe(OVERLOADED);
   });
+
+  test("an initialize the client already cancelled does not decide: the batch is one -32600", async () => {
+    const written = await behindHeldWrite([
+      initialize("init", "2025-03-26"),
+      cancel("init"),
+      pings(MAX_PENDING_REQUESTS),
+      // No initialize runs, so the session stays modern: ask for something it serves unnegotiated.
+      request("after", "server/discover"),
+    ]);
+    // biome-ignore lint/suspicious/noExplicitAny: the server's JSON, checked field by field.
+    const objects = written.filter((line) => !Array.isArray(line)) as any[];
+    expect(written.filter(Array.isArray)).toEqual([]);
+    const after = objects.find((r) => r.id === "after");
+    expect(after.error).toBeUndefined();
+    expect(after.result).toBeDefined();
+    const refused = objects.filter((r) => r.error?.code === -32600);
+    expect(refused).toHaveLength(1);
+    expect(refused[0].id).toBeUndefined();
+    // A cancelled request gets no further message.
+    expect(objects.find((r) => r.id === "init")).toBeUndefined();
+  });
+
+  test("a cancelled initialize does not decide; the next one queued does", async () => {
+    const written = await behindHeldWrite([
+      initialize("a", "2025-03-26"),
+      cancel("a"),
+      initialize("b", "2025-03-26"),
+      pings(3),
+    ]);
+    // biome-ignore lint/suspicious/noExplicitAny: the server's JSON, checked field by field.
+    const objects = written.filter((line) => !Array.isArray(line)) as any[];
+    expect(objects.find((r) => r.id === "a")).toBeUndefined();
+    expect(objects.find((r) => r.id === "b").result.protocolVersion).toBe("2025-03-26");
+    // biome-ignore lint/suspicious/noExplicitAny: as above.
+    const batches = written.filter(Array.isArray) as any[][];
+    expect(batches).toHaveLength(1);
+    expect(batches[0]?.map((r) => r.result)).toEqual([{}, {}, {}]);
+  });
 });
+
+const cancel = (requestId: string) =>
+  JSON.stringify({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId } });
