@@ -121,7 +121,9 @@ Done on 2026-11-11 after the owner's go, per `docs/RELEASE.md`:
   after `npm stage view` and `npm stage download` (its sha256 must equal the archive's above);
   then `npm view relembra@1.0.0-beta.6 dist.integrity` must equal the integrity above and
   `dist-tags.beta` must point at 1.0.0-beta.6.
-- SEC-20 and W-NV1 expire 2026-11-30: renew, remedy or close as documented boundaries.
+- SEC-20 and W-NV1, as this release shipped them, expire 2026-11-30. Decided by the owner on
+  2026-11-11, for the next gate: W-NV1 closed as a documented boundary, SEC-20 renewed to
+  2027-02-28.
 - npm's `latest` still names 1.0.0-beta.1 (a prerelease never takes `latest`); deprecating the
   older betas and the `0.0.0-stage` placeholder is the owner's, with 2FA.
 - H-19 (Low) from the gate's plan, for the next release.

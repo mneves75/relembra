@@ -7,6 +7,10 @@ those files cannot say: the mistake, the dead end, the thing that turned out to 
 
 ## 2026-11-11: 1.0.0-beta.6 (audit fixes, the rebuilt site)
 
+- Owner decision, 2026-11-11, for the next gate: W-NV1 is closed as a documented boundary
+  (`docs/specs/w-nv1/spec.md`), and the SEC-20 waiver is renewed to 2027-02-28. Releases through
+  1.0.0-beta.6 keep the waivers they shipped with; their records are not rewritten.
+
 - Scratch for a verifier or a second checkout goes outside the repository, or under an ignored
   path. A checkout nested in the tree brings its own `biome.json`, and `bun run lint` then fails
   on a nested root; `.gitignore` now lists `/.claude/worktrees/` for that reason.
