@@ -500,6 +500,25 @@ describe("site: the page", () => {
     expect(`${html}\n${css}\n${js}`).not.toContain("data-motion");
   });
 
+  test("ticks and hatches: every repeating gradient interpolates in sRGB", () => {
+    // Firefox draws no stripe for a repeating gradient interpolated in OKLab, the default once a
+    // stop is an oklch() colour, as every token is; a hard stop looks the same in either space.
+    const css = readFileSync(join(site, "assets", "site.css"), "utf8");
+    const gradients = css.match(/repeating-linear-gradient\([^,]*,/g) ?? [];
+    expect(gradients.length).toBeGreaterThanOrEqual(6); // positive control: the motif is there
+    expect(
+      gradients.filter((g) => !/^repeating-linear-gradient\(\d+deg in srgb,$/.test(g)),
+    ).toEqual([]);
+    // The ruler's 28 minor ticks are one solid layer each, on the ruler and on its fill: a
+    // repeating gradient's fractional period (the width / 28) drops ticks in WebKit.
+    const block = (selector: string) =>
+      css.slice(css.indexOf(`${selector} {`)).split("\n}")[0] ?? "";
+    for (const selector of [".ruler", ".ruler__fill"]) {
+      const layers = block(selector).match(/var\(--minor\) calc\(100% \* (\d+) \/ 28\)/g) ?? [];
+      expect({ selector, layers: layers.length }).toEqual({ selector, layers: 28 });
+    }
+  });
+
   test("table parts keep explicit roles, since phone CSS changes their display", async () => {
     // Safari with VoiceOver drops table semantics from a table element whose display CSS changes;
     // the roles in the markup restore them.

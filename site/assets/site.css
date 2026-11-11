@@ -68,9 +68,9 @@
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* the motif: minor ticks every 8px, a taller one every 80px */
-  --ticks-minor: repeating-linear-gradient(90deg, var(--tick) 0 1px, transparent 1px 8px);
-  --ticks-major: repeating-linear-gradient(90deg, var(--ink-2) 0 1px, transparent 1px 80px);
-  --hatch: repeating-linear-gradient(135deg, var(--ink-2) 0 1px, transparent 1px 6px);
+  --ticks-minor: repeating-linear-gradient(90deg in srgb, var(--tick) 0 1px, transparent 1px 8px);
+  --ticks-major: repeating-linear-gradient(90deg in srgb, var(--ink-2) 0 1px, transparent 1px 80px);
+  --hatch: repeating-linear-gradient(135deg in srgb, var(--ink-2) 0 1px, transparent 1px 6px);
 }
 
 *,
@@ -407,22 +407,79 @@ select {
   block-size: 28px;
   border-block-end: 1px solid var(--tick);
   border-inline: 1px solid var(--ink-2);
+  --minor: linear-gradient(var(--tick), var(--tick));
   background:
-    repeating-linear-gradient(90deg, var(--ink-2) 0 1px, transparent 1px 25%) 0 100% / 100% 100%
-    no-repeat,
-    repeating-linear-gradient(90deg, var(--tick) 0 1px, transparent 1px calc(100% / 28)) 0 100% /
-    100% 12px no-repeat;
+    repeating-linear-gradient(90deg in srgb, var(--ink-2) 0 1px, transparent 1px 25%) 0 100% / 100%
+    100% no-repeat,
+    /* one solid 1px layer per minor tick: a repeating gradient's fractional period drops ticks */
+    var(--minor) calc(100% * 0 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 1 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 2 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 3 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 4 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 5 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 6 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 7 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 8 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 9 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 10 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 11 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 12 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 13 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 14 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 15 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 16 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 17 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 18 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 19 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 20 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 21 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 22 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 23 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 24 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 25 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 26 / 28) 100% / 1px 12px no-repeat,
+    var(--minor) calc(100% * 27 / 28) 100% / 1px 12px no-repeat;
 }
 .ruler__fill {
   position: absolute;
   inset: 0 -1px -1px;
+  /* the content box is the ruler's padding box, so the minor ticks land on the ruler's own */
+  padding-inline: 1px;
   clip-path: inset(0 calc((1 - var(--p)) * 100%) 0 0);
+  --minor: linear-gradient(var(--signal), var(--signal));
   background:
     linear-gradient(var(--signal), var(--signal)) 0 100% / 100% 3px no-repeat,
-    repeating-linear-gradient(90deg, var(--signal) 0 1px, transparent 1px 25%) 1px 100% / 100% 100%
-    no-repeat,
-    repeating-linear-gradient(90deg, var(--signal) 0 1px, transparent 1px calc(100% / 28)) 1px 100%
-    / 100% 12px no-repeat;
+    repeating-linear-gradient(90deg in srgb, var(--signal) 0 1px, transparent 1px 25%) 1px 100% /
+    100% 100% no-repeat,
+    var(--minor) calc(100% * 0 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 1 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 2 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 3 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 4 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 5 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 6 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 7 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 8 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 9 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 10 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 11 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 12 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 13 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 14 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 15 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 16 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 17 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 18 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 19 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 20 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 21 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 22 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 23 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 24 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 25 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 26 / 28) 100% / 1px 12px no-repeat content-box,
+    var(--minor) calc(100% * 27 / 28) 100% / 1px 12px no-repeat content-box;
 }
 .ruler.is-refused .ruler__fill {
   clip-path: none;
@@ -727,7 +784,7 @@ select {
   position: absolute;
   inset: 0;
   clip-path: inset(0 calc((1 - var(--p)) * 100%) 0 0);
-  background: repeating-linear-gradient(90deg, var(--signal) 0 3px, transparent 3px 4px);
+  background: repeating-linear-gradient(90deg in srgb, var(--signal) 0 3px, transparent 3px 4px);
 }
 
 .wakelist {
