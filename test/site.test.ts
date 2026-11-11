@@ -218,10 +218,31 @@ describe("site: the browser bundle", () => {
     const js = readFileSync(join(site, "assets", "site.js"), "utf8");
     expect(js).toContain('lib.integrationOpId("relembra-site", base.scopes.a, "note", text)');
     // a repeat says so in both languages, in words distinct from the first save's
-    expect(js.match(/^ {6}alreadySaved: \(id\) =>$/gm)?.length).toBe(2);
+    expect(js.match(/^ {6}alreadySaved: \(id\) =>/gm)?.length).toBe(2);
     expect(js.match(/^ {6}saved: \(id\) =>/gm)?.length).toBe(2);
     expect(js).toMatch(/`Já estava guardado como \$\{shortId\(id\)\}\./);
     expect(js).toMatch(/`Already saved as \$\{shortId\(id\)\}\./);
+  });
+
+  test("the erase demo keeps its state across a language switch, as the other demos do", () => {
+    const js = readFileSync(join(site, "assets", "site.js"), "utf8");
+    const build = js.slice(
+      js.indexOf("async function buildErase()"),
+      js.indexOf("async function renderErase("),
+    );
+    // the rebuilt demo replays the actions taken, after the carriers' wakes
+    expect(build.indexOf("for (const act of eraseSteps)")).toBeGreaterThan(
+      build.indexOf("mcpWake"),
+    );
+    // the switch paints the replayed outcome in the new language instead of blanking it
+    const start = js.slice(
+      js.indexOf("async function startWorlds()"),
+      js.indexOf("function switchWorlds("),
+    );
+    expect(start).toContain("eraseOut.textContent = eraseMessage(erase.outcome);");
+    expect(start).not.toContain('eraseOut.textContent = "";');
+    // positive control: restart clears the record
+    expect(js).toContain("eraseSteps.length = 0;");
   });
 });
 
