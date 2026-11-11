@@ -83,7 +83,7 @@ Each platform's binary was built on its own runner by the Bun pinned in `build/b
 |---|---|
 | Tag | `v1.0.0-beta.6` (annotated, message `v1.0.0-beta.6; security gate: WAIVED SEC-20 W-NV1`) → `9a654c1`; no tag of that name existed before. GitHub answered the push with the ruleset-bypass notice for restricted tag creation, as for beta.5 |
 | GitHub release | https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.6, immutable prerelease published 2026-11-11T04:08:35Z with 7 assets; the draft's assets were downloaded and checked against `SHA256SUMS` before publication, the published ones after. Downloaded again by hand into an empty directory: `shasum -a 256 -c SHA256SUMS` passed for all six files and `SHA256SUMS` is byte-identical to the plan's |
-| npm | `release.yml` run 42957286663 staged `relembra@1.0.0-beta.6` with tag `beta`, stage id `7f29c566-c9d8-4da1-966a-414b86a87982`, shasum `86fab8b8ade4589a8c7d1b069710d831e400d19b` (equal to the archive's sha1), integrity `sha512-xA/N54mRtoXE0zrrApjiVVMPBa4hUKW6hZu5bxmj/odyMOMm86yv62CmtnmIGahoo8LuYOi4G/NHihJKZRIIqA==`. Owner approval pending; `dist-tags.beta` still names 1.0.0-beta.5 |
+| npm | `release.yml` run 42957286663 staged `relembra@1.0.0-beta.6` with tag `beta`, stage id `7f29c566-c9d8-4da1-966a-414b86a87982`, shasum `86fab8b8ade4589a8c7d1b069710d831e400d19b` (equal to the archive's sha1), integrity `sha512-xA/N54mRtoXE0zrrApjiVVMPBa4hUKW6hZu5bxmj/odyMOMm86yv62CmtnmIGahoo8LuYOi4G/NHihJKZRIIqA==`. Approved by the owner on 2026-11-11: `npm view relembra@1.0.0-beta.6 dist.integrity` and `dist.shasum` equal these values (62 files), and `dist-tags.beta` names 1.0.0-beta.6 |
 | Pages | run 42957334531 (`workflow_dispatch`, from `main` = `9a654c1`); HTTPS 200, the page names 1.0.0-beta.6 6 times (whole-version match). By hand: HTTP → HTTPS 301, `.well-known/security.txt` 200, the video answers a range request with 206, and the served `index.html` and `assets/site.js` are byte-identical to the commit's. In a browser at 1440x900 and 390x844: 6,038 and 9,401 px tall, no horizontal scroll, both fonts loaded, a pasted credential refused as `credential` with the save button unavailable, a saved fact shown in the session wake |
 
 | Asset | sha256 |
@@ -117,15 +117,14 @@ Done on 2026-11-11 after the owner's go, per `docs/RELEASE.md`:
 
 ## Open
 
-- `npm stage approve` for the beta.6 stage (owner, 2FA; npm is not logged in on this machine),
-  after `npm stage view` and `npm stage download` (its sha256 must equal the archive's above);
-  then `npm view relembra@1.0.0-beta.6 dist.integrity` must equal the integrity above and
-  `dist-tags.beta` must point at 1.0.0-beta.6.
 - SEC-20 and W-NV1, as this release shipped them, expire 2026-11-30. Decided by the owner on
   2026-11-11, for the next gate: W-NV1 closed as a documented boundary, SEC-20 renewed to
   2027-02-28.
-- npm's `latest` still names 1.0.0-beta.1 (a prerelease never takes `latest`); deprecating the
-  older betas and the `0.0.0-stage` placeholder is the owner's, with 2FA.
+- npm's `latest` still names 1.0.0-beta.1, since a prerelease never takes `latest`. On
+  2026-11-11 the owner deprecated 1.0.0-beta.1 to 1.0.0-beta.5 ("Superseded by a newer beta.
+  Install relembra@beta") and `0.0.0-stage` ("Placeholder. Install relembra@beta"), so a bare
+  install of `latest` now warns and points at the `beta` tag; read back with
+  `npm view relembra@<version> deprecated`.
 - H-19 (Low) from the gate's plan, for the next release.
 - `bun (windows-latest)`: `bun run eval > the suite runs every candidate…` failed once on a
   superseded commit after 28 s and passed on the next two runs; if it recurs, give it a
