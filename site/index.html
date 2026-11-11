@@ -51,7 +51,7 @@
         <p class="inst__bytes" id="try-bytes"><span class="num" data-bytes>28</span><span class="num"> / 280 bytes</span></p>
         <p class="inst__verdict" id="try-verdict" aria-live="polite"><span lang="pt-BR">A guarda aceita</span><span lang="en">The guard accepts it</span></p>
       </div>
-      <pre class="inst__line" data-rendered tabindex="0" aria-label="Linha que o agente lê" data-label-pt="Linha que o agente lê" data-label-en="The line the agent reads"><code>&lt;memory id="…" scope="projeto-a" rev="1" at="…" trust="agent"&gt;Os testes precisam de TZ=UTC&lt;/memory&gt;</code></pre>
+      <pre class="inst__line" data-rendered tabindex="0" role="group" aria-label="Linha que o agente lê" data-label-pt="Linha que o agente lê" data-label-en="The line the agent reads"><code>&lt;memory id="…" scope="projeto-a" rev="1" at="…" trust="agent"&gt;Os testes precisam de TZ=UTC&lt;/memory&gt;</code></pre>
       <div class="inst__acts">
         <button class="btn btn--primary" type="button" id="try-save" aria-describedby="try-verdict"><span lang="pt-BR">Guardar no projeto A</span><span lang="en">Save to project A</span></button>
         <div class="inst__examples" role="group" aria-label="Exemplos" data-label-pt="Exemplos" data-label-en="Examples">
@@ -128,7 +128,7 @@
         <li class="step">
           <p class="step__say"><span lang="pt-BR">O binário, verificado pelo checksum; <code>relembra init</code> imprime o gancho para <code>.claude/settings.json</code> ou <code>.codex/hooks.json</code>.</span><span lang="en">The binary, verified against its checksum; <code>relembra init</code> prints the hook for <code>.claude/settings.json</code> or <code>.codex/hooks.json</code>.</span></p>
           <div class="cmd">
-            <pre class="cmd__code" tabindex="0"><code data-copy-source>sh install.sh relembra-darwin-arm64 SHA256SUMS
+            <pre class="cmd__code" tabindex="0" role="group" aria-label="Comando de instalação do binário" data-label-pt="Comando de instalação do binário" data-label-en="Binary install command"><code data-copy-source>sh install.sh relembra-darwin-arm64 SHA256SUMS
 relembra init</code></pre>
             <button class="btn cmd__copy" type="button" data-copy><span lang="pt-BR">Copiar</span><span lang="en">Copy</span></button>
           </div>
@@ -136,14 +136,14 @@ relembra init</code></pre>
         <li class="step">
           <p class="step__say"><span lang="pt-BR">O servidor MCP: registre este comando no seu cliente, aberto na pasta do projeto ou com <code>RELEMBRA_SCOPE</code>.</span><span lang="en">The MCP server: register this command with your client, started in the project's folder or with <code>RELEMBRA_SCOPE</code> set.</span></p>
           <div class="cmd">
-            <pre class="cmd__code" tabindex="0"><code data-copy-source>relembra mcp</code></pre>
+            <pre class="cmd__code" tabindex="0" role="group" aria-label="Comando do servidor MCP" data-label-pt="Comando do servidor MCP" data-label-en="MCP server command"><code data-copy-source>relembra mcp</code></pre>
             <button class="btn cmd__copy" type="button" data-copy><span lang="pt-BR">Copiar</span><span lang="en">Copy</span></button>
           </div>
         </li>
         <li class="step">
           <p class="step__say"><span lang="pt-BR">A biblioteca, para Node 24.14+ ou Bun 1.4+.</span><span lang="en">The library, for Node 24.14+ or Bun 1.4+.</span></p>
           <div class="cmd">
-            <pre class="cmd__code" tabindex="0"><code data-copy-source>npm i relembra@beta</code></pre>
+            <pre class="cmd__code" tabindex="0" role="group" aria-label="Comando de instalação da biblioteca" data-label-pt="Comando de instalação da biblioteca" data-label-en="Library install command"><code data-copy-source>npm i relembra@beta</code></pre>
             <button class="btn cmd__copy" type="button" data-copy><span lang="pt-BR">Copiar</span><span lang="en">Copy</span></button>
           </div>
         </li>
@@ -154,10 +154,10 @@ relembra init</code></pre>
     <div class="split__side">
       <h3 class="panel__title" id="session-title"><span lang="pt-BR">Segunda você conta. Terça ele sabe.</span><span lang="en">Tell it Monday. It knows Tuesday.</span></h3>
       <div class="cmd">
-        <pre class="cmd__code" tabindex="0"><code lang="pt-BR" data-copy-source>relembra note "As migrações rodam com bun run migrate, nunca na mão."</code><code lang="en" data-copy-source>relembra note "Migrations run with bun run migrate, never by hand."</code></pre>
+        <pre class="cmd__code" tabindex="0" role="group" aria-label="Comando que guarda um fato" data-label-pt="Comando que guarda um fato" data-label-en="Command that saves a fact"><code lang="pt-BR" data-copy-source>relembra note "As migrações rodam com bun run migrate, nunca na mão."</code><code lang="en" data-copy-source>relembra note "Migrations run with bun run migrate, never by hand."</code></pre>
         <button class="btn cmd__copy" type="button" data-copy><span lang="pt-BR">Copiar</span><span lang="en">Copy</span></button>
       </div>
-      <pre class="cmd__out" tabindex="0" aria-label="Saída" data-label-pt="Saída" data-label-en="Output"><code data-noted-id>5349d07d-13f7-4c6e-a9f9-d1f6a5af74dc</code></pre>
+      <pre class="cmd__out" tabindex="0" role="group" aria-label="Saída" data-label-pt="Saída" data-label-en="Output"><code data-noted-id>5349d07d-13f7-4c6e-a9f9-d1f6a5af74dc</code></pre>
       <div class="session" data-ui aria-labelledby="session-title" role="group">
         <p class="session__when"><span lang="pt-BR">terça, 09:12, sessão nova</span><span lang="en">Tuesday 09:12, new session</span></p>
         <ol class="session__body">

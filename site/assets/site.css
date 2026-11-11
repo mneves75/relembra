@@ -221,13 +221,13 @@ select {
 .btn:active {
   transform: translateY(1px);
 }
-.btn:disabled {
+.btn[aria-disabled="true"],
+.btn[aria-disabled="true"]:hover {
   border-style: dashed;
   border-color: var(--line);
   background: transparent;
   color: var(--ink-2);
   cursor: not-allowed;
-  transform: none;
 }
 .btn--primary {
   border-color: var(--signal);
@@ -558,6 +558,20 @@ select {
   margin-block-start: 8px;
   padding-block-start: 18px;
   border-block-start: 1px solid var(--line);
+}
+/* Visitor-typed and library-returned text stays inside its column, however long the word:
+   overflow-wrap is inherited by every output, and a zero minimum lets each grid child shrink. */
+.inst,
+.demo,
+.session {
+  overflow-wrap: anywhere;
+}
+.inst,
+.demo,
+.session,
+.panel,
+.split > * {
+  min-inline-size: 0;
 }
 .demo__out {
   min-block-size: 3.1em;

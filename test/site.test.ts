@@ -461,6 +461,80 @@ describe("site: the page", () => {
     expect(wrong.map((el) => el.tag)).toEqual([]);
   });
 
+  test("every output echoing typed or returned text sits in a column that wraps any word", async () => {
+    // A visitor can type a 1,000-character word; it must wrap inside its column, never push the
+    // page sideways. overflow-wrap is inherited, so the rule lives on the containers.
+    const css = readFileSync(join(site, "assets", "site.css"), "utf8");
+    const rules = [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(
+      ([, selectors, body]) => ({
+        selectors: (selectors ?? "").split(",").map((s) => s.trim()),
+        body: body ?? "",
+      }),
+    );
+    const classesWith = (declaration: RegExp) =>
+      new Set(
+        rules
+          .filter((rule) => declaration.test(rule.body))
+          .flatMap((rule) => rule.selectors)
+          .filter((s) => /^\.[\w-]+$/.test(s))
+          .map((s) => s.slice(1)),
+      );
+    const wraps = classesWith(/overflow-wrap:\s*anywhere/);
+    const shrinks = classesWith(/min-inline-size:\s*0/);
+    const echoes = [
+      "data-saved",
+      "data-find-out",
+      "data-drawers",
+      "data-wake-sum",
+      "data-wakelist",
+      "data-erase",
+      "data-carriers",
+      "data-erase-out",
+    ];
+    const all = await elements(html);
+    const outputs = all.filter(
+      (el) =>
+        echoes.some((name) => el.attrs.has(name)) ||
+        el.attrs.get("id") === "try-verdict" ||
+        (el.attrs.get("class") ?? "").split(/\s+/).includes("sl--wake"),
+    );
+    // positive control: every echo point is found, once (plus the verdict and the wake line)
+    expect(outputs.length).toBe(echoes.length + 2);
+    const column = (el: (typeof all)[number]) => {
+      for (let at = el.parent; at !== -1; at = all[at]?.parent ?? -1) {
+        const classes = (all[at]?.attrs.get("class") ?? "").split(/\s+/);
+        const hit = classes.find((name) => wraps.has(name));
+        if (hit) return hit;
+      }
+      return null;
+    };
+    const loose = outputs.filter((el) => {
+      const hit = column(el);
+      return !hit || !shrinks.has(hit);
+    });
+    expect(loose.map((el) => [...el.attrs.keys()].join(" "))).toEqual([]);
+  });
+
+  test("every focusable code block has a name in both languages", async () => {
+    const all = await elements(html);
+    const blocks = all.filter((el) => el.tag === "pre" && el.attrs.has("tabindex"));
+    // positive control: the try-it line, the four commands and the note's output
+    expect(blocks.length).toBe(6);
+    const unnamed = blocks.filter((el) => {
+      const pt = el.attrs.get("data-label-pt") ?? "";
+      const en = el.attrs.get("data-label-en") ?? "";
+      // a bare pre is generic, which may not carry a name: the group role lets it
+      return (
+        !pt ||
+        !en ||
+        pt === en ||
+        el.attrs.get("aria-label") !== pt ||
+        el.attrs.get("role") !== "group"
+      );
+    });
+    expect(unnamed.map((el) => el.attrs.get("class"))).toEqual([]);
+  });
+
   test("explains plainly without naming the method it borrows", () => {
     const page = readFileSync(join(site, "index.html"), "utf8");
     // Rewritten for the 2026-11 redesign, which dropped the explain__lead chapter: the positive

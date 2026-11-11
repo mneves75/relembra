@@ -26,6 +26,8 @@
   }
 
   const shortId = (id) => `${id.slice(0, 8)}…`;
+  // Both languages take the singular for exactly one and the plural otherwise, zero included.
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
   /* ---------- Words ---------- */
 
@@ -79,10 +81,10 @@
       keyYes: "tem a chave",
       keyNo: "sem chave",
       noHits: "nada encontrado",
-      found: (count, query) =>
-        count === 0
+      found: (n, query) =>
+        n === 0
           ? `Nada para “${query}” nas gavetas que ele abre.`
-          : `${count} ${count === 1 ? "resultado" : "resultados"} para “${query}”, só das gavetas que ele abre.`,
+          : `${plural(n, "resultado", "resultados")} para “${query}”, só das gavetas que ele abre.`,
       typeToSearch: "Digite uma palavra para buscar.",
       peekDenied: (scope, access) =>
         `Recusado: ScopeDeniedError (${access === "read" ? "leitura" : access}). Sem a chave da gaveta ${scope}, a busca nem olha lá dentro.`,
@@ -91,7 +93,7 @@
       kinds: { pinned: "fixada", recent: "recente", summary: "resumo", covered: "coberta" },
       how: { full: "inteira", index: "só o id", out: "fora" },
       wakeSum: (full, index, out, used, budget) =>
-        `${full} inteiras, ${index} só pelo id, ${out} de fora. Usou ${used} de ${budget} bytes.`,
+        `${plural(full, "inteira", "inteiras")}, ${index} só pelo id, ${out} de fora. Usou ${used} de ${budget} bytes.`,
       erase: {
         pii: "O e-mail pessoal da diretora é ana@example.com.",
         other: "A diretora aprova os deploys de sexta.",
@@ -105,7 +107,7 @@
         redacted: "tarjada",
       },
       tombstone: (seq) => `lápide · seq ${seq}`,
-      received: (count) => `recebeu ${count} ${count === 1 ? "texto" : "textos"}`,
+      received: (n) => `recebeu ${plural(n, "texto", "textos")}`,
       kindName: { conversation: "conversa", mcp: "cliente MCP" },
       status: {
         received: "recebeu",
@@ -115,10 +117,10 @@
       },
       retracted:
         "Retirada. O original e o resumo saíram do alcance dos agentes, mas a cópia promovida para global continua viva, com o e-mail. Retirar não basta: tarje.",
-      redacted: (count) =>
-        `Tarjada em ${count} lugares: original, resumo e cópia promovida viraram lápide. Quem já tinha o texto ficou pendente.`,
+      redacted: (n) =>
+        `Tarjada em ${plural(n, "lugar", "lugares")}: original, resumo e cópia promovida viraram lápide. Quem já tinha o texto ficou pendente.`,
       delivered: (d) =>
-        `O host avisou os portadores: ${d.acknowledged} reconhecidos, ${d.unsupported} sem suporte para apagar, ${d.pending} pendentes. O relembra registra a resposta e nunca diz “apagado”.`,
+        `O host avisou os portadores: ${plural(d.acknowledged, "reconhecido", "reconhecidos")}, ${d.unsupported} sem suporte para apagar, ${plural(d.pending, "pendente", "pendentes")}. O relembra registra a resposta e nunca diz “apagado”.`,
     },
     en: {
       title: "relembra: memory for your AI agents",
@@ -167,10 +169,10 @@
       keyYes: "has the key",
       keyNo: "no key",
       noHits: "nothing found",
-      found: (count, query) =>
-        count === 0
+      found: (n, query) =>
+        n === 0
           ? `Nothing for “${query}” in the drawers it can open.`
-          : `${count} ${count === 1 ? "result" : "results"} for “${query}”, only from drawers it can open.`,
+          : `${plural(n, "result", "results")} for “${query}”, only from drawers it can open.`,
       typeToSearch: "Type a word to search.",
       peekDenied: (scope, access) =>
         `Refused: ScopeDeniedError (${access}). With no key to drawer ${scope}, the search never looks inside.`,
@@ -193,7 +195,7 @@
         redacted: "redacted",
       },
       tombstone: (seq) => `tombstone · seq ${seq}`,
-      received: (count) => `received ${count} ${count === 1 ? "text" : "texts"}`,
+      received: (n) => `received ${plural(n, "text", "texts")}`,
       kindName: { conversation: "conversation", mcp: "MCP client" },
       status: {
         received: "received",
@@ -203,8 +205,8 @@
       },
       retracted:
         "Retracted. The original and its summary are out of every agent's reach, but the copy promoted to global is still live, email and all. Retracting isn't enough: redact.",
-      redacted: (count) =>
-        `Redacted in ${count} places: original, summary and promoted copy are tombstones now. Whoever already had the text is pending.`,
+      redacted: (n) =>
+        `Redacted in ${plural(n, "place", "places")}: original, summary and promoted copy are tombstones now. Whoever already had the text is pending.`,
       delivered: (d) =>
         `The host told the carriers: ${d.acknowledged} acknowledged, ${d.unsupported} unsupported (can't erase), ${d.pending} pending. relembra records each answer and never says “erased”.`,
     },
@@ -237,6 +239,12 @@
         window.localStorage.setItem("relembra-lang", next);
       } catch {
         // Storage can be blocked; the choice then lasts for this visit only.
+      }
+      // ?lang= outranks storage on load, so a stale one would undo this choice on reload.
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("lang")) {
+        url.searchParams.set("lang", next);
+        window.history.replaceState(window.history.state, "", url);
       }
       applyLabels();
       if (lib) switchWorlds(before);
@@ -709,40 +717,57 @@
       }),
     );
     const pending = statuses.some((entry) => entry.carriers.some((c) => c.status === "pending"));
-    $('[data-erase-act="retract"]').disabled = zooms[0].status !== "live";
-    $('[data-erase-act="redact"]').disabled = zooms[0].status === "redacted";
-    $('[data-erase-act="deliver"]').disabled = !pending;
+    // aria-disabled, not disabled: focus stays on the button the visitor just pressed.
+    const off = {
+      retract: zooms[0].status !== "live",
+      redact: zooms[0].status === "redacted",
+      deliver: !pending,
+    };
+    for (const [act, value] of Object.entries(off)) {
+      $(`[data-erase-act="${act}"]`).setAttribute("aria-disabled", String(value));
+    }
   }
 
+  // One erase action at a time: a second click while the first awaits would act on a memory
+  // the first already changed (MemoryStateError, or a redaction that finds 0 places).
+  let erasing = false;
   for (const button of $$("[data-erase-act]")) {
     button.addEventListener("click", async () => {
+      if (erasing || !erase || button.getAttribute("aria-disabled") === "true") return;
+      erasing = true;
       const act = button.dataset.eraseAct;
       const g = gen;
       const state = erase;
-      if (act === "reset") {
-        erase = await buildErase();
+      try {
+        let message = "";
+        let next = state;
+        if (act === "reset") {
+          next = await buildErase();
+        } else if (act === "retract") {
+          await state.memory.retract("owner", { memoryId: state.original });
+          message = t().retracted;
+        } else if (act === "redact") {
+          const result = await state.memory.redact("owner", { memoryId: state.original });
+          message = t().redacted(result.redacted.length + result.derived.length);
+        } else if (act === "deliver") {
+          const delivery = await state.memory.deliverErasures(async (work) =>
+            Object.fromEntries(
+              work.carriers.map((carrier) => [
+                carrier.id,
+                carrier.kind === "mcp" ? "unsupported" : "acknowledged",
+              ]),
+            ),
+          );
+          message = t().delivered(delivery);
+        }
+        // A language switch rebuilt the demo meanwhile: this answer belongs to the old one.
         if (g !== gen) return;
-        eraseOut.textContent = "";
-      } else if (act === "retract") {
-        await state.memory.retract("owner", { memoryId: state.original });
-        eraseOut.textContent = t().retracted;
-      } else if (act === "redact") {
-        const result = await state.memory.redact("owner", { memoryId: state.original });
-        eraseOut.textContent = t().redacted(result.redacted.length + result.derived.length);
-      } else if (act === "deliver") {
-        const delivery = await state.memory.deliverErasures(async (work) =>
-          Object.fromEntries(
-            work.carriers.map((carrier) => [
-              carrier.id,
-              carrier.kind === "mcp" ? "unsupported" : "acknowledged",
-            ]),
-          ),
-        );
-        eraseOut.textContent = t().delivered(delivery);
+        erase = next;
+        eraseOut.textContent = message;
+        await renderErase(g);
+      } finally {
+        erasing = false;
       }
-      await renderErase(g);
-      // A disabled button drops focus to the page; keep the keyboard where the visitor was.
-      if (button.disabled) $("[data-erase-act]:not(:disabled)")?.focus();
     });
   }
 
