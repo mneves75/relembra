@@ -9,7 +9,15 @@ import type { Principal } from "../src/model.js";
 import type { Carrier, EgressFilter, Exposure, Store } from "../src/ports.js";
 import { createRelembra, type Relembra } from "../src/relembra.js";
 import { createMemoryStore } from "../src/testing/index.js";
-import { call, parseResponses, type Response, request, toolText } from "./cli/mcp-support.js";
+import {
+  call,
+  initialize,
+  legacyRequest,
+  parseResponses,
+  type Response,
+  request,
+  toolText,
+} from "./cli/mcp-support.js";
 
 describe("response parsing only permits explicitly expected legacy results and batch lines", () => {
   const legacy = { jsonrpc: "2.0", id: "legacy", result: {} } as const;
@@ -451,5 +459,89 @@ describe("the request queue is bounded", () => {
       await turn();
     }
     expect(written).toBe(lines);
+  });
+});
+
+/**
+ * Lines that arrive while the worker is blocked writing its first answer: a modern discover, then
+ * `lines`. Returns every written line, parsed, once the session ends.
+ */
+async function behindHeldWrite(lines: readonly string[]): Promise<unknown[]> {
+  let release = () => {};
+  let started = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const writing = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const written: unknown[] = [];
+  const encoder = new TextEncoder();
+  async function* input() {
+    yield encoder.encode(`${request("discover", "server/discover")}\n`);
+    await writing;
+    yield encoder.encode(lines.map((line) => `${line}\n`).join(""));
+    release();
+  }
+  await serveMcp(
+    input(),
+    {
+      write: async (line) => {
+        const parsed = JSON.parse(line) as { id?: unknown };
+        written.push(parsed);
+        if (parsed.id === "discover") {
+          started();
+          await held;
+        }
+      },
+      log: () => {},
+    },
+    host((text) => ({ allow: true, text })),
+  );
+  return written;
+}
+
+const pings = (count: number) =>
+  `[${range(0, count)
+    .map((id) => legacyRequest(id, "ping"))
+    .join(",")}]`;
+
+describe("a batch read before negotiation counts against the cap only if it can become valid", () => {
+  for (const [label, version] of [
+    ["an initialize requesting 2025-11-25", "2025-11-25"],
+    [
+      "an initialize requesting an unsupported revision (it falls back to 2025-11-25)",
+      "1999-01-01",
+    ],
+  ] as const) {
+    test(`${label}: the batch is one -32600 and takes no request slot`, async () => {
+      const written = await behindHeldWrite([
+        initialize("init", version),
+        pings(MAX_PENDING_REQUESTS),
+        legacyRequest("after", "ping"),
+      ]);
+      // biome-ignore lint/suspicious/noExplicitAny: the server's JSON, checked field by field.
+      const objects = written.filter((line) => !Array.isArray(line)) as any[];
+      expect(written.filter(Array.isArray)).toEqual([]);
+      expect(objects.find((r) => r.id === "after")).toMatchObject({ result: {} });
+      const refused = objects.filter((r) => r.error?.code === -32600);
+      expect(refused).toHaveLength(1);
+      // The batch line's single refusal carries no id.
+      expect(refused[0].id).toBeUndefined();
+    });
+  }
+
+  test("control: an initialize requesting 2025-03-26 lets the batch hold its slots", async () => {
+    const written = await behindHeldWrite([
+      initialize("init", "2025-03-26"),
+      pings(MAX_PENDING_REQUESTS),
+      legacyRequest("after", "ping"),
+    ]);
+    // biome-ignore lint/suspicious/noExplicitAny: the server's JSON, checked field by field.
+    const [batch] = written.filter(Array.isArray) as any[][];
+    expect(batch).toHaveLength(MAX_PENDING_REQUESTS);
+    // biome-ignore lint/suspicious/noExplicitAny: as above.
+    const after = (written as any[]).find((r) => !Array.isArray(r) && r.id === "after");
+    expect(after.error.code).toBe(OVERLOADED);
   });
 });

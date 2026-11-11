@@ -597,8 +597,9 @@ the client it was qualified with).
   a batch may be pipelined after initialize. Responses form one array line in batch order;
   notifications and cancelled requests have no response. A notification-only batch writes
   nothing; an empty array gets one `-32600` error object. An initialize inside a batch gets
-  `-32600` for that element. Each request element counts toward the pending cap; excess elements
-  get `-31000` inside the response array.
+  `-32600` for that element. In a batch that can be accepted (the session, or the initialize queued
+  ahead of it, negotiates 2025-03-26), each request element counts toward the pending cap; excess
+  elements get `-31000` inside the response array.
 - **Pending requests.** At most 64 requests are queued or running at once. A request past that is
   answered at once with `-31000` (`Server overloaded`), `data: { maxPending: 64 }`, is never
   queued, and may be sent again once responses arrive. The 2026-07-28 revision defines no
