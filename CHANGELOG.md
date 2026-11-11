@@ -5,19 +5,50 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [1.0.0-beta.6] - 2026-11-11
+
+Fixes from a full read of the repository, a rebuilt landing page and a smaller npm package. The
+store schemas and the export format are unchanged. The CLI gains one refusal code,
+`summary-supersede`; a script that treated exit 3 from `supersede` on a summary as a store error
+now sees exit 1.
+
 ### Changed
 
+- `relembra --help` opens with a Commands table, one line per command saying what it does, before
+  the usage lines.
+- The landing page is rebuilt as a measuring instrument: dark only, the live note line with a byte
+  ruler in the first viewport, the scope, wake-budget and erasure demos in one row, one proof table,
+  Instrument Sans and Martian Mono self-hosted (`PRODUCT.md`, `DESIGN.md`).
 - `.claude/settings.json` (new) makes two contributor rules code for agents: the retired OptMem checkout is never
   read, and merging a pull request asks first. A Stop hook runs `typecheck`, `lint` and `bun test` (Postgres
   skipped) when the tree changed since the last green run.
 
+### Removed
+
+- The npm package no longer ships `dist/cli/` (20 files): no export pointed at it, and the CLI
+  ships as a native binary.
+
 ### Fixed
 
+- `relembra supersede` on a summary is refused with the new code `summary-supersede` (exit 1); it
+  was reported as `internal` (exit 3).
+- A memory id holding a lone surrogate is refused as `invalid-argument` (`memory-id:ill-formed`);
+  over MCP it was an Internal error (`-32603`).
+- `relembra zoom` lists a summary's source as not visible only when the principal may not see it;
+  a store failure while reading one is now reported instead of hidden.
+- Opening a SQLite store reads the 20-byte header to check for WAL instead of the whole file,
+  which Node refused outright for a store of 2 GiB or more.
+- pi-durable: `memory_note`'s description states the 280-byte limit.
 - `relembra mcp` negotiates initialize-based versions 2025-11-25, 2025-06-18, 2025-03-26 and
   2024-11-05 alongside stateless 2026-07-28 requests, falling back to 2025-11-25 for unknown
   initialize versions. Fields and input-validation errors follow the selected revision;
   JSON-RPC batching is supported only for 2025-03-26. Scope and principal still come only from
   the launch environment.
+- `scripts/deploy.sh hmo` no longer leaves a temporary file behind when it refuses while reading
+  the CI run.
+- `scripts/deploy.sh prd` finds the `release.yml` and `pages.yml` runs from GitHub's clock (the
+  `Date` header) instead of the local one, so a local clock ahead of GitHub's no longer misses them
+  after publication; a header it cannot read is refused before publishing.
 
 ## [1.0.0-beta.5] - 2026-11-04
 
@@ -196,6 +227,7 @@ table of `docs/specs/IMPLEMENTATION-PLAN.md`. Known residuals are documented in 
 (import id existence) and `docs/CLI.md` (same-user trust model). Report vulnerabilities as
 [SECURITY.md](SECURITY.md) describes.
 
+[1.0.0-beta.6]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.6
 [1.0.0-beta.5]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.5
 [1.0.0-beta.4]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.4
 [1.0.0-beta.3]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.3

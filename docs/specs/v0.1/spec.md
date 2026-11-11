@@ -1,6 +1,7 @@
 # Spec: relembra v0.1, a working memory on one machine
 
-Status: ready-for-agent. Source: `docs/ARCHITECTURE.md` (accepted 2026-10-30), `GLOSSARY.md`,
+Status: shipped; historical. Its scope was built in the private 0.x pre-releases and is part of
+every public release from 1.0.0-beta.1 on. Source: `docs/ARCHITECTURE.md` (accepted 2026-10-30), `GLOSSARY.md`,
 `docs/specs/ranking-algorithm.md`.
 
 ## Problem Statement

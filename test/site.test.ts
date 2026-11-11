@@ -326,8 +326,9 @@ describe("site: the page", () => {
     const stated = [
       ...html.matchAll(/\b(?:[Vv]ersão|[Vv]ersion) (\d+\.\d+\.\d+(?:-[0-9A-Za-z.]*[0-9A-Za-z])?)/g),
     ].map((m) => m[1]);
-    // positive control: the footer and the FAQ state it in both languages
-    expect(stated.length).toBe(4);
+    // Rewritten for the 2026-11 redesign, whose install line adds a mention: the exact count was
+    // incidental; what matters is at least one mention (scripts/deploy.sh needs it) and all equal.
+    expect(stated.length).toBeGreaterThanOrEqual(1);
     expect(new Set(stated)).toEqual(new Set([version]));
   });
 
@@ -366,35 +367,34 @@ describe("site: the page", () => {
     expect(Number.isNaN(Date.parse(expires))).toBe(false);
   });
 
-  test("motion: a saved choice wins over the system, which only sets the first visit", () => {
+  // Rewritten for the 2026-11 redesign: the page is dark only, with no theme or motion toggle, so
+  // the bootstrap sets the language and nothing else.
+  test("theme and motion: the bootstrap sets neither, and the page has no toggle for them", async () => {
     const boot = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1] ?? "";
-    expect(boot.length).toBeGreaterThan(0);
-    // Runs the inline bootstrap with a stored value (or none) and the system's reduce-motion flag.
-    const motionFor = (stored: string | null, systemReduces: boolean) => {
-      const attrs = new Map<string, string>();
-      const element = {
-        classList: { add() {} },
-        lang: "",
-        setAttribute: (name: string, value: string) => attrs.set(name, value),
-      };
-      runInNewContext(boot, {
-        document: { documentElement: element },
-        localStorage: { getItem: (key: string) => (key === "relembra-motion" ? stored : null) },
-        matchMedia: (query: string) => ({
-          matches: query.includes("reduced-motion: reduce") ? systemReduces : false,
-        }),
-        navigator: { language: "pt-BR" },
-      });
-      return attrs.get("data-motion");
+    // positive control: the bootstrap exists and still sets the language
+    expect(boot).toContain("d.lang=l");
+    const attrs = new Map<string, string>();
+    const element = {
+      classList: { add() {} },
+      lang: "",
+      setAttribute: (name: string, value: string) => attrs.set(name, value),
     };
-    // no saved choice: the system decides, on every OS that reports the preference
-    expect(motionFor(null, false)).toBe("full");
-    expect(motionFor(null, true)).toBe("reduced");
-    // a saved choice wins in both directions (the Windows/Linux case: animations off in the OS)
-    expect(motionFor("full", true)).toBe("full");
-    expect(motionFor("reduced", false)).toBe("reduced");
-    // anything else stored is ignored
-    expect(motionFor("fast", true)).toBe("reduced");
+    runInNewContext(boot, {
+      document: { documentElement: element },
+      localStorage: { getItem: () => "dark" },
+      matchMedia: () => ({ matches: true }),
+      navigator: { language: "pt-BR" },
+    });
+    expect(element.lang).toBe("pt-BR");
+    expect([...attrs.keys()]).toEqual([]);
+    const all = await elements(html);
+    // positive control: the language switch is found by the same scan
+    expect(all.filter((el) => el.attrs.has("data-set-lang")).length).toBe(2);
+    expect(
+      all.filter(
+        (el) => ["theme"].includes(el.attrs.get("id") ?? "") || el.attrs.has("data-motion-toggle"),
+      ),
+    ).toEqual([]);
   });
 
   test("language: ?lang= in the link wins, then a saved choice, then the browser", () => {
@@ -423,31 +423,123 @@ describe("site: the page", () => {
     expect(langFor("?lang=<b>", "en", "pt-BR")).toBe("en");
   });
 
-  test("motion: the stylesheet follows the page's choice, not the system's media query", () => {
+  // Rewritten for the 2026-11 redesign: the motion toggles are gone, so the stylesheet must honour
+  // the system's reduced-motion preference itself, with every transition behind it.
+  test("motion: every transition and animation sits behind prefers-reduced-motion", () => {
     const css = readFileSync(join(site, "assets", "site.css"), "utf8");
-    // positive control: the motion rules exist and key on the attribute the bootstrap sets
-    expect(css).toContain('[data-motion="full"]');
-    expect(css).toContain('[data-motion="reduced"]');
-    // a media query here would keep animations off on Windows/Linux even after the visitor
-    // turns them on
-    expect(css).not.toMatch(/prefers-reduced-motion/);
-    // site.js puts .motion on the root, beside data-motion: a rule that looks for .motion below
-    // the root matches nothing
-    expect(css).toContain(".motion [data-reveal]");
-    expect(css.match(/\[data-motion(="[a-z]+")?\][^{,]*\s\.motion\b/g)).toBeNull();
+    const js = readFileSync(join(site, "assets", "site.js"), "utf8");
+    const gate = "@media (prefers-reduced-motion: no-preference) {";
+    // positive control: the gate exists and holds transitions
+    const at = css.indexOf(gate);
+    expect(at).toBeGreaterThan(-1);
+    const outside = css.slice(0, at);
+    expect(css.slice(at)).toMatch(/\btransition\s*:/);
+    // nothing moves before the gate, and nothing keys on the old attribute
+    expect(outside).not.toMatch(/\b(transition|animation)\s*:/);
+    expect(`${html}\n${css}\n${js}`).not.toContain("data-motion");
   });
 
-  test("motion: one toggle in the bar and one in the footer, both starting unpressed", async () => {
+  test("table parts keep explicit roles, since phone CSS changes their display", async () => {
+    // Safari with VoiceOver drops table semantics from a table element whose display CSS changes;
+    // the roles in the markup restore them.
+    const expected: Record<string, string> = {
+      table: "table",
+      thead: "rowgroup",
+      tbody: "rowgroup",
+      tr: "row",
+      td: "cell",
+    };
     const all = await elements(html);
-    const toggles = all.filter((el) => el.attrs.has("data-motion-toggle"));
-    expect(toggles.map((el) => el.tag)).toEqual(["button", "button"]);
-    for (const el of toggles) expect(el.attrs.get("aria-pressed")).toBe("false");
+    const parts = all.filter((el) => el.tag in expected || el.tag === "th");
+    // positive control: the proof table and its 27 data rows are found
+    expect(parts.filter((el) => el.tag === "tr").length).toBe(29);
+    const wrong = parts.filter((el) => {
+      const role = el.attrs.get("role");
+      if (el.tag !== "th") return role !== expected[el.tag];
+      return role !== (el.attrs.get("scope") === "col" ? "columnheader" : "rowheader");
+    });
+    expect(wrong.map((el) => el.tag)).toEqual([]);
+  });
+
+  test("every output echoing typed or returned text sits in a column that wraps any word", async () => {
+    // A visitor can type a 1,000-character word; it must wrap inside its column, never push the
+    // page sideways. overflow-wrap is inherited, so the rule lives on the containers.
+    const css = readFileSync(join(site, "assets", "site.css"), "utf8");
+    const rules = [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(
+      ([, selectors, body]) => ({
+        selectors: (selectors ?? "").split(",").map((s) => s.trim()),
+        body: body ?? "",
+      }),
+    );
+    const classesWith = (declaration: RegExp) =>
+      new Set(
+        rules
+          .filter((rule) => declaration.test(rule.body))
+          .flatMap((rule) => rule.selectors)
+          .filter((s) => /^\.[\w-]+$/.test(s))
+          .map((s) => s.slice(1)),
+      );
+    const wraps = classesWith(/overflow-wrap:\s*anywhere/);
+    const shrinks = classesWith(/min-inline-size:\s*0/);
+    const echoes = [
+      "data-saved",
+      "data-find-out",
+      "data-drawers",
+      "data-wake-sum",
+      "data-wakelist",
+      "data-erase",
+      "data-carriers",
+      "data-erase-out",
+    ];
+    const all = await elements(html);
+    const outputs = all.filter(
+      (el) =>
+        echoes.some((name) => el.attrs.has(name)) ||
+        el.attrs.get("id") === "try-verdict" ||
+        (el.attrs.get("class") ?? "").split(/\s+/).includes("sl--wake"),
+    );
+    // positive control: every echo point is found, once (plus the verdict and the wake line)
+    expect(outputs.length).toBe(echoes.length + 2);
+    const column = (el: (typeof all)[number]) => {
+      for (let at = el.parent; at !== -1; at = all[at]?.parent ?? -1) {
+        const classes = (all[at]?.attrs.get("class") ?? "").split(/\s+/);
+        const hit = classes.find((name) => wraps.has(name));
+        if (hit) return hit;
+      }
+      return null;
+    };
+    const loose = outputs.filter((el) => {
+      const hit = column(el);
+      return !hit || !shrinks.has(hit);
+    });
+    expect(loose.map((el) => [...el.attrs.keys()].join(" "))).toEqual([]);
+  });
+
+  test("every focusable code block has a name in both languages", async () => {
+    const all = await elements(html);
+    const blocks = all.filter((el) => el.tag === "pre" && el.attrs.has("tabindex"));
+    // positive control: the try-it line, the four commands and the note's output
+    expect(blocks.length).toBe(6);
+    const unnamed = blocks.filter((el) => {
+      const pt = el.attrs.get("data-label-pt") ?? "";
+      const en = el.attrs.get("data-label-en") ?? "";
+      // a bare pre is generic, which may not carry a name: the group role lets it
+      return (
+        !pt ||
+        !en ||
+        pt === en ||
+        el.attrs.get("aria-label") !== pt ||
+        el.attrs.get("role") !== "group"
+      );
+    });
+    expect(unnamed.map((el) => el.attrs.get("class"))).toEqual([]);
   });
 
   test("explains plainly without naming the method it borrows", () => {
     const page = readFileSync(join(site, "index.html"), "utf8");
-    // positive control: the chapter introduction this rule guards is present
-    expect(page).toContain('class="explain__lead"');
+    // Rewritten for the 2026-11 redesign, which dropped the explain__lead chapter: the positive
+    // control is now the "how it works" section this rule guards.
+    expect(page).toContain('id="como"');
     expect(page.match(/[^<>]{0,40}feynman[^<>]{0,40}/gi)).toBeNull();
   });
 });

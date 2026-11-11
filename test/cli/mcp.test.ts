@@ -1049,8 +1049,11 @@ describe("the tools", () => {
           call(2, "retract", { memoryId: owner.id }),
           call(3, "retract", { memoryId: agentId }),
           call(4, "retract", { memoryId: "no-such-memory" }),
+          // A lone surrogate is a valid JSON escape and an ill-formed id: a refusal, not a server error.
+          call(6, "retract", { memoryId: "\ud800" }),
         ),
       );
+      expect(toolText(result.byId(6))).toBe("refused: invalid-argument (memory-id:ill-formed)");
       expect(toolText(result.byId(2))).toBe("refused: provenance (trust:above-ceiling)");
       expect(JSON.parse(toolText(result.byId(3)))).toEqual({ memoryId: agentId });
       expect(toolText(result.byId(4))).toBe("refused: not-found");

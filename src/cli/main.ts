@@ -25,17 +25,24 @@ import {
 import { hostname } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { ImportError, PlanChangedError } from "../errors.js";
+import { ImportError, MemoryNotFoundError, PlanChangedError } from "../errors.js";
 import { guardText } from "../guard.js";
 import {
   LATEST_EVENT_FORMAT,
   type Memory,
   type Principal,
   type StoredMemory,
+  TRUSTS,
   type Trust,
 } from "../model.js";
 import { importOptmem } from "../optmem.js";
-import { createRelembra, type NoteProvenance, type Relembra } from "../relembra.js";
+import {
+  createRelembra,
+  MAX_FIND_LIMIT,
+  MAX_SUMMARY_SOURCES,
+  type NoteProvenance,
+  type Relembra,
+} from "../relembra.js";
 import { identityEgress, renderMemory } from "../render.js";
 import { OWNER_MODES } from "../sqlite/database.js";
 import { openSqliteStore, type SqliteStore } from "../sqlite/index.js";
@@ -68,12 +75,9 @@ interface HookOutput {
   };
 }
 
-const TRUST: readonly Trust[] = ["owner", "agent", "untrusted"];
-const MAX_LIMIT = 100;
 const MAX_RECALL_LIMIT = 100_000;
 const MAX_BUDGET = 1_000_000;
 const MAX_AGE_DAYS = 36_500;
-const MAX_SOURCES = 100;
 
 /** Reads the session's scope and the global one; writes, pins and owns the session's only. */
 function principalFor(env: CliEnv, scopes: SessionScopes, trustCeiling: Trust): Principal {
@@ -105,7 +109,7 @@ function provenanceFrom(context: Context): NoteProvenance {
   const pick = (flag: string, variable: string | undefined, fallback: string) =>
     flagValue(parsed, flag) ?? (variable === undefined || variable === "" ? fallback : variable);
   const trust = flagValue(parsed, "--trust");
-  if (trust !== undefined && !TRUST.includes(trust as Trust)) {
+  if (trust !== undefined && !TRUSTS.includes(trust as Trust)) {
     throw usage("bad-value", "--trust takes owner, agent or untrusted");
   }
   const source = flagValue(parsed, "--source");
@@ -211,6 +215,26 @@ interface ZoomSource {
   readonly memoryId: string;
   readonly revision: number;
   readonly memory: StoredMemory | null;
+}
+
+/**
+ * The sources of a summary, each as `zoom` gives it. One this principal may not see is listed with
+ * no memory; any other failure (a busy store) is the command's failure.
+ */
+export async function zoomSources(
+  zoom: (memoryId: string) => Promise<StoredMemory>,
+  memory: StoredMemory,
+): Promise<ZoomSource[]> {
+  const sources: ZoomSource[] = [];
+  if (memory.status === "redacted") return sources;
+  for (const { memoryId, revision } of memory.sources ?? []) {
+    const source = await zoom(memoryId).catch((error: unknown) => {
+      if (error instanceof MemoryNotFoundError) return null;
+      throw error;
+    });
+    sources.push({ memoryId, revision, memory: source });
+  }
+  return sources;
 }
 
 function shellQuote(path: string): string {
@@ -346,7 +370,7 @@ async function runStoreCommand(
       return { data: { memory }, text: memory.id };
     }
     case "find": {
-      const limit = intFlag(parsed, "--limit", MAX_LIMIT);
+      const limit = intFlag(parsed, "--limit", MAX_FIND_LIMIT);
       const results = await relembra.find(null, {
         query: parsed.positionals.join(" "),
         ...(limit === undefined ? {} : { limit }),
@@ -376,13 +400,7 @@ async function runStoreCommand(
     }
     case "zoom": {
       const memory = await relembra.zoom(null, { memoryId: first as string });
-      const sources: ZoomSource[] = [];
-      if (memory.status !== "redacted") {
-        for (const { memoryId, revision } of memory.sources ?? []) {
-          const source = await relembra.zoom(null, { memoryId }).catch(() => null);
-          sources.push({ memoryId, revision, memory: source });
-        }
-      }
+      const sources = await zoomSources((memoryId) => relembra.zoom(null, { memoryId }), memory);
       return { data: { memory, sources }, text: zoomText(memory, sources) };
     }
     case "retract": {
@@ -439,8 +457,8 @@ async function runStoreCommand(
       const sources = (parsed.flags.get("--of") ?? []).map(parseSource);
       if (sources.length === 0)
         throw usage("missing-value", "summarize needs --of <id>@<revision>");
-      if (sources.length > MAX_SOURCES) {
-        throw usage("bad-value", `summarize takes at most ${MAX_SOURCES} --of sources`);
+      if (sources.length > MAX_SUMMARY_SOURCES) {
+        throw usage("bad-value", `summarize takes at most ${MAX_SUMMARY_SOURCES} --of sources`);
       }
       const provenance = provenanceFrom(context);
       const text = await textFrom(first);

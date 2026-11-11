@@ -14,6 +14,7 @@ import { createMemoryExtension, MEMORY_SECTION_KEY, WAKE_UNAVAILABLE } from "rel
 /** The most bytes a tool result for invalid arguments may have, as the model receives it. */
 const MAX_ARGUMENT_ERROR_BYTES = 512;
 
+import { MAX_MEMORY_BYTES } from "../src/guard.js";
 import { createMemoryStore } from "../src/testing/memory-store.js";
 import {
   answer,
@@ -84,6 +85,8 @@ describe("pi-durable integration", () => {
       ["memory_find", "safe"],
       ["memory_brief", "safe"],
     ]);
+    // The model reads the description: it names the guard's limit, so no call is spent finding it.
+    expect(extension.tools?.[0]?.description).toContain(`${MAX_MEMORY_BYTES} bytes`);
     expect(MEMORY_SECTION_KEY).toBe("relembra_memory");
     expect(extension.sections?.map((s) => [s.key, s.tag])).toEqual([[MEMORY_SECTION_KEY, false]]);
   });

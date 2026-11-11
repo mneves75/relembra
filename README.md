@@ -25,7 +25,7 @@ and storage (an adapter). relembra enforces the rules:
 - **Measured.** An evaluation harness with leak, scope, retrieval and wake-coverage gates, plus
   controls that must fail. Results: [docs/eval/](docs/eval/).
 
-Version: 1.0.0-beta.5, a beta ([changelog](CHANGELOG.md),
+Version: 1.0.0-beta.6, a beta ([changelog](CHANGELOG.md),
 [releases](https://github.com/mneves75/relembra/releases)). Release procedure:
 [docs/RELEASE.md](docs/RELEASE.md).
 Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -57,7 +57,7 @@ Entry points:
 
 | Import | What |
 |---|---|
-| `relembra` | `createRelembra`, the error types and the domain types |
+| `relembra` | `createRelembra`, `advanceFence`, `exportJsonl`, `importJsonl`, `importOptmem`, `integrationOpId`, `identityEgress`, the error types and the domain types |
 | `relembra/sqlite` | `openSqliteStore`, the SQLite adapter (`node:sqlite`) |
 | `relembra/postgres` | `openPostgresStore`, the Postgres adapter over a SQL client the host passes |
 | `relembra/pi-durable` | `createMemoryExtension`, memory tools for a pi-durable Harness |
@@ -226,7 +226,7 @@ On Windows, check the hash with `Get-FileHash` and copy the binary onto `PATH` a
 
 Before replacing an installed executable, retain a backup and its hash. Verify installed bytes
 against the release checksum and export metadata from a disposable store
-(`relembra: "1.0.0-beta.5"`); there is no `--version` flag. The [release procedure](docs/RELEASE.md) covers isolated checks and
+(`relembra: "1.0.0-beta.6"`); there is no `--version` flag. The [release procedure](docs/RELEASE.md) covers isolated checks and
 rollback without opening a live memory store. After verification, `relembra init` prints the
 session hook for your agent.
 

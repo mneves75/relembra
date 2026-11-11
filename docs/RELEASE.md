@@ -66,9 +66,10 @@ not enforce the latency budget; `--out` and `--work` choose output/work parents.
 
 Compatibility remains Node >=24.14 and Bun >=1.4. Report only the actual local OS/architecture,
 Bun version/revision, Node version, resolved executable hashes and SQLite versions measured.
-Hosted CI adds Linux/macOS and Node 24.14/26 coverage on every push and pull request; local
-evidence does not attest those cells. Local release acceptance additionally binds
-provenance and latency. Report performance only from the candidate's recorded measurements.
+Hosted CI adds Linux x64/arm64, macOS arm64, Windows x64/arm64 and Node 24.14/26 coverage on every
+push and pull request; local evidence does not attest those cells. Local release acceptance
+additionally binds provenance and latency. Report performance only from the candidate's
+recorded measurements.
 
 ## Candidate and asset binding
 
@@ -109,9 +110,9 @@ second build, not the release binary: the release ships the locally gated one.
 
 ## Publication
 
-`scripts/deploy.sh` runs this section, in two stages, and the steps below say what each does, so
-the two cannot drift. Run a step by hand only when the script refuses and its reason has been dealt
-with.
+`scripts/deploy.sh` runs this section, in two stages, and the steps below say what each does; a
+change to one goes into the other in the same commit. Run a step by hand only when the script
+refuses and its reason has been dealt with.
 
 ```sh
 scripts/deploy.sh hmo --run <main run id> --release-check <.scratch/release/release-...>
@@ -138,7 +139,10 @@ archive `release.yml` would refuse is caught before anything is public.
 `hmo`), and that HEAD and `origin/main` are still the plan's commit; `origin/main` is checked
 again right before the Pages dispatch, which deploys `main` as the remote has it at that moment: tag
 (annotated with the gate verdict), push the tag, draft release with every asset, download and
-check the draft's assets, publish, follow the `release.yml` run and bind the staged archive to the
+check the draft's assets, read GitHub's clock (the `Date` header of `gh api -i rate_limit`; the
+runs publication starts are found from that time, so a local clock ahead of GitHub's cannot hide
+them, and a header that cannot be read is refused while the tag and draft can still be undone),
+publish, follow the `release.yml` run and bind the staged archive to the
 release's by sha1, dispatch and follow `pages.yml`, then download the published assets and check
 them again, and write `.scratch/deploy/<version>/published.json` with what the evidence record
 needs. Until the draft is published every step can be undone, and a failure prints the commands
@@ -152,14 +156,18 @@ Before publishing, check that no `refs/tags/v<version>` exists yet, peeled ref i
 (`git ls-remote --tags origin`); a collision blocks the release. Then, in this order:
 
 1. Tag the final commit (`git tag -a v<version>`) and push the tag.
-2. Create the GitHub release as a draft with every asset attached, then publish it.
-   `SHA256SUMS` must list every binary and the retained archive. With immutable releases enabled
-   on the repository, the published release's assets and tag can no longer change:
+2. Create the GitHub release as a draft with every asset attached, download the draft's assets
+   into an empty directory and check them against `SHA256SUMS`, then publish it. `SHA256SUMS`
+   must list every binary and the retained archive. `--prerelease` only for a version with a
+   prerelease part (`1.0.0-beta.5`, not `1.0.0`). With immutable releases enabled on the
+   repository, the published release's assets and tag can no longer change:
 
    ```sh
-   gh release create v<version> --verify-tag --draft --prerelease --title v<version> \
+   gh release create v<version> --verify-tag --draft [--prerelease] --title v<version> \
      --notes-file <notes> relembra-darwin-arm64 relembra-linux-x64 relembra-linux-arm64 \
      relembra-windows-x64.exe relembra-windows-arm64.exe SHA256SUMS relembra-<version>.tgz
+   gh release download v<version> --dir <empty-dir>
+   (cd <empty-dir> && shasum -a 256 -c SHA256SUMS)
    gh release edit v<version> --draft=false
    ```
 
@@ -171,7 +179,14 @@ Before publishing, check that no `refs/tags/v<version>` exists yet, peeled ref i
    publishing, under the dist-tag the manifest declares (`beta` for a prerelease). Staging
    makes nothing installable and needs no stored token; the job's npm provenance names the
    workflow run. If the job fails, fix the cause and re-run it; the release cannot change.
-4. Approve the staged version from a terminal; the approval asks for the owner's two-factor
+4. Once `origin/main` is still the release commit (the dispatch deploys `main` as the remote has
+   it), publish the site and check that it names the whole version:
+
+   ```sh
+   gh workflow run pages.yml --ref main
+   ```
+
+5. Approve the staged version from a terminal; the approval asks for the owner's two-factor
    key. Approve only a release you published, and check what npm itself read first, since the
    workflow's checks catch release mistakes, not a crafted archive:
 

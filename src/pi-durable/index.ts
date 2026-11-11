@@ -15,10 +15,17 @@ import type {
   ToolExecutionResult,
   ToolRegistration,
 } from "@earendil-works/pi-durable";
+import { MAX_MEMORY_BYTES } from "../guard.js";
 import type { Scope } from "../model.js";
 import { integrationOpId } from "../ops.js";
 import type { Carrier } from "../ports.js";
-import { checkCarrier, type NoteProvenance, type Relembra } from "../relembra.js";
+import {
+  checkCarrier,
+  MAX_FIND_LIMIT,
+  MAX_QUERY_LENGTH,
+  type NoteProvenance,
+  type Relembra,
+} from "../relembra.js";
 
 /** What the host gives relembra for one conversation. */
 export interface ConversationMemory<Context> {
@@ -60,9 +67,8 @@ export const MEMORY_SECTION_KEY = "relembra_memory";
 /** What the memory section shows when the wake cannot be rendered: no memory text at all. */
 export const WAKE_UNAVAILABLE = '<wake unavailable="true"/>';
 
+/** The most an argument may hold before the guard reads it; the guard's own limit is far lower. */
 const MAX_TEXT = 4_000;
-const MAX_QUERY = 1_000;
-const MAX_LIMIT = 100;
 /** pi-durable's generation task; hooks match tasks by this name. */
 const GENERATION_TASK = "pi.generation";
 /** The kind of every carrier this extension records. */
@@ -92,7 +98,8 @@ export function createMemoryExtension<Context>(
   const note: ToolRegistration = {
     name: "memory_note",
     description:
-      "Save one durable fact for later sessions: a decision, preference or lesson, as one line.",
+      "Save one durable fact for later sessions: a decision, preference or lesson, as one line " +
+      `of at most ${MAX_MEMORY_BYTES} bytes.`,
     parameters: {
       type: "object",
       required: ["text"],
@@ -124,13 +131,13 @@ export function createMemoryExtension<Context>(
       type: "object",
       required: ["query"],
       properties: {
-        query: { type: "string", minLength: 1, maxLength: MAX_QUERY },
-        limit: { type: "integer", minimum: 1, maximum: MAX_LIMIT },
+        query: { type: "string", minLength: 1, maxLength: MAX_QUERY_LENGTH },
+        limit: { type: "integer", minimum: 1, maximum: MAX_FIND_LIMIT },
       },
       additionalProperties: false,
     },
     replay: "safe",
-    prepareArguments: strictArguments("memory_find", "query", MAX_QUERY, true),
+    prepareArguments: strictArguments("memory_find", "query", MAX_QUERY_LENGTH, true),
     async execute(args, api) {
       const { context } = await resolve(api.conversationId);
       const limit = (args as { limit?: unknown }).limit;
@@ -149,11 +156,11 @@ export function createMemoryExtension<Context>(
     parameters: {
       type: "object",
       required: ["topic"],
-      properties: { topic: { type: "string", minLength: 1, maxLength: MAX_QUERY } },
+      properties: { topic: { type: "string", minLength: 1, maxLength: MAX_QUERY_LENGTH } },
       additionalProperties: false,
     },
     replay: "safe",
-    prepareArguments: strictArguments("memory_brief", "topic", MAX_QUERY),
+    prepareArguments: strictArguments("memory_brief", "topic", MAX_QUERY_LENGTH),
     async execute(args, api) {
       const { context } = await resolve(api.conversationId);
       const rendering = await relembra.brief(context, {
@@ -260,7 +267,7 @@ function strictArguments(
 ): (args: unknown) => Record<string, string | number> {
   const message =
     `${tool}: invalid arguments: ${field} must be a string of 1 to ${max} characters` +
-    `${limit ? `, limit an optional integer from 1 to ${MAX_LIMIT}` : ""}, and nothing else`;
+    `${limit ? `, limit an optional integer from 1 to ${MAX_FIND_LIMIT}` : ""}, and nothing else`;
   const allowed = new Set(limit ? [field, "limit"] : [field]);
   return (args) => {
     if (typeof args !== "object" || args === null || Array.isArray(args)) throw new Error(message);
@@ -272,7 +279,7 @@ function strictArguments(
     }
     if (!limit || given.limit === undefined) return { [field]: value };
     const count = given.limit;
-    if (!Number.isInteger(count) || (count as number) < 1 || (count as number) > MAX_LIMIT) {
+    if (!Number.isInteger(count) || (count as number) < 1 || (count as number) > MAX_FIND_LIMIT) {
       throw new Error(message);
     }
     return { [field]: value, limit: count as number };

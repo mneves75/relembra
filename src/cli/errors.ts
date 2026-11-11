@@ -3,6 +3,7 @@ import {
   ExposureRedactedError,
   GuardError,
   IdentifierError,
+  IllFormedStringError,
   ImportError,
   MemoryNotFoundError,
   MemoryRedactedError,
@@ -12,6 +13,7 @@ import {
   ProvenanceError,
   ScopeDeniedError,
   SourceChangedError,
+  SummarySupersedeError,
 } from "../errors.js";
 import {
   StoreBusyError,
@@ -39,6 +41,7 @@ export const ERROR_CODES = {
   "scope-denied": 1,
   "not-found": 1,
   "memory-state": 1,
+  "summary-supersede": 1,
   "op-conflict": 1,
   budget: 1,
   "source-changed": 1,
@@ -94,6 +97,9 @@ export function toCliError(error: unknown): CliError {
   if (error instanceof MemoryStateError) {
     return new CliError("memory-state", error.message, error.status);
   }
+  if (error instanceof SummarySupersedeError) {
+    return new CliError("summary-supersede", error.message);
+  }
   if (error instanceof OpConflictError) return new CliError("op-conflict", error.message);
   if (error instanceof BudgetError) return new CliError("budget", error.message);
   if (error instanceof SourceChangedError) return new CliError("source-changed", error.message);
@@ -107,6 +113,13 @@ export function toCliError(error: unknown): CliError {
   if (error instanceof IdentifierError) {
     const field = error.field.replace(" ", "-");
     return new CliError("invalid-argument", error.message, `${field}:${error.rule}`);
+  }
+  if (error instanceof IllFormedStringError) {
+    return new CliError(
+      "invalid-argument",
+      error.message,
+      `${error.field.replace(" ", "-")}:ill-formed`,
+    );
   }
   if (error instanceof SchemaTooNewError) return new CliError("schema-too-new", error.message);
   if (error instanceof StoreFileModeError) return new CliError("store-file", error.message, "mode");

@@ -199,6 +199,7 @@ is the library's host: it decides the scope and the principal, never the agent c
 | `scope-denied` | 1 | The principal lacks an access right | `read`, `write`, `pin`, `own` |
 | `not-found` | 1 | No memory this principal may see has the id, including one in another scope | |
 | `memory-state` | 1 | The memory's status refuses the operation | `retracted`, `superseded`, `redacted` |
+| `summary-supersede` | 1 | `supersede` named a summary: retract it and submit a new one | |
 | `op-conflict` | 1 | The op id was used for a different payload | |
 | `budget` | 1 | `--budget` cannot hold the rendering's frame | |
 | `source-changed` | 1 | A summary source is no longer at the given revision | |
@@ -220,7 +221,7 @@ is the library's host: it decides the scope and the principal, never the agent c
 | Flag | Meaning |
 |---|---|
 | `--json` | Print one JSON document (see [Output](#output)) |
-| `--help` | Print the usage and exit 0; with `--json`, `{ "ok": true, "data": { "usage": … } }` |
+| `--help` | Print a Commands table (each command with a one-line summary), the usage lines and exit 0; with `--json`, `{ "ok": true, "data": { "usage": … } }` |
 
 A token starting with `-` before `--` is a flag. Put text that starts with `-` after `--`:
 `relembra note -- "-5 °C is the freezer's setting"`. A value flag takes `--flag value` or
@@ -294,7 +295,7 @@ The newest memories of the scope and the global scope first.
 
 | Flag | Meaning |
 |---|---|
-| `--limit <n>` | At most n memories; default 50 |
+| `--limit <n>` | At most n memories, 1 to 100,000; default 50 |
 | `--retracted` | The owner view: retracted memories too, marked |
 
 `data`: `{ memories }`.
@@ -305,7 +306,7 @@ The bounded block a session starts with: pinned memories, recent ones, summaries
 
 | Flag | Meaning |
 |---|---|
-| `--budget <bytes>` | The most UTF-8 bytes, frame included; default 9,500 |
+| `--budget <bytes>` | The most UTF-8 bytes, frame included, 1 to 1,000,000; default 9,500 |
 
 `data`: `{ text, memoryIds }`. Text: the rendering.
 
@@ -333,7 +334,7 @@ summaries, over the scope and the global scope.
 
 | Flag | Meaning |
 |---|---|
-| `--budget <bytes>` | The most UTF-8 bytes, frame included; default 9,500 |
+| `--budget <bytes>` | The most UTF-8 bytes, frame included, 1 to 1,000,000; default 9,500 |
 
 `data`: `{ text, memoryIds }`.
 
@@ -390,7 +391,7 @@ sources must be in the summary's scope.
 
 | Flag | Meaning |
 |---|---|
-| `--limit <n>` | At most n memories; default 50 |
+| `--limit <n>` | At most n memories, 1 to 100,000; default 50 |
 
 `data`: `{ memories }`.
 
@@ -596,8 +597,9 @@ the client it was qualified with).
   a batch may be pipelined after initialize. Responses form one array line in batch order;
   notifications and cancelled requests have no response. A notification-only batch writes
   nothing; an empty array gets one `-32600` error object. An initialize inside a batch gets
-  `-32600` for that element. Each request element counts toward the pending cap; excess elements
-  get `-31000` inside the response array.
+  `-32600` for that element. In a batch that can be accepted (the session, or the initialize queued
+  ahead of it, negotiates 2025-03-26), each request element counts toward the pending cap; excess
+  elements get `-31000` inside the response array.
 - **Pending requests.** At most 64 requests are queued or running at once. A request past that is
   answered at once with `-31000` (`Server overloaded`), `data: { maxPending: 64 }`, is never
   queued, and may be sent again once responses arrive. The 2026-07-28 revision defines no

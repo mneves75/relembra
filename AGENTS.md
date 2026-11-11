@@ -48,10 +48,10 @@ Run it as a script (or `npm run check:release`), not through `bun run`: Bun acts
 before any script starts.
 
 Local evidence covers only this machine's platform and the actual Bun/Node executables recorded.
-Hosted CI adds Linux/macOS jobs, Node 24.14/26 jobs and an informational pi-durable@latest probe;
-local runs do not attest those cells. Keep the shared checks aligned; local release acceptance
-additionally requires candidate/artifact provenance and strict latency acceptance. The main
-steps, one by one:
+Hosted CI adds Linux x64/arm64, macOS arm64 and Windows x64/arm64 jobs, Node 24.14/26 jobs on Linux
+and Windows, and an informational pi-durable@latest probe; local runs do not attest those cells.
+Keep the shared checks aligned; local release acceptance additionally requires candidate/artifact
+provenance and strict latency acceptance. The main steps, one by one:
 
 ```sh
 bun run build:cli                        # the CLI tests run bin/relembra
@@ -78,6 +78,7 @@ that archive and the tested binary, and actual exits for every required step; pr
 attempts and logs too. `--check` accepts only raw nearest-rank warm find p95 <=50 ms on both
 runtimes, pinned corpus/sampling, stable clean identity, deterministic rebuild and read integrity.
 Cold latency is diagnostic. See [docs/RELEASE.md](docs/RELEASE.md) for paths and delivery checks.
+Publication runs through `scripts/deploy.sh hmo|prd` ([docs/RELEASE.md](docs/RELEASE.md#publication)).
 
 Commit release eval reports only when preparing a release. The gate and strict benchmark must
 name the same committed candidate. If report-only commits follow, compare every relevant input
@@ -105,6 +106,12 @@ Local markdown under `docs/specs/<feature>/`. See `docs/agents/issue-tracker.md`
 ### Domain docs
 
 Single-context: `GLOSSARY.md` and `docs/adr/` at the repository root. See `docs/agents/domain.md`.
+
+### Landing page
+
+`PRODUCT.md` (who the product is for and what it does) and `DESIGN.md` (the shipped design system:
+tokens, type, the tick motif, components) at the repository root govern `site/`. Read both before
+changing the page; `test/site.test.ts` holds its invariants.
 
 ### Working notes
 

@@ -68,6 +68,28 @@ export function posixCliTest(
   (binary === undefined || process.platform === "win32" ? test.skip : test)(name, fn, timeoutMs);
 }
 
+let python: boolean | undefined;
+/** Whether python3 runs; probed once, on first use, so loading this file never spawns it. */
+const hasPython = () => (python ??= spawnSync("python3", ["--version"]).status === 0);
+
+/**
+ * A POSIX CLI test that drives a pseudo-terminal through python3 (pty-confirm.py). Without
+ * python3 it follows the binary rule: skipped, loudly, locally; a failing test under
+ * RELEMBRA_REQUIRE_BINARY or CI, so a missing python3 never passes with no assertions.
+ */
+export function ptyCliTest(name: string, fn: () => void | Promise<void>, timeoutMs = 30_000): void {
+  if (binary === undefined || process.platform === "win32" || hasPython()) {
+    posixCliTest(name, fn, timeoutMs);
+  } else if (REQUIRE) {
+    test(name, () => {
+      throw new Error("RELEMBRA_REQUIRE_BINARY or CI is set, but python3 is not available");
+    });
+  } else {
+    console.warn(`${name}: SKIPPED, python3 is not available`);
+    test.skip(name, fn, timeoutMs);
+  }
+}
+
 /**
  * The OS user part of a scope: the uid (see src/cli/scope.ts on why not the name), and on Windows,
  * which has none, the logon account's SID.

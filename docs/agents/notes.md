@@ -5,6 +5,35 @@ Dated entries, newest first. Keep out secrets, local paths, private names and se
 the repository is public. Code and procedure live in their own files; this file holds only what
 those files cannot say: the mistake, the dead end, the thing that turned out to matter.
 
+## 2026-11-11: 1.0.0-beta.6 (audit fixes, the rebuilt site)
+
+- Scratch for a verifier or a second checkout goes outside the repository, or under an ignored
+  path. A checkout nested in the tree brings its own `biome.json`, and `bun run lint` then fails
+  on a nested root; `.gitignore` now lists `/.claude/worktrees/` for that reason.
+- `scripts/pack-smoke.ts` installs its consumer under the temporary directory and asserts that the
+  optional peer cannot be resolved. With `TMPDIR` inside the checkout, Node finds the peer in the
+  checkout's own `node_modules` and the smoke test fails: a layout fault, not a package fault.
+- The pseudo-terminal tests (`test/cli/race.test.ts`, `test/cli/trust.test.ts`) need a real
+  terminal as well as python3. In a sandbox without one they fail with `no-tty`; that is the
+  environment's answer, not the code's.
+- Two store-building tests take 11 to 32 s on a good hosted Windows run and two to three times
+  that on a bad one. Their limits are scaled on `win32` only; a red `bun (windows-latest)` lane
+  with only those two timeouts is the runner.
+- A full-page screenshot of the site taken while an entrance animation runs shows blank bands and
+  a half-drawn highlight. Measure `document.documentElement.scrollHeight` and capture after the
+  page settles before calling anything a defect.
+- An audit claim about a script is checked by reading what the script calls, not only the script:
+  `deploy.sh` never names `tar`, and still needs it through `scripts/stage-release.ts`.
+
+## 2026-11-10: deploy.sh follow-ups
+
+- A bare `mktemp` on this macOS ignores `TMPDIR`, so a test that points `TMPDIR` at an empty
+  directory and checks it stays empty passes whether or not the script leaks. A `mktemp` shim
+  first on PATH that writes into the test's directory and logs each file is the reliable check.
+- `prd`'s `since` comes from the `Date` header of `gh api -i rate_limit`, which the `gh` shim
+  serves from `date-header` in the fixtures; a fake `date` ahead of real time is how the skew is
+  tested.
+
 ## 2026-11-04: release tooling (scripts/deploy.sh, scripts/init.sh)
 
 - First real use (1.0.0-beta.5, the same day): `hmo` and `prd` ran end to end with no refusal
@@ -12,7 +41,7 @@ those files cannot say: the mistake, the dead end, the thing that turned out to 
   `pages.yml`. Real `gh` output matched the shim. The one message the tests did not model is
   GitHub's "Bypassed rule violations for refs/tags/v…: Cannot create ref due to creations being
   restricted" on the tag push: the ruleset restricts tag creation and the owner's role bypasses
-  it. Before the run, compare the clock with GitHub's `Date` header (1 s here).
+  it. The clock was 1 s off GitHub's `Date` header; `prd` now reads that header itself (G-6).
 - Hosted CI red while the Mac is green usually means the test, not the script: a test name that
   touched `spawnSync("/bin/bash").stdout` where there is no `/bin/bash` (Windows collects skipped
   files too), a PATH that hid `/usr/bin` to remove one tool (Linux keeps everything there), and

@@ -16,6 +16,9 @@ export type OpId = string;
  */
 export type Trust = "owner" | "agent" | "untrusted";
 
+/** Every trust tier, highest first. */
+export const TRUSTS: readonly Trust[] = ["owner", "agent", "untrusted"];
+
 /**
  * A writer's authority as the host grants it: a fencing key and the epoch this writer holds. The
  * store keeps the highest epoch it has seen per key. A write whose epoch is lower commits

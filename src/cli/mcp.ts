@@ -20,7 +20,7 @@ import { EgressDeniedError } from "../errors.js";
 import type { Trust } from "../model.js";
 import { integrationOpId } from "../ops.js";
 import type { Carrier } from "../ports.js";
-import type { NoteProvenance, Relembra } from "../relembra.js";
+import { MAX_FIND_LIMIT, type NoteProvenance, type Relembra } from "../relembra.js";
 import { DEFAULT_BUDGET_BYTES } from "../render.js";
 import { RELEMBRA_VERSION } from "../version.js";
 import { toCliError } from "./errors.js";
@@ -33,6 +33,15 @@ const LEGACY_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
 type LegacyVersion = (typeof LEGACY_VERSIONS)[number];
 type ProtocolVersion = typeof PROTOCOL_VERSION | LegacyVersion;
 const SUPPORTED_VERSIONS = [PROTOCOL_VERSION, ...LEGACY_VERSIONS];
+
+/**
+ * The revision an initialize negotiates: the requested one when it is a supported legacy revision,
+ * else the newest; undefined when `protocolVersion` is not a string (refused, nothing negotiated).
+ */
+function negotiate(requested: unknown): LegacyVersion | undefined {
+  if (typeof requested !== "string") return undefined;
+  return LEGACY_VERSIONS.find((version) => version === requested) ?? LEGACY_VERSIONS[0];
+}
 
 /** What the host decides for every request, from the launch environment only. */
 export interface McpHost {
@@ -257,7 +266,7 @@ const TOOLS: readonly Tool[] = [
           type: "integer",
           description: "At most this many memories; default 10",
           minimum: 1,
-          maximum: 100,
+          maximum: MAX_FIND_LIMIT,
         },
         budget,
       },
@@ -727,15 +736,15 @@ export async function serveMcp(
     if (legacyVersion !== undefined) {
       return errorResponse(request.id, INVALID_REQUEST, "Invalid request: already initialized");
     }
-    const requested = request.params.protocolVersion;
-    if (typeof requested !== "string") {
+    const negotiated = negotiate(request.params.protocolVersion);
+    if (negotiated === undefined) {
       return errorResponse(
         request.id,
         INVALID_PARAMS,
         "Invalid params: protocolVersion must be a string",
       );
     }
-    legacyVersion = LEGACY_VERSIONS.find((version) => version === requested) ?? LEGACY_VERSIONS[0];
+    legacyVersion = negotiated;
     return initializeResult(request.id, legacyVersion);
   };
 
@@ -819,12 +828,19 @@ export async function serveMcp(
     }
     if (Array.isArray(message)) {
       const batch: Batch = { elements: [] };
-      // A line known to be ineligible must not consume request slots. A queued initialize can
-      // still establish the batching revision, so leave that decision to the worker.
+      // A line known to be ineligible must not consume request slots. Before negotiation, the
+      // revision is set by the first queued initialize that will negotiate (one with a non-string
+      // protocolVersion is refused and sets nothing; any after the deciding one is refused), so the
+      // batch may take slots only when that one negotiates the batching revision.
+      let upcoming: LegacyVersion | undefined;
+      for (const job of queue) {
+        if ("elements" in job || job.method !== "initialize") continue;
+        upcoming = negotiate(job.params.protocolVersion);
+        if (upcoming !== undefined) break;
+      }
       const mayAccept =
         legacyVersion === "2025-03-26" ||
-        (legacyVersion === undefined &&
-          queue.some((job) => !("elements" in job) && job.method === "initialize"));
+        (legacyVersion === undefined && upcoming === "2025-03-26");
       if (mayAccept) {
         for (const element of message) {
           const response = triage(element, batch);

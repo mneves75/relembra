@@ -235,11 +235,14 @@ store adapters    memory (tests) · sqlite (node:sqlite, works in Node and Bun) 
 - Development uses Bun (`bun test`); a Node smoke test runs against the built library. Biome lints
   and TypeScript runs in strict mode.
 - CI (`.github/workflows/ci.yml`) runs on every push to `main` and every pull request. Its jobs
-  include lint and typecheck; the AOT CLI built on Linux and macOS with Bun canary (no stable
-  Bun has `--aot` yet; this binary is not the release binary);
-  every Bun test on stable Bun 1.4.4 against that binary, with a Postgres 17 service on Linux
-  (macOS skips the Postgres tests, having no service containers); the Node tests and packed
-  tarball; the eval's release gates on the synthetic set (ticket 18); SBOM, gitleaks, zizmor,
+  include lint and typecheck; the AOT CLI built natively on Linux x64 and arm64, macOS arm64 and
+  Windows x64 and arm64 with the pinned Bun canary (no stable Bun has `--aot` yet), whose Linux
+  and Windows builds from the release commit's push to `main` are the release's binaries (the
+  macOS one is a second build: the release ships the locally gated binary); every Bun test
+  against that binary, on stable Bun 1.4.4 on Linux x64 with a Postgres 17 service and on macOS,
+  and with the pinned Bun on Linux arm64 and Windows x64 and arm64 (those skip the Postgres
+  tests, having no service containers); the Node tests on Node 24.14 and 26, on Linux and
+  Windows, and the packed tarball; the eval's release gates on the synthetic set (ticket 18); SBOM, gitleaks, zizmor,
   and an informational probe of the latest pi-durable.
 - The local merge gate, `scripts/ci.sh`, records every required step's exit and the committed
   source/runtime identity before and after. It force-builds the native CLI, tests with Postgres

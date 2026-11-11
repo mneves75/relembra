@@ -1,3 +1,2 @@
-# False positives: a made-up authority fence key in a test (no credential), commit 3919f0a.
-3919f0ad56613651cec864d653e82d84049c20a1:test/fence.test.ts:generic-api-key:62
-3919f0ad56613651cec864d653e82d84049c20a1:test/fence.test.ts:generic-api-key:65
+# Findings gitleaks may skip, one fingerprint per line (commit:path:rule:line), each with the reason.
+# None: the two entries for a test key lived on a commit that no branch or tag reaches.

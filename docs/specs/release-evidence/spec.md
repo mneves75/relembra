@@ -1,5 +1,9 @@
 # Trustworthy performance evidence and verified release
 
+Status: historical. Its 0.4.0 prerelease was private, and this repository does not carry that
+history (`docs/eval/release-0.4.0.md` included); release evidence is now
+`docs/eval/release-<version>.md`.
+
 ## Implementation contract
 
 Source intent: owner-approved execution plan, 2026-10-31. Base:
