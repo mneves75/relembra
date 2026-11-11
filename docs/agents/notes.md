@@ -5,6 +5,21 @@ Dated entries, newest first. Keep out secrets, local paths, private names and se
 the repository is public. Code and procedure live in their own files; this file holds only what
 those files cannot say: the mistake, the dead end, the thing that turned out to matter.
 
+## 2026-11-11: 1.0.0-beta.7 (H-19, site fixes)
+
+- The strict benchmark failed on a sound candidate at a 1-minute load near 230 on 18 cores, with
+  this release's own verifiers running beside it: warm find p95 92.5 ms, while p50 stayed normal.
+  Check `uptime` and run nothing else of yours during `scripts/check-release.sh`; the rerun at load
+  20 gave 4.79 ms.
+- Independent gate acceptance rejected twice on wording, each time with every behavioural check
+  passing: a refusal said to carry a rule when not-found has none, a write inventory that called
+  itself complete, a blanket "no home path in any tracked file" that synthetic Windows test
+  fixtures contradict, and a fix that appended a sentence instead of removing the wrong claim.
+  Scope every "no X anywhere" claim to what was searched, and replace a wrong sentence rather than
+  qualifying it.
+- Firefox drops `repeating-linear-gradient` stripes when a stop is an OKLCH colour; `in srgb`
+  fixes it. Tiles of a single gradient doubled columns in Chromium.
+
 ## 2026-11-11: 1.0.0-beta.6 (audit fixes, the rebuilt site)
 
 - `npm deprecate "relembra@<1.0.0-beta.6" …` also matched `0.0.0-stage`: npm's range match for
