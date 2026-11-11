@@ -465,14 +465,23 @@ prd() {
     const http = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT$/;
     const time = http.test(value) ? Date.parse(value) : NaN;
     if (!Number.isFinite(time) || new Date(time).toUTCString() !== value) {
-      console.error(`no valid Date header (${JSON.stringify(line ?? null)})`);
+      process.stdout.write(`no valid Date header (${JSON.stringify(line ?? null)})`);
       process.exit(1);
     }
     process.stdout.write(new Date(time).toISOString().replace(/\.\d{3}Z$/, "Z"));
-  ' 2>&1); then
+  '); then
     rollback_hint
     refuse "cannot read GitHub's clock: $since"
   fi
+  # Exactly one UTC timestamp, or find_run's `createdAt >= since` would match nothing after
+  # publication. Node's stderr stays out of $since; this checks what reached stdout.
+  case $since in
+  [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) ;;
+  *)
+    rollback_hint
+    refuse "cannot read GitHub's clock: $since is not one UTC timestamp"
+    ;;
+  esac
 
   # Publication. From here nothing is undone: a published release is immutable.
   tmp_view=$(mktemp) || exit 1

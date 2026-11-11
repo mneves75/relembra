@@ -358,6 +358,49 @@ describe.skipIf(NO_RELEASE_TOOLING)(
       );
     }
 
+    // A node first on PATH that, for the clock reading only, adds a stderr line or replaces stdout.
+    const clockNode = (f: Fixture, body: string) => {
+      const realNode = spawnSync("sh", ["-c", "command -v node"], { encoding: "utf8" });
+      const dir = join(f.fixtures, "..", "clock-node");
+      mkdirSync(dir);
+      writeFileSync(
+        join(dir, "node"),
+        `#!/bin/sh\ncase "$*" in *"no valid Date header"*) ${body} ;; esac\nexec '${realNode.stdout.trim()}' "$@"\n`,
+      );
+      chmodSync(join(dir, "node"), 0o755);
+      return pathEnv(f, [dir], []);
+    };
+    for (const shell of shells) {
+      test.skipIf(shell !== "bash" && !existsSync(shell))(
+        `a warning node prints on stderr while reading GitHub's clock does not hide the runs (${shell})`,
+        () => {
+          const f = fixture();
+          expect(hmo(f, f.env, shell).status).toBe(0);
+          const env = clockNode(f, "echo 'Debugger listening on ws://127.0.0.1:9229/x' >&2");
+          const run = prd(f, env, shell);
+          expect(run.stderr).toContain("Debugger listening");
+          expect(run.stderr).not.toContain("no release.yml run");
+          expect(run.status).toBe(0);
+          expect(ghCalls(f)).toContain("run watch 900 --exit-status");
+        },
+      );
+
+      test.skipIf(shell !== "bash" && !existsSync(shell))(
+        `a clock reading that is not one UTC timestamp is refused before publishing (${shell})`,
+        () => {
+          const f = fixture();
+          expect(hmo(f, f.env, shell).status).toBe(0);
+          const env = clockNode(f, "printf '2026-11-10T20:00:00Z\\nextra'; exit 0");
+          const run = prd(f, env, shell);
+          expect(run.status).toBe(1);
+          expect(run.stderr).toContain("cannot read GitHub's clock");
+          expect(run.stderr).toContain("nothing is published");
+          expect(existsSync(join(f.fixtures, "state-published"))).toBe(false);
+          expect(ghCalls(f)).not.toContainEqual(`release edit ${TAG} --draft=false`);
+        },
+      );
+    }
+
     const badDates: [string, (f: Fixture) => void, string][] = [
       [
         "GitHub's clock cannot be read",
