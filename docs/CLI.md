@@ -598,7 +598,7 @@ the client it was qualified with).
   notifications and cancelled requests have no response. A notification-only batch writes
   nothing; an empty array gets one `-32600` error object. An initialize inside a batch gets
   `-32600` for that element. In a batch that can be accepted (the session, or the initialize queued
-  ahead of it, negotiates 2025-03-26), each request element counts toward the pending cap; excess
+  ahead of it and not cancelled, negotiates 2025-03-26), each request element counts toward the pending cap; excess
   elements get `-31000` inside the response array.
 - **Pending requests.** At most 64 requests are queued or running at once. A request past that is
   answered at once with `-31000` (`Server overloaded`), `data: { maxPending: 64 }`, is never

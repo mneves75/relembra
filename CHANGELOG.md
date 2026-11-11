@@ -5,6 +5,23 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [1.0.0-beta.7] - 2026-11-11
+
+One MCP hardening and four landing-page fixes. The library API, the store schemas, the export
+format and the CLI's exit codes are unchanged.
+
+### Fixed
+
+- MCP server: when the client cancels a queued `initialize`, a JSON-RPC batch that arrives before
+  negotiation is judged against the next `initialize` still queued, not the cancelled one. A batch
+  is accepted early only when that `initialize` asks for `2025-03-26`.
+- Landing page: saving the same fact twice in the demo keeps one memory and says it was already
+  saved (the demo now passes an op id, as an integration would).
+- Landing page: the erase demo keeps its state (retracted, redacted, delivered) across a language
+  switch; Restart still resets it.
+- Landing page: at 320 px the header bar fits inside the content margins.
+- Landing page: the ruler ticks and hatches draw the same in Firefox and WebKit as in Chromium.
+
 ## [1.0.0-beta.6] - 2026-11-11
 
 Fixes from a full read of the repository, a rebuilt landing page and a smaller npm package. The
@@ -227,6 +244,7 @@ table of `docs/specs/IMPLEMENTATION-PLAN.md`. Known residuals are documented in 
 (import id existence) and `docs/CLI.md` (same-user trust model). Report vulnerabilities as
 [SECURITY.md](SECURITY.md) describes.
 
+[1.0.0-beta.7]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.7
 [1.0.0-beta.6]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.6
 [1.0.0-beta.5]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.5
 [1.0.0-beta.4]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.4

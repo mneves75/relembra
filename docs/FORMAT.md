@@ -1,6 +1,6 @@
 # relembra storage format
 
-Status: event formats 1 and 2, SQLite schema version 6, Postgres schema version 3. Release 1.0.0-beta.6.
+Status: event formats 1 and 2, SQLite schema version 6, Postgres schema version 3. Release 1.0.0-beta.7.
 
 This document is the contract for what relembra stores. A reader that follows it needs no
 relembra code.
@@ -175,7 +175,7 @@ the events above, so a reader needs only this document.
 |---|---|---|
 | `export` | string | Always `relembra`. What makes the file an export. |
 | `format` | integer | The newest event format of the lines after it: `1` when none is a `promote` line, so a format 1 reader still reads the file, and `2` when one is. |
-| `relembra` | string | The relembra version that wrote the file, such as `1.0.0-beta.6`. Informational: a reader decides by `format` alone. |
+| `relembra` | string | The relembra version that wrote the file, such as `1.0.0-beta.7`. Informational: a reader decides by `format` alone. |
 | `scopes` | array of strings | The scopes exported. Every event's `scope` is one of them. |
 
 ### Events (lines 2 onward)

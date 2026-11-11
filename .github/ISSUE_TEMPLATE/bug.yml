@@ -12,7 +12,7 @@ body:
     attributes:
       label: Version
       description: The relembra version (npm package or the export header's `relembra` field) or commit.
-      placeholder: 1.0.0-beta.6
+      placeholder: 1.0.0-beta.7
     validations:
       required: true
   - type: dropdown

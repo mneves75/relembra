@@ -830,11 +830,12 @@ export async function serveMcp(
       const batch: Batch = { elements: [] };
       // A line known to be ineligible must not consume request slots. Before negotiation, the
       // revision is set by the first queued initialize that will negotiate (one with a non-string
-      // protocolVersion is refused and sets nothing; any after the deciding one is refused), so the
-      // batch may take slots only when that one negotiates the batching revision.
+      // protocolVersion is refused and sets nothing, one already cancelled is dropped unrun; any
+      // after the deciding one is refused), so the batch may take slots only when that one
+      // negotiates the batching revision. A cancellation read after this line cannot be foreseen.
       let upcoming: LegacyVersion | undefined;
       for (const job of queue) {
-        if ("elements" in job || job.method !== "initialize") continue;
+        if ("elements" in job || job.method !== "initialize" || cancelled.has(job.key)) continue;
         upcoming = negotiate(job.params.protocolVersion);
         if (upcoming !== undefined) break;
       }
