@@ -1,7 +1,7 @@
 {
   "permissions": {
     "deny": [
-      "Read(//Users/mneves/dev/OptMem/**)",
+      "Read(~/dev/OptMem/**)",
       "Bash(*dev/OptMem*)"
     ],
     "ask": [
