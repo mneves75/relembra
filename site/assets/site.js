@@ -75,6 +75,7 @@
       },
       notRendered: "Nada é gravado, e a recusa nunca repete o texto.",
       saved: (id) => `Guardado no projeto A como ${shortId(id)}. Já está no wake de terça, abaixo.`,
+      alreadySaved: (id) => `Já estava guardado como ${shortId(id)}. Nada foi duplicado.`,
       saveRefused: (rule) => `A guarda recusou (${rule}). Nada foi gravado.`,
       copied: "Copiado",
       selected: "Selecionado",
@@ -163,6 +164,7 @@
       },
       notRendered: "Nothing is stored, and the refusal never echoes the text.",
       saved: (id) => `Saved to project A as ${shortId(id)}. It's in Tuesday's wake, below.`,
+      alreadySaved: (id) => `Already saved as ${shortId(id)}. Nothing was duplicated.`,
       saveRefused: (rule) => `The guard refused it (${rule}). Nothing was stored.`,
       copied: "Copied",
       selected: "Selected",
@@ -330,6 +332,15 @@
   let world = null;
   let gen = 0;
 
+  /**
+   * A visitor's save carries an op id made from the scope and the exact text, so the library
+   * answers a repeat with the first save's memory instead of storing a second copy.
+   */
+  const saveNote = (base, text) =>
+    base.note("a", base.scopes.a, text, {
+      opId: lib.integrationOpId("relembra-site", base.scopes.a, "note", text),
+    });
+
   async function buildMain() {
     const base = makeMemory();
     const { scopes, note, memory, provenance } = base;
@@ -357,8 +368,9 @@
     ids.global = (await note("owner", scopes.g, seed.global, { provenance: owner })).id;
     ids.b1 = (await note("b", scopes.b, seed.b1)).id;
     ids.b2 = (await note("b", scopes.b, seed.b2)).id;
-    for (const text of savedTexts) await note("a", scopes.a, text);
-    return { ...base, ids, covered: new Set([ids.port, ids.tz]) };
+    const saved = new Set();
+    for (const text of savedTexts) saved.add((await saveNote(base, text)).id);
+    return { ...base, ids, saved, covered: new Set([ids.port, ids.tz]) };
   }
 
   function wakeLines(text) {
@@ -468,9 +480,16 @@
     if (saveButton.getAttribute("aria-disabled") === "true") return; // the guard refused the line
     const text = fact.value;
     const g = gen;
+    const current = world;
     try {
-      const memory = await world.note("a", world.scopes.a, text);
+      const memory = await saveNote(current, text);
       if (g !== gen) return;
+      // The library returned a memory this world already holds: the repeat stored nothing.
+      if (current.saved.has(memory.id)) {
+        savedOut.textContent = t().alreadySaved(memory.id);
+        return;
+      }
+      current.saved.add(memory.id);
       savedTexts.push(text);
       savedOut.textContent = t().saved(memory.id);
       await refreshWorld();
@@ -628,6 +647,36 @@
   const carrierList = $("[data-carriers]");
   const eraseOut = $("[data-erase-out]");
   let erase = null;
+  // The erase actions taken so far, in order: a language switch replays them, as savedTexts.
+  const eraseSteps = [];
+
+  /** Runs one erase action on the demo's store; returns what its message needs. */
+  async function eraseStep(state, act) {
+    if (act === "retract") {
+      await state.memory.retract("owner", { memoryId: state.original });
+      return { act };
+    }
+    if (act === "redact") {
+      const result = await state.memory.redact("owner", { memoryId: state.original });
+      return { act, places: result.redacted.length + result.derived.length };
+    }
+    const delivery = await state.memory.deliverErasures(async (work) =>
+      Object.fromEntries(
+        work.carriers.map((carrier) => [
+          carrier.id,
+          carrier.kind === "mcp" ? "unsupported" : "acknowledged",
+        ]),
+      ),
+    );
+    return { act, delivery };
+  }
+
+  function eraseMessage(outcome) {
+    if (outcome?.act === "retract") return t().retracted;
+    if (outcome?.act === "redact") return t().redacted(outcome.places);
+    if (outcome?.act === "deliver") return t().delivered(outcome.delivery);
+    return "";
+  }
 
   async function buildErase() {
     const base = makeMemory();
@@ -664,7 +713,10 @@
       { ...chat, received: chatWake.memoryIds.filter((id) => tracked.has(id)).length },
       { ...mcp, received: mcpWake.memoryIds.filter((id) => tracked.has(id)).length },
     ];
-    return { ...base, rows, carriers, original: pii.id };
+    const state = { ...base, rows, carriers, original: pii.id, outcome: null };
+    // After the carriers' wakes, so a replayed redaction leaves them pending as the first one did.
+    for (const act of eraseSteps) state.outcome = await eraseStep(state, act);
+    return state;
   }
 
   async function renderErase(g) {
@@ -738,32 +790,25 @@
       const act = button.dataset.eraseAct;
       const g = gen;
       const state = erase;
+      let next = state;
       try {
-        let message = "";
-        let next = state;
         if (act === "reset") {
+          eraseSteps.length = 0;
           next = await buildErase();
-        } else if (act === "retract") {
-          await state.memory.retract("owner", { memoryId: state.original });
-          message = t().retracted;
-        } else if (act === "redact") {
-          const result = await state.memory.redact("owner", { memoryId: state.original });
-          message = t().redacted(result.redacted.length + result.derived.length);
-        } else if (act === "deliver") {
-          const delivery = await state.memory.deliverErasures(async (work) =>
-            Object.fromEntries(
-              work.carriers.map((carrier) => [
-                carrier.id,
-                carrier.kind === "mcp" ? "unsupported" : "acknowledged",
-              ]),
-            ),
-          );
-          message = t().delivered(delivery);
+        } else {
+          // Recorded before it runs, so a language switch meanwhile replays it in the new demo.
+          eraseSteps.push(act);
+          try {
+            state.outcome = await eraseStep(state, act);
+          } catch (error) {
+            eraseSteps.splice(eraseSteps.lastIndexOf(act), 1);
+            throw error;
+          }
         }
         // A language switch rebuilt the demo meanwhile: this answer belongs to the old one.
         if (g !== gen) return;
         erase = next;
-        eraseOut.textContent = message;
+        eraseOut.textContent = eraseMessage(next.outcome);
         await renderErase(g);
       } finally {
         erasing = false;
@@ -780,10 +825,13 @@
 
   async function startWorlds() {
     const g = ++gen;
+    // No erase action while the demo is rebuilt: it would act on the store being replaced.
+    erase = null;
     world = await buildMain();
-    erase = await buildErase();
+    const built = await buildErase();
     if (g !== gen) return;
-    eraseOut.textContent = "";
+    erase = built;
+    eraseOut.textContent = eraseMessage(erase.outcome);
     await Promise.all([refreshWorld(), renderErase(g), renderTry()]);
   }
 

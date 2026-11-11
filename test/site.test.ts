@@ -183,6 +183,67 @@ describe("site: the browser bundle", () => {
     const after = await memory.wake("a", { scope: "projeto-a" });
     expect(after.text).not.toContain("TZ=UTC");
   });
+
+  test("the hero's save is idempotent: the same text in the same scope is one memory", async () => {
+    const sandbox: { relembraDemo?: unknown; [global: string]: unknown } = {
+      TextEncoder,
+      TextDecoder,
+      structuredClone,
+      crypto: { randomUUID: () => crypto.randomUUID() },
+    };
+    runInNewContext(await buildSiteBundle(), sandbox);
+    const lib = sandbox.relembraDemo as typeof import("../scripts/site/entry.js").demo;
+    const scopes = ["projeto-a"];
+    const memory = lib.createRelembra({
+      store: lib.createMemoryStore(),
+      policy: () => ({ id: "agente-a", readable: scopes, writable: scopes, promotable: [] }),
+    });
+    const provenance = { agent: "demo", harness: "site", model: "none", host: "browser" };
+    // the derivation site.js uses for a visitor's save
+    const save = (text: string) =>
+      memory.note(null, {
+        scope: "projeto-a",
+        text,
+        provenance,
+        opId: lib.integrationOpId("relembra-site", "projeto-a", "note", text),
+      });
+
+    const first = await save("O Redis local escuta na 6380.");
+    for (let i = 0; i < 3; i++)
+      expect((await save("O Redis local escuta na 6380.")).id).toBe(first.id);
+    const other = await save("O Redis local escuta na 6381.");
+    expect(other.id).not.toBe(first.id); // positive control: a different text is a new memory
+    expect((await memory.recall(null, { scope: "projeto-a" })).length).toBe(2);
+
+    const js = readFileSync(join(site, "assets", "site.js"), "utf8");
+    expect(js).toContain('lib.integrationOpId("relembra-site", base.scopes.a, "note", text)');
+    // a repeat says so in both languages, in words distinct from the first save's
+    expect(js.match(/^ {6}alreadySaved: \(id\) =>/gm)?.length).toBe(2);
+    expect(js.match(/^ {6}saved: \(id\) =>/gm)?.length).toBe(2);
+    expect(js).toMatch(/`Já estava guardado como \$\{shortId\(id\)\}\./);
+    expect(js).toMatch(/`Already saved as \$\{shortId\(id\)\}\./);
+  });
+
+  test("the erase demo keeps its state across a language switch, as the other demos do", () => {
+    const js = readFileSync(join(site, "assets", "site.js"), "utf8");
+    const build = js.slice(
+      js.indexOf("async function buildErase()"),
+      js.indexOf("async function renderErase("),
+    );
+    // the rebuilt demo replays the actions taken, after the carriers' wakes
+    expect(build.indexOf("for (const act of eraseSteps)")).toBeGreaterThan(
+      build.indexOf("mcpWake"),
+    );
+    // the switch paints the replayed outcome in the new language instead of blanking it
+    const start = js.slice(
+      js.indexOf("async function startWorlds()"),
+      js.indexOf("function switchWorlds("),
+    );
+    expect(start).toContain("eraseOut.textContent = eraseMessage(erase.outcome);");
+    expect(start).not.toContain('eraseOut.textContent = "";');
+    // positive control: restart clears the record
+    expect(js).toContain("eraseSteps.length = 0;");
+  });
 });
 
 /** Elements in document order, with their attributes and the path of open parents. */
@@ -437,6 +498,25 @@ describe("site: the page", () => {
     // nothing moves before the gate, and nothing keys on the old attribute
     expect(outside).not.toMatch(/\b(transition|animation)\s*:/);
     expect(`${html}\n${css}\n${js}`).not.toContain("data-motion");
+  });
+
+  test("ticks and hatches: every repeating gradient interpolates in sRGB", () => {
+    // Firefox draws no stripe for a repeating gradient interpolated in OKLab, the default once a
+    // stop is an oklch() colour, as every token is; a hard stop looks the same in either space.
+    const css = readFileSync(join(site, "assets", "site.css"), "utf8");
+    const gradients = css.match(/repeating-linear-gradient\([^,]*,/g) ?? [];
+    expect(gradients.length).toBeGreaterThanOrEqual(6); // positive control: the motif is there
+    expect(
+      gradients.filter((g) => !/^repeating-linear-gradient\(\d+deg in srgb,$/.test(g)),
+    ).toEqual([]);
+    // The ruler's 28 minor ticks are one solid layer each, on the ruler and on its fill: a
+    // repeating gradient's fractional period (the width / 28) drops ticks in WebKit.
+    const block = (selector: string) =>
+      css.slice(css.indexOf(`${selector} {`)).split("\n}")[0] ?? "";
+    for (const selector of [".ruler", ".ruler__fill"]) {
+      const layers = block(selector).match(/var\(--minor\) calc\(100% \* (\d+) \/ 28\)/g) ?? [];
+      expect({ selector, layers: layers.length }).toEqual({ selector, layers: 28 });
+    }
   });
 
   test("table parts keep explicit roles, since phone CSS changes their display", async () => {

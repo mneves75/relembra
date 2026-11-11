@@ -39,11 +39,16 @@ The smallest text is 14 px (`max(0.875em, 0.875rem)` on code). Numerals are tabu
 
 ## Motif: the ruler tick
 
-1px lines at regular intervals, drawn as hard-stop repeating gradients (stripes, never a blend):
+1px lines at regular intervals, drawn as hard-stop repeating gradients (stripes, never a blend).
+Every one names `in srgb` (`repeating-linear-gradient(90deg in srgb, …)`): with oklch stops the
+default interpolation is OKLab, and Firefox then draws no stripe at all; a hard stop looks the same
+in either space.
 
 - `--ticks-minor`: every 8px; `--ticks-major`: every 80px.
 - Section dividers: a 10px tick band on each section's top hairline, and on the footer's.
-- The hero ruler: 28 minor ticks (10 bytes each), majors at 70, 140, 210 and 280.
+- The hero ruler: 28 minor ticks (10 bytes each), majors at 70, 140, 210 and 280. The minor
+  ticks are one solid 1px layer each (`var(--minor) calc(100% * k / 28)`), not a repeating
+  gradient: a period of the width / 28 is fractional, and WebKit then skips ticks.
 - The wake budget slider's track; the gauge under it.
 - The proof table's row rules (a 4px tick strip at each row's foot).
 - List bullets: a 10px horizontal tick; install steps hang off a 1px vertical rule.
