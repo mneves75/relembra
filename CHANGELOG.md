@@ -7,6 +7,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `relembra --help` opens with a Commands table, one line per command saying what it does, before
+  the usage lines.
 - The landing page is rebuilt as a measuring instrument: dark only, the live note line with a byte
   ruler in the first viewport, the scope, wake-budget and erasure demos in one row, one proof table,
   Instrument Sans and Martian Mono self-hosted (`PRODUCT.md`, `DESIGN.md`).

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect } from "bun:test";
+import { COMMANDS } from "../../src/cli/commands.js";
 import { BINARY, cliTest, ok, refused, run, runStdinOpen, sandbox } from "./support.js";
 
 const box = sandbox();
@@ -144,6 +145,30 @@ describe("bad input, refused cleanly by the compiled binary", () => {
     const result = run(box, ["--help"]);
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("relembra note");
+  });
+
+  cliTest("--help gives every command a one-line summary and keeps every usage line", () => {
+    const result = run(box, ["--help"]);
+    expect(result.status).toBe(0);
+    const lines = result.stdout.split("\n");
+    const start = lines.indexOf("Commands:");
+    const usageAt = lines.indexOf("Usage:");
+    // positive control: both blocks exist, the table first
+    expect(start).toBeGreaterThan(0);
+    expect(usageAt).toBeGreaterThan(start);
+    const table = lines.slice(start + 1, usageAt).filter((line) => line.trim() !== "");
+    const rows = new Map(
+      table.map((line) => {
+        const match = /^ {2}([a-z]+) {2,}(\S.*)$/.exec(line);
+        return [match?.[1] ?? line, match?.[2] ?? ""] as const;
+      }),
+    );
+    expect([...rows.keys()]).toEqual(COMMANDS.map((command) => command.name));
+    for (const [name, summary] of rows)
+      expect({ name, summary: summary.length > 0 }).toEqual({ name, summary: true });
+    expect(table.filter((line) => line.length > 80)).toEqual([]);
+    const usage = lines.slice(usageAt + 1);
+    for (const command of COMMANDS) expect(usage).toContain(`  ${command.usage}`);
   });
 
   cliTest("--help with --json is one JSON document, in either order and after a command", () => {
