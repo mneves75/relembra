@@ -531,6 +531,22 @@ describe("a batch read before negotiation counts against the cap only if it can 
     });
   }
 
+  test("an initialize refused for its protocolVersion does not decide; the next one queued does", async () => {
+    const written = await behindHeldWrite([
+      legacyRequest("bad", "initialize", { protocolVersion: 42 }),
+      initialize("init", "2025-03-26"),
+      pings(3),
+    ]);
+    // biome-ignore lint/suspicious/noExplicitAny: the server's JSON, checked field by field.
+    const objects = written.filter((line) => !Array.isArray(line)) as any[];
+    expect(objects.find((r) => r.id === "bad").error.code).toBe(-32602);
+    expect(objects.find((r) => r.id === "init").result.protocolVersion).toBe("2025-03-26");
+    // biome-ignore lint/suspicious/noExplicitAny: as above.
+    const batches = written.filter(Array.isArray) as any[][];
+    expect(batches).toHaveLength(1);
+    expect(batches[0]?.map((r) => r.result)).toEqual([{}, {}, {}]);
+  });
+
   test("control: an initialize requesting 2025-03-26 lets the batch hold its slots", async () => {
     const written = await behindHeldWrite([
       initialize("init", "2025-03-26"),

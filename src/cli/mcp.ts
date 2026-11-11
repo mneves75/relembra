@@ -828,17 +828,19 @@ export async function serveMcp(
     }
     if (Array.isArray(message)) {
       const batch: Batch = { elements: [] };
-      // A line known to be ineligible must not consume request slots. Before negotiation, only the
-      // first queued initialize can set the revision (a later one is refused), so the batch may
-      // take slots only when that one will negotiate the batching revision.
-      const initialize = queue.find(
-        (job): job is Request => !("elements" in job) && job.method === "initialize",
-      );
+      // A line known to be ineligible must not consume request slots. Before negotiation, the
+      // revision is set by the first queued initialize that will negotiate (one with a non-string
+      // protocolVersion is refused and sets nothing; any after the deciding one is refused), so the
+      // batch may take slots only when that one negotiates the batching revision.
+      let upcoming: LegacyVersion | undefined;
+      for (const job of queue) {
+        if ("elements" in job || job.method !== "initialize") continue;
+        upcoming = negotiate(job.params.protocolVersion);
+        if (upcoming !== undefined) break;
+      }
       const mayAccept =
         legacyVersion === "2025-03-26" ||
-        (legacyVersion === undefined &&
-          initialize !== undefined &&
-          negotiate(initialize.params.protocolVersion) === "2025-03-26");
+        (legacyVersion === undefined && upcoming === "2025-03-26");
       if (mayAccept) {
         for (const element of message) {
           const response = triage(element, batch);
