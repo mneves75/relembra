@@ -196,17 +196,22 @@ describe("strictVerdict", () => {
     expect(failuresOf({ ...base, store: null })).toContain("no store was built");
   });
 
-  test("storeIntegrity runs SQLite's integrity check: ok on a built store, not on a damaged one", async () => {
-    const path = join(scratch, "integrity", "relembra.db");
-    await buildStore(path, bulkCorpus({ seed: DEFAULT_SEED, memories: 300 }).memories);
-    expect(storeIntegrity(path)).toBe("ok");
-    // Overwrite the second page, a b-tree page, with a byte no page type uses.
-    const bytes = readFileSync(path);
-    const pageSize = bytes.readUInt16BE(16);
-    bytes.fill(0xee, pageSize, pageSize + 64);
-    writeFileSync(path, bytes);
-    expect(storeIntegrity(path)).not.toBe("ok");
-  }, 30_000);
+  test(
+    "storeIntegrity runs SQLite's integrity check: ok on a built store, not on a damaged one",
+    async () => {
+      const path = join(scratch, "integrity", "relembra.db");
+      await buildStore(path, bulkCorpus({ seed: DEFAULT_SEED, memories: 300 }).memories);
+      expect(storeIntegrity(path)).toBe("ok");
+      // Overwrite the second page, a b-tree page, with a byte no page type uses.
+      const bytes = readFileSync(path);
+      const pageSize = bytes.readUInt16BE(16);
+      bytes.fill(0xee, pageSize, pageSize + 64);
+      writeFileSync(path, bytes);
+      expect(storeIntegrity(path)).not.toBe("ok");
+      // A hosted Windows runner builds a store two to three times slower on a bad day.
+    },
+    process.platform === "win32" ? 90_000 : 30_000,
+  );
 
   for (const [mode, field, label, minimum] of [
     ["warm", "warmup", "--warmup", 50],
