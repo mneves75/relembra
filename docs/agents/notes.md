@@ -22,6 +22,12 @@ those files cannot say: the mistake, the dead end, the thing that turned out to 
 - A full-page screenshot of the site taken while an entrance animation runs shows blank bands and
   a half-drawn highlight. Measure `document.documentElement.scrollHeight` and capture after the
   page settles before calling anything a defect.
+- A hosted build job that fails at the pinned-Bun download (`curl: (35) … Connection was reset`)
+  is the registry, not the repository: `gh run rerun <id> --failed` re-runs it and the lanes
+  skipped behind it, and `hmo` then accepts the run on its second attempt.
+- An acceptance brief that says more than was measured gets rejected on that sentence even when
+  the candidate is sound ("all four tests fail on the old code" when two are controls). State what
+  each test does on the old code, one by one.
 - An audit claim about a script is checked by reading what the script calls, not only the script:
   `deploy.sh` never names `tar`, and still needs it through `scripts/stage-release.ts`.
 
