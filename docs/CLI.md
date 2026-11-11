@@ -221,7 +221,7 @@ is the library's host: it decides the scope and the principal, never the agent c
 | Flag | Meaning |
 |---|---|
 | `--json` | Print one JSON document (see [Output](#output)) |
-| `--help` | Print the usage and exit 0; with `--json`, `{ "ok": true, "data": { "usage": … } }` |
+| `--help` | Print a Commands table (each command with a one-line summary), the usage lines and exit 0; with `--json`, `{ "ok": true, "data": { "usage": … } }` |
 
 A token starting with `-` before `--` is a flag. Put text that starts with `-` after `--`:
 `relembra note -- "-5 °C is the freezer's setting"`. A value flag takes `--flag value` or

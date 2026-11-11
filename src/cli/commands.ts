@@ -30,9 +30,11 @@ export type Positionals =
 
 export interface CommandSpec {
   readonly name: string;
+  /** What the command does, in one line for the Commands table of `relembra --help`. */
+  readonly summary: string;
   readonly positionals: Positionals;
   readonly flags: readonly FlagSpec[];
-  /** One line for `relembra --help`. */
+  /** One line for the Usage block of `relembra --help`. */
   readonly usage: string;
 }
 
@@ -46,9 +48,16 @@ const PROVENANCE: readonly FlagSpec[] = [
 ];
 
 export const COMMANDS: readonly CommandSpec[] = [
-  { name: "init", positionals: "none", flags: [], usage: "relembra init" },
+  {
+    name: "init",
+    summary: "Create the store and print the session-start hook for your agent",
+    positionals: "none",
+    flags: [],
+    usage: "relembra init",
+  },
   {
     name: "note",
+    summary: "Save one fact, a single line of at most 280 bytes",
     positionals: "text",
     flags: [...PROVENANCE, { name: "--pin", value: false }],
     usage:
@@ -56,12 +65,14 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: "find",
+    summary: "Search memories by words, best match first",
     positionals: "words",
     flags: [{ name: "--limit", value: true }],
     usage: "relembra find <query…> [--limit n]",
   },
   {
     name: "recall",
+    summary: "List the newest memories",
     positionals: "none",
     flags: [
       { name: "--limit", value: true },
@@ -71,49 +82,98 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: "wake",
+    summary: "Print the block a session starts with, within a byte budget",
     positionals: "none",
     flags: [{ name: "--budget", value: true }],
     usage: "relembra wake [--budget bytes]",
   },
   {
     name: "brief",
+    summary: "Print the memories about one topic, within a byte budget",
     positionals: "words",
     flags: [{ name: "--budget", value: true }],
     usage: "relembra brief <topic…> [--budget bytes]",
   },
-  { name: "zoom", positionals: "id", flags: [], usage: "relembra zoom <id>" },
-  { name: "retract", positionals: "id", flags: [], usage: "relembra retract <id>" },
-  { name: "redact", positionals: "id", flags: [], usage: "relembra redact <id>" },
+  {
+    name: "zoom",
+    summary: "Show one memory with its provenance, and a summary's sources",
+    positionals: "id",
+    flags: [],
+    usage: "relembra zoom <id>",
+  },
+  {
+    name: "retract",
+    summary: "Hide a memory from agents; its owner still sees it",
+    positionals: "id",
+    flags: [],
+    usage: "relembra retract <id>",
+  },
+  {
+    name: "redact",
+    summary: "Erase a memory's text everywhere, summaries of it included",
+    positionals: "id",
+    flags: [],
+    usage: "relembra redact <id>",
+  },
   {
     name: "supersede",
+    summary: "Replace a memory with a new line",
     positionals: "id-text",
     flags: [...PROVENANCE, { name: "--pin", value: false }],
     usage: "relembra supersede <id> [text] [--pin] [provenance flags as for note]",
   },
   {
     name: "pending",
+    summary: "List unpinned memories that no summary covers yet, oldest first",
     positionals: "none",
     flags: [{ name: "--limit", value: true }],
     usage: "relembra pending [--limit n]",
   },
   {
     name: "summarize",
+    summary: "Save a summary of the given memory revisions",
     positionals: "text",
     flags: [...PROVENANCE, { name: "--of", value: true, repeat: true }],
     usage: "relembra summarize [text] --of <id>@<revision>… [provenance flags as for note]",
   },
   {
     name: "sweep",
+    summary: "Redact memories older than a number of days",
     positionals: "none",
     flags: [{ name: "--max-age-days", value: true }],
     usage: "relembra sweep --max-age-days n",
   },
-  { name: "check", positionals: "none", flags: [], usage: "relembra check" },
-  { name: "hook", positionals: "none", flags: [], usage: "relembra hook" },
-  { name: "mcp", positionals: "none", flags: [], usage: "relembra mcp" },
-  { name: "export", positionals: "none", flags: [], usage: "relembra export" },
+  {
+    name: "check",
+    summary: "Verify the store and report what it holds",
+    positionals: "none",
+    flags: [],
+    usage: "relembra check",
+  },
+  {
+    name: "hook",
+    summary: "Print the wake as a session-start hook response",
+    positionals: "none",
+    flags: [],
+    usage: "relembra hook",
+  },
+  {
+    name: "mcp",
+    summary: "Serve the memory tools to an MCP client over stdio",
+    positionals: "none",
+    flags: [],
+    usage: "relembra mcp",
+  },
+  {
+    name: "export",
+    summary: "Print the scope's events as JSON Lines",
+    positionals: "none",
+    flags: [],
+    usage: "relembra export",
+  },
   {
     name: "import",
+    summary: "Load an export file, or another store's directory, into the scope",
     positionals: "path",
     flags: [{ name: "--optmem", value: true }],
     usage: "relembra import <file> | relembra import --optmem <dir>",
@@ -140,9 +200,14 @@ export const ENV_VARS = [
 ] as const;
 
 export function usageText(): string {
+  const width = Math.max(...COMMANDS.map((command) => command.name.length));
   return [
     "relembra: a curated, scoped memory for AI agents",
     "",
+    "Commands:",
+    ...COMMANDS.map((command) => `  ${command.name.padEnd(width)}  ${command.summary}`),
+    "",
+    "Usage:",
     ...COMMANDS.map((command) => `  ${command.usage}`),
     "",
     "Every command takes --json. Scope comes from the git project and the OS user, or",
