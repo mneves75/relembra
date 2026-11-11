@@ -1270,9 +1270,10 @@ select {
   .bar__tools {
     gap: 4px;
   }
+  /* 280px of content at 320: every item at its smallest legible size, 14px text, 38px targets */
   .bar__mark {
-    gap: 5px;
-    font-size: 1.0625rem;
+    gap: 4px;
+    font-size: 1rem;
   }
   .bar .seg button {
     min-inline-size: 38px;
@@ -1280,9 +1281,11 @@ select {
   }
   .bar__link {
     padding-inline: 0;
+    font-size: 0.875rem;
   }
   .bar .btn {
-    padding-inline: 8px;
+    padding-inline: 6px;
+    font-size: 0.875rem;
   }
 }
 
