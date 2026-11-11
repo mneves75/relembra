@@ -1,7 +1,9 @@
 # W-NV1: create a Windows store privately and verify its ancestry
 
-Status: shipped in 1.0.0-beta.4 and accepted at its security gate; the residual (b′) is under an
-owner waiver to 2026-11-30 (`docs/eval/release-1.0.0-beta.4.md`).
+Status: shipped in 1.0.0-beta.4 and accepted at its security gate. The residual (b′) was carried
+under an owner waiver through 1.0.0-beta.6 (`docs/eval/release-1.0.0-beta.4.md`); on 2026-11-11 the
+owner closed it as a documented boundary: it stays stated here and in
+[docs/CLI.md](../../CLI.md#windows), and later gates list it as a boundary, not a waiver.
 
 ## Assumptions and boundary
 
