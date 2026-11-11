@@ -107,6 +107,12 @@ Local markdown under `docs/specs/<feature>/`. See `docs/agents/issue-tracker.md`
 
 Single-context: `GLOSSARY.md` and `docs/adr/` at the repository root. See `docs/agents/domain.md`.
 
+### Landing page
+
+`PRODUCT.md` (who the product is for and what it does) and `DESIGN.md` (the shipped design system:
+tokens, type, the tick motif, components) at the repository root govern `site/`. Read both before
+changing the page; `test/site.test.ts` holds its invariants.
+
 ### Working notes
 
 `docs/agents/notes.md` records what worked and what did not in this repository's tooling and

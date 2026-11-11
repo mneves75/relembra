@@ -5,6 +5,13 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [1.0.0-beta.6] - 2026-11-11
+
+Fixes from a full read of the repository, a rebuilt landing page and a smaller npm package. The
+store schemas and the export format are unchanged. The CLI gains one refusal code,
+`summary-supersede`; a script that treated exit 3 from `supersede` on a summary as a store error
+now sees exit 1.
+
 ### Changed
 
 - `relembra --help` opens with a Commands table, one line per command saying what it does, before
@@ -220,6 +227,7 @@ table of `docs/specs/IMPLEMENTATION-PLAN.md`. Known residuals are documented in 
 (import id existence) and `docs/CLI.md` (same-user trust model). Report vulnerabilities as
 [SECURITY.md](SECURITY.md) describes.
 
+[1.0.0-beta.6]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.6
 [1.0.0-beta.5]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.5
 [1.0.0-beta.4]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.4
 [1.0.0-beta.3]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.3
