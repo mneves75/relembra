@@ -439,6 +439,28 @@ describe("site: the page", () => {
     expect(`${html}\n${css}\n${js}`).not.toContain("data-motion");
   });
 
+  test("table parts keep explicit roles, since phone CSS changes their display", async () => {
+    // Safari with VoiceOver drops table semantics from a table element whose display CSS changes;
+    // the roles in the markup restore them.
+    const expected: Record<string, string> = {
+      table: "table",
+      thead: "rowgroup",
+      tbody: "rowgroup",
+      tr: "row",
+      td: "cell",
+    };
+    const all = await elements(html);
+    const parts = all.filter((el) => el.tag in expected || el.tag === "th");
+    // positive control: the proof table and its 27 data rows are found
+    expect(parts.filter((el) => el.tag === "tr").length).toBe(29);
+    const wrong = parts.filter((el) => {
+      const role = el.attrs.get("role");
+      if (el.tag !== "th") return role !== expected[el.tag];
+      return role !== (el.attrs.get("scope") === "col" ? "columnheader" : "rowheader");
+    });
+    expect(wrong.map((el) => el.tag)).toEqual([]);
+  });
+
   test("explains plainly without naming the method it borrows", () => {
     const page = readFileSync(join(site, "index.html"), "utf8");
     // Rewritten for the 2026-11 redesign, which dropped the explain__lead chapter: the positive

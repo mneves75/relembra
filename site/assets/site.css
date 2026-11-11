@@ -238,6 +238,17 @@ select {
   border-color: var(--signal-hi);
   background: var(--signal-hi);
 }
+.btn--primary[aria-disabled="true"],
+.btn--primary[aria-disabled="true"]:hover {
+  border-style: dashed;
+  border-color: var(--ink-2);
+  background: transparent;
+  color: var(--ink-2);
+  cursor: not-allowed;
+}
+.btn[aria-disabled="true"]:active {
+  transform: none;
+}
 
 .seg {
   display: inline-flex;
@@ -1221,8 +1232,8 @@ select {
   .bar__tools {
     gap: 8px;
   }
-  .bar .bar__ticks {
-    display: none;
+  .bar__mark {
+    gap: 6px;
   }
   .bar__link {
     padding-inline: 2px;
@@ -1241,15 +1252,23 @@ select {
 }
 
 @media (max-width: 379px) {
+  .bar__in,
   .bar__tools {
     gap: 4px;
   }
+  .bar__mark {
+    gap: 5px;
+    font-size: 1.0625rem;
+  }
   .bar .seg button {
-    min-inline-size: 40px;
-    padding-inline: 8px;
+    min-inline-size: 38px;
+    padding-inline: 6px;
+  }
+  .bar__link {
+    padding-inline: 0;
   }
   .bar .btn {
-    padding-inline: 10px;
+    padding-inline: 8px;
   }
 }
 

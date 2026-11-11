@@ -408,13 +408,23 @@
     inst.style.setProperty("--wdth", `${100 - 25 * squeeze}%`);
   }
 
-  async function renderTry() {
-    if (!fact) return;
-    const text = fact.value;
+  const saveButton = $("#try-save");
+
+  /** Runs the real guard on the line: ruler, verdict and the save action follow its answer. */
+  function guard(text) {
     measure(byteLength(text));
     const rule = lib.findGuardViolation(text, lib.MAX_MEMORY_BYTES);
     ruler.classList.toggle("is-refused", Boolean(rule));
+    // aria-disabled, not disabled: the button stays focusable so a keyboard user hears why.
+    saveButton?.setAttribute("aria-disabled", String(Boolean(rule)));
     paintVerdict(rule);
+    return rule;
+  }
+
+  async function renderTry() {
+    if (!fact) return;
+    const text = fact.value;
+    const rule = guard(text);
     const seq = ++trySeq;
     if (rule) {
       rendered.replaceChildren(el("span", "tk-dim", t().notRendered));
@@ -430,7 +440,7 @@
   fact?.addEventListener("input", () => {
     factEdited = true;
     savedOut.textContent = "";
-    measure(byteLength(fact.value));
+    guard(fact.value);
     window.clearTimeout(tryTimer);
     tryTimer = window.setTimeout(renderTry, 90);
   });
@@ -445,8 +455,9 @@
     });
   }
 
-  $("#try-save")?.addEventListener("click", async () => {
+  saveButton?.addEventListener("click", async () => {
     if (!world) return; // the demo store is still being built
+    if (saveButton.getAttribute("aria-disabled") === "true") return; // the guard refused the line
     const text = fact.value;
     const g = gen;
     try {
