@@ -183,6 +183,46 @@ describe("site: the browser bundle", () => {
     const after = await memory.wake("a", { scope: "projeto-a" });
     expect(after.text).not.toContain("TZ=UTC");
   });
+
+  test("the hero's save is idempotent: the same text in the same scope is one memory", async () => {
+    const sandbox: { relembraDemo?: unknown; [global: string]: unknown } = {
+      TextEncoder,
+      TextDecoder,
+      structuredClone,
+      crypto: { randomUUID: () => crypto.randomUUID() },
+    };
+    runInNewContext(await buildSiteBundle(), sandbox);
+    const lib = sandbox.relembraDemo as typeof import("../scripts/site/entry.js").demo;
+    const scopes = ["projeto-a"];
+    const memory = lib.createRelembra({
+      store: lib.createMemoryStore(),
+      policy: () => ({ id: "agente-a", readable: scopes, writable: scopes, promotable: [] }),
+    });
+    const provenance = { agent: "demo", harness: "site", model: "none", host: "browser" };
+    // the derivation site.js uses for a visitor's save
+    const save = (text: string) =>
+      memory.note(null, {
+        scope: "projeto-a",
+        text,
+        provenance,
+        opId: lib.integrationOpId("relembra-site", "projeto-a", "note", text),
+      });
+
+    const first = await save("O Redis local escuta na 6380.");
+    for (let i = 0; i < 3; i++)
+      expect((await save("O Redis local escuta na 6380.")).id).toBe(first.id);
+    const other = await save("O Redis local escuta na 6381.");
+    expect(other.id).not.toBe(first.id); // positive control: a different text is a new memory
+    expect((await memory.recall(null, { scope: "projeto-a" })).length).toBe(2);
+
+    const js = readFileSync(join(site, "assets", "site.js"), "utf8");
+    expect(js).toContain('lib.integrationOpId("relembra-site", base.scopes.a, "note", text)');
+    // a repeat says so in both languages, in words distinct from the first save's
+    expect(js.match(/^ {6}alreadySaved: \(id\) =>$/gm)?.length).toBe(2);
+    expect(js.match(/^ {6}saved: \(id\) =>/gm)?.length).toBe(2);
+    expect(js).toMatch(/`Já estava guardado como \$\{shortId\(id\)\}\./);
+    expect(js).toMatch(/`Already saved as \$\{shortId\(id\)\}\./);
+  });
 });
 
 /** Elements in document order, with their attributes and the path of open parents. */

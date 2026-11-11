@@ -75,6 +75,8 @@
       },
       notRendered: "Nada é gravado, e a recusa nunca repete o texto.",
       saved: (id) => `Guardado no projeto A como ${shortId(id)}. Já está no wake de terça, abaixo.`,
+      alreadySaved: (id) =>
+        `Já estava guardado como ${shortId(id)}. Nada foi duplicado.`,
       saveRefused: (rule) => `A guarda recusou (${rule}). Nada foi gravado.`,
       copied: "Copiado",
       selected: "Selecionado",
@@ -163,6 +165,8 @@
       },
       notRendered: "Nothing is stored, and the refusal never echoes the text.",
       saved: (id) => `Saved to project A as ${shortId(id)}. It's in Tuesday's wake, below.`,
+      alreadySaved: (id) =>
+        `Already saved as ${shortId(id)}. Nothing was duplicated.`,
       saveRefused: (rule) => `The guard refused it (${rule}). Nothing was stored.`,
       copied: "Copied",
       selected: "Selected",
@@ -330,6 +334,15 @@
   let world = null;
   let gen = 0;
 
+  /**
+   * A visitor's save carries an op id made from the scope and the exact text, so the library
+   * answers a repeat with the first save's memory instead of storing a second copy.
+   */
+  const saveNote = (base, text) =>
+    base.note("a", base.scopes.a, text, {
+      opId: lib.integrationOpId("relembra-site", base.scopes.a, "note", text),
+    });
+
   async function buildMain() {
     const base = makeMemory();
     const { scopes, note, memory, provenance } = base;
@@ -357,8 +370,9 @@
     ids.global = (await note("owner", scopes.g, seed.global, { provenance: owner })).id;
     ids.b1 = (await note("b", scopes.b, seed.b1)).id;
     ids.b2 = (await note("b", scopes.b, seed.b2)).id;
-    for (const text of savedTexts) await note("a", scopes.a, text);
-    return { ...base, ids, covered: new Set([ids.port, ids.tz]) };
+    const saved = new Set();
+    for (const text of savedTexts) saved.add((await saveNote(base, text)).id);
+    return { ...base, ids, saved, covered: new Set([ids.port, ids.tz]) };
   }
 
   function wakeLines(text) {
@@ -468,9 +482,16 @@
     if (saveButton.getAttribute("aria-disabled") === "true") return; // the guard refused the line
     const text = fact.value;
     const g = gen;
+    const current = world;
     try {
-      const memory = await world.note("a", world.scopes.a, text);
+      const memory = await saveNote(current, text);
       if (g !== gen) return;
+      // The library returned a memory this world already holds: the repeat stored nothing.
+      if (current.saved.has(memory.id)) {
+        savedOut.textContent = t().alreadySaved(memory.id);
+        return;
+      }
+      current.saved.add(memory.id);
       savedTexts.push(text);
       savedOut.textContent = t().saved(memory.id);
       await refreshWorld();
