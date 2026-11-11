@@ -1,10 +1,10 @@
 import type { SQLInputValue, StatementSync } from "node:sqlite";
+import { detachEvent } from "../frozen.js";
 import {
   type Event,
   type ImportCheckpoint,
   type Memory,
   type MemoryStatus,
-  type NewEvent,
   type OpRecord,
   type Provenance,
   redactedEvent,
@@ -590,10 +590,6 @@ async function withBusyRetry<T>(timeoutMs: number, step: () => T): Promise<T> {
   }
 }
 
-function detachEvent(event: NewEvent, seq: number): Event {
-  return deepFreeze(structuredClone({ ...event, seq }));
-}
-
 function memoryRow(memory: Memory): SQLInputValue[] {
   return [
     memory.id,
@@ -677,12 +673,4 @@ function opFromRow(row: OpRow): OpRecord {
     at: row.at,
     seq: row.seq,
   };
-}
-
-function deepFreeze<T>(value: T): T {
-  if (typeof value === "object" && value !== null) {
-    for (const child of Object.values(value)) deepFreeze(child);
-    Object.freeze(value);
-  }
-  return value;
 }

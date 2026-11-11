@@ -1,9 +1,9 @@
 import { StoreBusyError } from "../errors.js";
+import { detachEvent } from "../frozen.js";
 import {
   type Event,
   type Memory,
   type MemoryStatus,
-  type NewEvent,
   type OpRecord,
   type Provenance,
   redactedEvent,
@@ -588,10 +588,6 @@ function pause(attempts: number): Promise<void> {
   return new Promise((done) => setTimeout(done, ceiling / 2 + Math.random() * ceiling));
 }
 
-function detachEvent(event: NewEvent, seq: number): Event {
-  return deepFreeze(structuredClone({ ...event, seq }));
-}
-
 function memoryRow(memory: Memory): unknown[] {
   return [
     memory.id,
@@ -667,12 +663,4 @@ function opFromRow(row: OpRow): OpRecord {
     at: Number(row.at),
     seq: Number(row.seq),
   };
-}
-
-function deepFreeze<T>(value: T): T {
-  if (typeof value === "object" && value !== null) {
-    for (const child of Object.values(value)) deepFreeze(child);
-    Object.freeze(value);
-  }
-  return value;
 }

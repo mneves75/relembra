@@ -309,6 +309,129 @@ describe.skipIf(NO_RELEASE_TOOLING)(
       expect(ghCalls(f)).not.toContain("workflow run pages.yml --ref main");
     });
 
+    // G-6: runs are kept only from `since` on. A local clock ahead of GitHub's must not hide the
+    // release's own runs, so `since` is GitHub's time, read before anything is published.
+    const seconds = (ms: number) => new Date(ms).toISOString().replace(/\.\d+Z$/, "Z");
+    const shells = ["bash", "/bin/bash"];
+    for (const shell of shells) {
+      test.skipIf(shell !== "bash" && !existsSync(shell))(
+        `a local clock 10 minutes ahead of GitHub's still finds the release's runs (${shell})`,
+        () => {
+          const f = fixture();
+          expect(hmo(f, f.env, shell).status).toBe(0);
+          const now = Date.now();
+          writeFileSync(join(f.fixtures, "date-header"), new Date(now - 5_000).toUTCString());
+          const run = (databaseId: number, event: string) => ({
+            databaseId,
+            headSha: f.commit,
+            event,
+            createdAt: seconds(now),
+            status: "completed",
+            conclusion: "success",
+          });
+          writeFileSync(
+            join(f.fixtures, "run-list-release.yml.json"),
+            JSON.stringify([run(900, "release")]),
+          );
+          writeFileSync(
+            join(f.fixtures, "run-list-pages.yml.json"),
+            JSON.stringify([run(901, "workflow_dispatch")]),
+          );
+          // A date first on PATH whose UTC clock runs 10 minutes ahead; anything else is the real one.
+          const realDate = spawnSync("sh", ["-c", "command -v date"], { encoding: "utf8" });
+          const shim = join(f.fixtures, "..", "fast-clock");
+          mkdirSync(shim);
+          writeFileSync(
+            join(shim, "date"),
+            `#!/bin/sh\ncase "$1" in -u) echo '${seconds(now + 600_000)}' ;; *) exec '${realDate.stdout.trim()}' "$@" ;; esac\n`,
+          );
+          chmodSync(join(shim, "date"), 0o755);
+          const env = pathEnv(f, [shim], []);
+          expect(spawnSync("sh", ["-c", "date -u +%Y"], { env, encoding: "utf8" }).stdout).toBe(
+            `${seconds(now + 600_000)}\n`,
+          );
+          const result = prd(f, env, shell);
+          expect(result.stderr).toBe("");
+          expect(result.status).toBe(0);
+          expect(ghCalls(f)).toContain("run watch 900 --exit-status");
+        },
+      );
+    }
+
+    // A node first on PATH that, for the clock reading only, adds a stderr line or replaces stdout.
+    const clockNode = (f: Fixture, body: string) => {
+      const realNode = spawnSync("sh", ["-c", "command -v node"], { encoding: "utf8" });
+      const dir = join(f.fixtures, "..", "clock-node");
+      mkdirSync(dir);
+      writeFileSync(
+        join(dir, "node"),
+        `#!/bin/sh\ncase "$*" in *"no valid Date header"*) ${body} ;; esac\nexec '${realNode.stdout.trim()}' "$@"\n`,
+      );
+      chmodSync(join(dir, "node"), 0o755);
+      return pathEnv(f, [dir], []);
+    };
+    for (const shell of shells) {
+      test.skipIf(shell !== "bash" && !existsSync(shell))(
+        `a warning node prints on stderr while reading GitHub's clock does not hide the runs (${shell})`,
+        () => {
+          const f = fixture();
+          expect(hmo(f, f.env, shell).status).toBe(0);
+          const env = clockNode(f, "echo 'Debugger listening on ws://127.0.0.1:9229/x' >&2");
+          const run = prd(f, env, shell);
+          expect(run.stderr).toContain("Debugger listening");
+          expect(run.stderr).not.toContain("no release.yml run");
+          expect(run.status).toBe(0);
+          expect(ghCalls(f)).toContain("run watch 900 --exit-status");
+        },
+      );
+
+      test.skipIf(shell !== "bash" && !existsSync(shell))(
+        `a clock reading that is not one UTC timestamp is refused before publishing (${shell})`,
+        () => {
+          const f = fixture();
+          expect(hmo(f, f.env, shell).status).toBe(0);
+          const env = clockNode(f, "printf '2026-11-10T20:00:00Z\\nextra'; exit 0");
+          const run = prd(f, env, shell);
+          expect(run.status).toBe(1);
+          expect(run.stderr).toContain("cannot read GitHub's clock");
+          expect(run.stderr).toContain("nothing is published");
+          expect(existsSync(join(f.fixtures, "state-published"))).toBe(false);
+          expect(ghCalls(f)).not.toContainEqual(`release edit ${TAG} --draft=false`);
+        },
+      );
+    }
+
+    const badDates: [string, (f: Fixture) => void, string][] = [
+      [
+        "GitHub's clock cannot be read",
+        (f) => writeFileSync(join(f.fixtures, "fail-api"), ""),
+        "HTTP 502",
+      ],
+      [
+        "a Date header that is not an HTTP date",
+        (f) => writeFileSync(join(f.fixtures, "date-header"), "yesterday"),
+        "cannot read GitHub's clock",
+      ],
+      [
+        "a Date header for a day that does not exist",
+        (f) => writeFileSync(join(f.fixtures, "date-header"), "Mon, 30 Feb 2026 10:00:00 GMT"),
+        "cannot read GitHub's clock",
+      ],
+    ];
+    for (const [name, arrange, message] of badDates) {
+      test(`${name}: refused before publishing, with the rollback`, () => {
+        const f = fixture();
+        expect(hmo(f).status).toBe(0);
+        arrange(f);
+        const run = prd(f);
+        expect(run.status).toBe(1);
+        expect(run.stderr).toContain(message);
+        expect(run.stderr).toContain("nothing is published");
+        expect(existsSync(join(f.fixtures, "state-published"))).toBe(false);
+        expect(ghCalls(f)).not.toContainEqual(`release edit ${TAG} --draft=false`);
+      });
+    }
+
     test("no pages.yml run in time fails prd and writes no published.json", {
       timeout: 20_000,
     }, () => {

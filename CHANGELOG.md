@@ -11,6 +11,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
   read, and merging a pull request asks first. A Stop hook runs `typecheck`, `lint` and `bun test` (Postgres
   skipped) when the tree changed since the last green run.
 
+### Removed
+
+- The npm package no longer ships `dist/cli/` (20 files): no export pointed at it, and the CLI
+  ships as a native binary.
+
 ### Fixed
 
 - `relembra supersede` on a summary is refused with the new code `summary-supersede` (exit 1); it
@@ -27,6 +32,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
   initialize versions. Fields and input-validation errors follow the selected revision;
   JSON-RPC batching is supported only for 2025-03-26. Scope and principal still come only from
   the launch environment.
+- `scripts/deploy.sh hmo` no longer leaves a temporary file behind when it refuses while reading
+  the CI run.
+- `scripts/deploy.sh prd` finds the `release.yml` and `pages.yml` runs from GitHub's clock (the
+  `Date` header) instead of the local one, so a local clock ahead of GitHub's no longer misses them
+  after publication; a header it cannot read is refused before publishing.
 
 ## [1.0.0-beta.5] - 2026-11-04
 

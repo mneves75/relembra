@@ -57,7 +57,7 @@ Entry points:
 
 | Import | What |
 |---|---|
-| `relembra` | `createRelembra`, the error types and the domain types |
+| `relembra` | `createRelembra`, `advanceFence`, `exportJsonl`, `importJsonl`, `importOptmem`, `integrationOpId`, `identityEgress`, the error types and the domain types |
 | `relembra/sqlite` | `openSqliteStore`, the SQLite adapter (`node:sqlite`) |
 | `relembra/postgres` | `openPostgresStore`, the Postgres adapter over a SQL client the host passes |
 | `relembra/pi-durable` | `createMemoryExtension`, memory tools for a pi-durable Harness |

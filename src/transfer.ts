@@ -31,6 +31,7 @@ import {
   type SourceRevision,
   type StoredMemory,
   type SupersedeEvent,
+  TRUSTS,
   type Trust,
 } from "./model.js";
 import { type Clock, type Store, type StoreTransaction, systemClock } from "./ports.js";
@@ -367,7 +368,6 @@ function checkPrincipalId(id: unknown, line: number): asserts id is string {
 }
 
 const CAUSES: readonly RedactionCause[] = ["request", "retention", "source"];
-const TRUSTS: readonly Trust[] = ["owner", "agent", "untrusted"];
 
 /** One event line, checked field by field; anything else in the line is ignored. */
 function checkEvent(value: Json, line: number, header: ExportHeader, latest: number): Event {

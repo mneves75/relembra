@@ -258,6 +258,10 @@ positive controls.
 
 ### Progress (resume here; updated with every merge)
 
+Status: historical. Every ticket below shipped before 1.0.0-beta.1; "in progress" and "hosted CI
+blocked by billing" are the state at the time, and hosted CI now runs on every push to `main` and
+every pull request.
+
 | Ticket | State | Where |
 |---|---|---|
 | 01–05 | Merged, Sol-reviewed, fixes merged | `feat/v0.1` |

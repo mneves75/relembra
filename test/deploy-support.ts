@@ -48,7 +48,7 @@ const GH_SHIM = `#!/usr/bin/env bash
 # A gh that serves fixtures from $GH_FIXTURES and appends every invocation to $GH_LOG. Marker
 # files in $GH_FIXTURES make a step fail: fail-release-create, fail-draft-download, fail-edit
 # (GitHub did not apply it), fail-edit-applied (GitHub applied it and then the connection broke),
-# fail-watch-<run id>.
+# fail-watch-<run id>, fail-api.
 set -u
 printf '%s\\n' "$*" >>"$GH_LOG"
 value() { # value NAME ARGS...: the argument after NAME
@@ -86,6 +86,10 @@ case "$1 $2" in
     [ -f "$GH_FIXTURES/fail-view" ] && { echo "HTTP 503" >&2; exit 1; }
     if [ -f "$GH_FIXTURES/state-published" ]; then cat "$GH_FIXTURES/release-view.json"; else cat "$GH_FIXTURES/release-view-draft.json"; fi ;;
   "workflow run") touch "$GH_FIXTURES/state-pages-dispatched" ;;
+  "api -i")
+    # Headers, a blank line, then the body, as gh prints them; the Date value is a fixture.
+    [ -f "$GH_FIXTURES/fail-api" ] && { echo "HTTP 502" >&2; exit 1; }
+    printf 'HTTP/2.0 200 OK\\nContent-Type: application/json\\nDate: %s\\n\\n{}\\n' "$(cat "$GH_FIXTURES/date-header")" ;;
   *) echo "gh shim: unexpected: $*" >&2; exit 97 ;;
 esac
 `;
@@ -339,6 +343,8 @@ export function fixture(options: Options = {}): Fixture {
     join(fixtures, "release-view-draft.json"),
     JSON.stringify({ ...view, isDraft: true, publishedAt: null }),
   );
+  // GitHub's clock, as its `Date` response header gives it.
+  writeFileSync(join(fixtures, "date-header"), new Date().toUTCString());
   writeFileSync(
     join(fixtures, "page.html"),
     `<html><body>Version ${version}. Install ${version}.</body></html>`,

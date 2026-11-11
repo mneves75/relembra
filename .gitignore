@@ -8,3 +8,7 @@ bin/
 coverage/
 # the explainer video is kept on gh-pages (scripts/site/assemble.sh); a copy here is for local preview
 /site/assets/video/
+# local session handoffs; never committed
+/docs/handoffs/
+# agent worktrees inside the checkout: each has its own biome.json (a nested lint root) and dirties the tree for scripts/ci.sh
+/.claude/worktrees/

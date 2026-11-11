@@ -14,8 +14,9 @@
 # then. The tarball stays in DIR/package, installed by both Node and Bun.
 #
 # Needs Docker (scripts/with-postgres.sh), gitleaks, and zizmor or uvx. It covers one platform and
-# one Node: the workflow's other cells (the CLI built on the other OS, the tests on macOS and
-# Linux, Node 24.14) and its informational pi-durable@latest probe run only when it is dispatched.
+# one Node: the workflow's other cells (the CLI built and tested on Linux x64 and arm64, macOS arm64
+# and Windows x64 and arm64, Node 24.14 and 26 on Linux and Windows) and its informational
+# pi-durable@latest probe run on every push to main and pull request, or when it is dispatched.
 set -u
 
 # Inherited settings that would change or skip what the gate runs, refused by name before any Bun

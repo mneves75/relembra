@@ -32,10 +32,17 @@ import {
   type Memory,
   type Principal,
   type StoredMemory,
+  TRUSTS,
   type Trust,
 } from "../model.js";
 import { importOptmem } from "../optmem.js";
-import { createRelembra, type NoteProvenance, type Relembra } from "../relembra.js";
+import {
+  createRelembra,
+  MAX_FIND_LIMIT,
+  MAX_SUMMARY_SOURCES,
+  type NoteProvenance,
+  type Relembra,
+} from "../relembra.js";
 import { identityEgress, renderMemory } from "../render.js";
 import { OWNER_MODES } from "../sqlite/database.js";
 import { openSqliteStore, type SqliteStore } from "../sqlite/index.js";
@@ -68,12 +75,9 @@ interface HookOutput {
   };
 }
 
-const TRUST: readonly Trust[] = ["owner", "agent", "untrusted"];
-const MAX_LIMIT = 100;
 const MAX_RECALL_LIMIT = 100_000;
 const MAX_BUDGET = 1_000_000;
 const MAX_AGE_DAYS = 36_500;
-const MAX_SOURCES = 100;
 
 /** Reads the session's scope and the global one; writes, pins and owns the session's only. */
 function principalFor(env: CliEnv, scopes: SessionScopes, trustCeiling: Trust): Principal {
@@ -105,7 +109,7 @@ function provenanceFrom(context: Context): NoteProvenance {
   const pick = (flag: string, variable: string | undefined, fallback: string) =>
     flagValue(parsed, flag) ?? (variable === undefined || variable === "" ? fallback : variable);
   const trust = flagValue(parsed, "--trust");
-  if (trust !== undefined && !TRUST.includes(trust as Trust)) {
+  if (trust !== undefined && !TRUSTS.includes(trust as Trust)) {
     throw usage("bad-value", "--trust takes owner, agent or untrusted");
   }
   const source = flagValue(parsed, "--source");
@@ -366,7 +370,7 @@ async function runStoreCommand(
       return { data: { memory }, text: memory.id };
     }
     case "find": {
-      const limit = intFlag(parsed, "--limit", MAX_LIMIT);
+      const limit = intFlag(parsed, "--limit", MAX_FIND_LIMIT);
       const results = await relembra.find(null, {
         query: parsed.positionals.join(" "),
         ...(limit === undefined ? {} : { limit }),
@@ -453,8 +457,8 @@ async function runStoreCommand(
       const sources = (parsed.flags.get("--of") ?? []).map(parseSource);
       if (sources.length === 0)
         throw usage("missing-value", "summarize needs --of <id>@<revision>");
-      if (sources.length > MAX_SOURCES) {
-        throw usage("bad-value", `summarize takes at most ${MAX_SOURCES} --of sources`);
+      if (sources.length > MAX_SUMMARY_SOURCES) {
+        throw usage("bad-value", `summarize takes at most ${MAX_SUMMARY_SOURCES} --of sources`);
       }
       const provenance = provenanceFrom(context);
       const text = await textFrom(first);

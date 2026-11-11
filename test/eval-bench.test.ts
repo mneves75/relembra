@@ -77,33 +77,37 @@ test("the benchmark refuses an unsupported --memories before building anything",
 });
 
 describe("the benchmark store", () => {
-  test("the same seed gives a byte-identical store; another seed does not", async () => {
-    const corpus = bulkCorpus({ seed: DEFAULT_SEED, memories: 300 });
-    const other = bulkCorpus({ seed: DEFAULT_SEED + 1, memories: 300 });
-    const a = await buildStore(join(scratch, "a", "relembra.db"), corpus.memories);
-    const b = await buildStore(join(scratch, "b", "relembra.db"), corpus.memories);
-    const c = await buildStore(join(scratch, "c", "relembra.db"), other.memories);
-    expect(a.sha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(b.sha256).toBe(a.sha256);
-    expect(c.sha256).not.toBe(a.sha256);
-    expect(c.fileSha256).not.toBe(a.fileSha256);
-    // Every byte that differs between the two raw files is one storeSha256 zeroes: the header's
-    // change counter or a migration time, a 6-byte integer in each schema_version row. How many
-    // of a time's bytes differ depends on how far apart the builds ran: two bytes under 65 s,
-    // with a carry three, as on a slow Windows runner (run 41389502801: 18).
-    const fa = readFileSync(join(scratch, "a", "relembra.db"));
-    const fb = readFileSync(join(scratch, "b", "relembra.db"));
-    expect(fb.length).toBe(fa.length);
-    const header = (i: number) =>
-      VARYING_HEADER_BYTES.some(([start, end]) => i >= start && i < end);
-    const differing: number[] = [];
-    for (let i = 0; i < fa.length; i++) if (fa[i] !== fb[i] && !header(i)) differing.push(i);
-    expect(differing.length).toBeLessThanOrEqual(6 * MIGRATIONS.length);
-    expect(a.bytes).toBeGreaterThan(0);
-    // Only the database file remains once the store is closed.
-    expect(readdirSync(join(scratch, "a"))).toEqual(["relembra.db"]);
-    // Three builds outlast bun's 5 s default on a loaded machine.
-  }, 60_000);
+  test(
+    "the same seed gives a byte-identical store; another seed does not",
+    async () => {
+      const corpus = bulkCorpus({ seed: DEFAULT_SEED, memories: 300 });
+      const other = bulkCorpus({ seed: DEFAULT_SEED + 1, memories: 300 });
+      const a = await buildStore(join(scratch, "a", "relembra.db"), corpus.memories);
+      const b = await buildStore(join(scratch, "b", "relembra.db"), corpus.memories);
+      const c = await buildStore(join(scratch, "c", "relembra.db"), other.memories);
+      expect(a.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(b.sha256).toBe(a.sha256);
+      expect(c.sha256).not.toBe(a.sha256);
+      expect(c.fileSha256).not.toBe(a.fileSha256);
+      // Every byte that differs between the two raw files is one storeSha256 zeroes: the header's
+      // change counter or a migration time, a 6-byte integer in each schema_version row. How many
+      // of a time's bytes differ depends on how far apart the builds ran: two bytes under 65 s,
+      // with a carry three, as on a slow Windows runner (run 41389502801: 18).
+      const fa = readFileSync(join(scratch, "a", "relembra.db"));
+      const fb = readFileSync(join(scratch, "b", "relembra.db"));
+      expect(fb.length).toBe(fa.length);
+      const header = (i: number) =>
+        VARYING_HEADER_BYTES.some(([start, end]) => i >= start && i < end);
+      const differing: number[] = [];
+      for (let i = 0; i < fa.length; i++) if (fa[i] !== fb[i] && !header(i)) differing.push(i);
+      expect(differing.length).toBeLessThanOrEqual(6 * MIGRATIONS.length);
+      expect(a.bytes).toBeGreaterThan(0);
+      // Only the database file remains once the store is closed.
+      expect(readdirSync(join(scratch, "a"))).toEqual(["relembra.db"]);
+      // Three builds outlast bun's 5 s default on a loaded machine, and a minute on hosted Windows.
+    },
+    process.platform === "win32" ? 180_000 : 60_000,
+  );
 });
 
 test("ticket 19's budget is judged only on 20,000 memories from the pinned seed", () => {

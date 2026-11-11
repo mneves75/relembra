@@ -16,15 +16,17 @@
 #
 # prd (produção) publishes that plan and nothing else, in docs/RELEASE.md's order: rechecks every
 # asset against plan.json, tags HEAD with the gate verdict, pushes the tag, creates the draft
-# release with every asset, downloads the draft's assets and checks them, publishes, follows the
-# release.yml run and binds the staged npm archive to the release's by its sha1, dispatches
-# pages.yml and follows it, then downloads the published assets and checks them again.
+# release with every asset, downloads the draft's assets and checks them, reads GitHub's clock,
+# publishes, follows the release.yml run and binds the staged npm archive to the release's by its
+# sha1, dispatches pages.yml and follows it, then downloads the published assets and checks them
+# again.
 # published.json holds what the evidence record needs. Until the release is published every step
 # can be undone, and a failure prints the commands that undo it; after it, a failure is reported
 # and nothing is undone, because a published release is immutable.
 #
-# Needs bash 3.2 or later, git, gh (signed in), bun and node, curl, tar, openssl, and sha256sum
-# and sha1sum or shasum. Exit codes: 0 done, 1 refused or failed (the reason on stderr), 2 usage.
+# Needs bash 3.2 or later, git, gh (signed in), bun and node, curl, tar (for
+# scripts/stage-release.ts), openssl, and sha256sum and sha1sum or shasum. Exit codes: 0 done,
+# 1 refused or failed (the reason on stderr), 2 usage.
 # RELEMBRA_DEPLOY_POLL (seconds between polls, default 20) and RELEMBRA_DEPLOY_TIMEOUT (seconds to
 # wait for a workflow run, default 1200) exist for the tests.
 #
@@ -77,9 +79,9 @@ case $version in *-*) prerelease=1 ;; *) prerelease=0 ;; esac
 head=$(git rev-parse HEAD) || exit 1
 tree=$(git rev-parse 'HEAD^{tree}') || exit 1
 # Temporary files, and the plan directory while hmo is still filling it, go when the script ends.
-tmp_now='' tmp_view='' plan_created=''
+tmp_now='' tmp_view='' run_json='' plan_created=''
 # shellcheck disable=SC2154  # rc is assigned inside the trap
-trap 'rc=$?; rm -f "$tmp_now" "$tmp_view"; [ "$rc" = 0 ] || [ -z "$plan_created" ] || rm -rf "$plan"' EXIT
+trap 'rc=$?; rm -f "$tmp_now" "$tmp_view" "$run_json"; [ "$rc" = 0 ] || [ -z "$plan_created" ] || rm -rf "$plan"' EXIT
 
 # ---------------------------------------------------------------------------------------------
 # Shared by both stages
@@ -232,7 +234,7 @@ hmo() {
   [ -z "$waivers" ] || gate_line="$gate_line $waivers"
 
   # The hosted run: the ci workflow's push to main, for this commit, finished, every job green.
-  local run_json run_sha run_status run_event run_workflow run_branch jobs red
+  local run_sha run_status run_event run_workflow run_branch jobs red
   run_json=$(mktemp) || exit 1
   gh run view "$run" --json headSha,status,conclusion,jobs,workflowName,event,headBranch >"$run_json" ||
     refuse "cannot read run $run"
@@ -259,7 +261,6 @@ hmo() {
   *) refuse "run $run: $red" ;;
   esac
   [ "$(json "$run_json" conclusion)" = success ] || refuse "run $run concluded $(json "$run_json" conclusion)"
-  rm -f "$run_json"
 
   # From here the plan directory exists; a refusal removes it so a retry starts clean.
   mkdir -p "$plan/dl" || exit 1
@@ -448,9 +449,41 @@ prd() {
   fi
   echo "draft release created and its assets verified"
 
+  # The runs publication starts are found by createdAt from `since`, on GitHub's clock: a local
+  # clock ahead of it would hide them, and the wait would come after the step that cannot be
+  # undone. So `since` is the Date header of an authenticated call, read while a refusal can still
+  # be undone. An HTTP date is valid only when it prints back unchanged (30 Feb would not).
+  local since headers
+  if ! headers=$(gh api -i rate_limit); then
+    rollback_hint
+    refuse "cannot read GitHub's clock (gh api -i rate_limit)"
+  fi
+  if ! since=$(printf '%s\n' "$headers" | node -e '
+    const head = require("node:fs").readFileSync(0, "utf8").split(/\r?\n\r?\n/)[0];
+    const line = head.split(/\r?\n/).find((l) => /^date:/i.test(l));
+    const value = line === undefined ? "" : line.replace(/^date:[ \t]*/i, "").trim();
+    const http = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT$/;
+    const time = http.test(value) ? Date.parse(value) : NaN;
+    if (!Number.isFinite(time) || new Date(time).toUTCString() !== value) {
+      process.stdout.write(`no valid Date header (${JSON.stringify(line ?? null)})`);
+      process.exit(1);
+    }
+    process.stdout.write(new Date(time).toISOString().replace(/\.\d{3}Z$/, "Z"));
+  '); then
+    rollback_hint
+    refuse "cannot read GitHub's clock: $since"
+  fi
+  # Exactly one UTC timestamp, or find_run's `createdAt >= since` would match nothing after
+  # publication. Node's stderr stays out of $since; this checks what reached stdout.
+  case $since in
+  [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) ;;
+  *)
+    rollback_hint
+    refuse "cannot read GitHub's clock: $since is not one UTC timestamp"
+    ;;
+  esac
+
   # Publication. From here nothing is undone: a published release is immutable.
-  local since
-  since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   tmp_view=$(mktemp) || exit 1
   if ! gh release edit "$tag" --draft=false >/dev/null; then
     # The edit may have gone through before the error reached us; what GitHub holds decides, and
