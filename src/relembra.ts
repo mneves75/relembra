@@ -1313,7 +1313,8 @@ function shownTo(principal: Principal, { memory, derived }: RedactionItem): Memo
   return [memory, ...derived.filter((other) => visibleTo(principal, other))];
 }
 
-function visibleTo(principal: Principal, memory: StoredMemory): boolean {
+/** Whether `principal` may see `memory`: any status in a scope it owns, live in one it reads. */
+export function visibleTo(principal: Principal, memory: StoredMemory): boolean {
   return (
     owns(principal, memory.scope) ||
     (memory.status === "live" && principal.readable.includes(memory.scope))
@@ -1525,7 +1526,7 @@ function checkMemoryId(memoryId: unknown): void {
 /** The most UTF-8 bytes a principal id may have. */
 export const MAX_PRINCIPAL_ID_BYTES = 256;
 /** The most UTF-8 bytes an authority fence key may have. */
-export const MAX_FENCE_KEY_BYTES = 256;
+const MAX_FENCE_KEY_BYTES = 256;
 
 /** The most UTF-8 bytes a carrier id may have. */
 export const MAX_CARRIER_ID_BYTES = 512;
@@ -1558,7 +1559,7 @@ export function checkName(field: NamingField, value: string): void {
  * Refuses a name holding a lone surrogate (IllFormedStringError): encoded as UTF-8 it becomes
  * U+FFFD, so two different names would be one in a store, a hash or a file.
  */
-export function checkWellFormed(field: NamingField, value: string): void {
+function checkWellFormed(field: NamingField, value: string): void {
   if (!value.isWellFormed()) throw new IllFormedStringError(field);
 }
 

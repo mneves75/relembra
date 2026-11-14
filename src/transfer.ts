@@ -51,6 +51,7 @@ import {
   redactWithDerived,
   retractAll,
   trustCeiling,
+  visibleTo,
 } from "./relembra.js";
 import { isSummary, MAX_ID_BYTES, MAX_SCOPE_BYTES, utf8Bytes } from "./render.js";
 import { RELEMBRA_VERSION } from "./version.js";
@@ -867,7 +868,7 @@ class Replay {
       throw new ImportError("denied", line, "promote");
     }
     const origin = await this.tx.memory(link.memoryId);
-    if (origin === undefined || !seenBy(this.principal, origin)) {
+    if (origin === undefined || !visibleTo(this.principal, origin)) {
       throw new ImportError("malformed", line);
     }
     if (origin.scope === scope) throw new ImportError("malformed", line);
@@ -901,14 +902,6 @@ class Replay {
       origin: link,
     });
   }
-}
-
-/** Whether `principal` may see `stored`: any status in a scope it owns, live in one it reads. */
-function seenBy(principal: Principal, stored: StoredMemory): boolean {
-  return (
-    owns(principal, stored.scope) ||
-    (stored.status === "live" && principal.readable.includes(stored.scope))
-  );
 }
 
 /**

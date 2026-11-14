@@ -194,7 +194,7 @@ export interface Entry {
 }
 
 /** A memory in full: its text, attributed. */
-export function fullEntry(memory: Memory): Entry {
+function fullEntry(memory: Memory): Entry {
   return { line: renderMemory(memory), carries: memory.id };
 }
 
@@ -213,7 +213,7 @@ export function frameBytes(kind: RenderingKind): number {
  * How many entries, from the first, fit in `room` bytes. The first that does not fit ends the
  * prefix, so the composition order is kept and no entry is ever cut.
  */
-export function fittingPrefix(entries: readonly Entry[], room: number): number {
+function fittingPrefix(entries: readonly Entry[], room: number): number {
   let used = 0;
   for (let count = 0; count < entries.length; count++) {
     used += utf8Bytes((entries[count] as Entry).line) + 1;
