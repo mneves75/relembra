@@ -39,6 +39,8 @@ const env = {
 let tarball = "";
 
 beforeAll(() => {
+  // A top-level hook runs even when every test below is skipped: build nothing for them.
+  if (NO_RELEASE_TOOLING) return;
   for (const path of [
     "src",
     "package.json",
