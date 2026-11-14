@@ -18,6 +18,16 @@ those files cannot say: the mistake, the dead end, the thing that turned out to 
   its own install it fails with `tsc: undefinedundefined`.
 - Windows PowerShell reads a redirected stdin in the console code page, not UTF-8. Send it
   ASCII-only JSON (`\uXXXX` escapes); setting `[Console]::InputEncoding` depends on host state.
+- Codex's sandbox denies `/dev/tty`, so the 11 pseudo-terminal tests cannot run there; a
+  verifier that must run them needs Codex without its sandbox. Agent admission answers exit 75
+  when all Codex slots are busy: retry, it is not a verdict.
+- A behaviour only hosted Windows can show is proved red-then-green by a throwaway branch with
+  only the fix reverted, run through `workflow_dispatch`; delete the branch afterwards.
+- The released `relembra-darwin-arm64` is the locally gated binary, built by the host's Bun
+  (`process.execPath`), not by the pin in `build/bun-toolchain.txt`, which only the hosted builds
+  use. Record the host Bun in the release evidence.
+- The security gate binds a tree: even a one-line CHANGELOG fix after the audit needs a new
+  record and a new acceptance. Fix public wording before the gate, not after.
 
 ## 2026-11-11: 1.0.0-beta.7 (H-19, site fixes)
 

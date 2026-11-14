@@ -17,7 +17,7 @@ checkout that ran the release check.
 | Tree | `029c0a810d197fb2a8296f0c84306a1df34275d2` |
 | Measured candidate | `b78d06b88ae3050c211f55ae8b1fef17718ce008`, the PR #25 head, the same tree |
 | Input digest (`scripts/evidence.ts`) | `f6c7dae4caefd3b95f7411696ebeb8b6140428dbf916bdf2619b6e504d6b22cf` |
-| Runtimes | Bun 1.4.5 (`b6e7b9cdc`), Node v26.13.0, SQLite 3.54.0 |
+| Runtimes | Bun 1.4.5 (`b6e7b9cdc`), Node v26.13.0, SQLite 3.54.0; the macOS binary was built by that host Bun (the hosted builds use the pin in `build/bun-toolchain.txt`) |
 | Machine | Apple M5 Pro, 18 cores, macOS 27.3 arm64 |
 
 ## Local acceptance
@@ -53,8 +53,8 @@ the benchmark record below.
   named with an accent is created private and opens" failed on `windows-latest` and
   `windows-11-arm`, the only failure in each Windows job, and passes on the candidate's runs. The
   branch was deleted.
-- **Independent review (Claude Opus 5.5 `reviewer`, fresh context, on `9e9e1e8`):** PASS with one
-  Low finding, fixed in `b71595b`: rendering a wake lazily had stopped refusing a memory with
+- **Independent review (`reviewer` agent, fresh context, on `9e9e1e8`):** PASS with one Low
+  finding, fixed in `b71595b`: rendering a wake lazily had stopped refusing a memory with
   out-of-bounds metadata past the budget. A second observation (concurrent first opens of a new
   Postgres schema through one shared Bun SQL pool fail with a duplicate-key error) reproduces on
   1.0.0-beta.7 as well; it is open below.
@@ -65,12 +65,11 @@ the benchmark record below.
   pseudo-terminal tests ran and passed; public export keys and type names are unchanged; wake
   output, promote fingerprints and OptMem ids match 1.0.0-beta.7's.
 - **Security deploy gate (production):** WAIVED (SEC-20, SEC-18, SEC-11/W-1) on tree `029c0a81…`.
-  A new full audit (Claude Opus 5.5) of tree `c39de09c…` (`b71595b`); `b78d06b` differs from it
-  only by one CHANGELOG line, which the gate's finder asked for: the beta.8 section had overstated
-  how the old Windows behaviour failed. Independent acceptance by GPT-6 via Codex: round 1 rejected
-  on the record (a search claim broader than the search, and two launch controls answered too
-  generously: SEC-18 and the Windows part of SEC-11); after the record was corrected and the owner
-  named waivers, round 2: ACCEPT (WAIVED). No Critical or High finding; K-2 stays Low.
+  The audit (Claude Opus 5.5) ran on tree `c39de09c…` (`b71595b`); `b78d06b` differs from it by one
+  CHANGELOG line. Coverage is partial: `src/testing/conformance.ts`, most of `test/` and the
+  scripts unchanged since 1.0.0-beta.7 were carried, not read again. Independent acceptance by
+  GPT-6 via Codex: round 1 rejected on the record; after its correction and the owner's waivers,
+  round 2: ACCEPT (WAIVED). No Critical or High finding; K-2 stays Low.
 - **Owner decisions applied (2026-11-14):** SEC-18 and SEC-11/W-1 waived to 2027-01-31; SEC-20
   carried to 2027-02-28; W-NV1 stays a closed, documented boundary.
 
