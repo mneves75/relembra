@@ -138,8 +138,6 @@ interface Args {
   readonly memoryId?: string;
 }
 
-// --- Tools -------------------------------------------------------------------------------------
-
 type Property =
   | {
       readonly type: "string";
@@ -435,8 +433,6 @@ function schemaProblem(schema: InputSchema, args: Json): string | undefined {
   return undefined;
 }
 
-// --- JSON-RPC ----------------------------------------------------------------------------------
-
 const isObject = (value: unknown): value is Json =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -674,8 +670,7 @@ export async function serveMcp(
   const splitter = new LineSplitter(MAX_MESSAGE_BYTES);
   const queue: (Request | Batch)[] = [];
   let legacyVersion: LegacyVersion | undefined;
-  /** Requests queued or running, by id key, with how many share the key. */
-  const pending = new Map<string, number>();
+  const pendingByKey = new Map<string, number>();
   /** Requests queued or running in all: at most MAX_PENDING_REQUESTS. */
   let pendingCount = 0;
   const cancelled = new Set<string>();
@@ -715,10 +710,10 @@ export async function serveMcp(
   };
   const settle = (key: string) => {
     pendingCount--;
-    const count = (pending.get(key) ?? 1) - 1;
-    if (count > 0) pending.set(key, count);
+    const count = (pendingByKey.get(key) ?? 1) - 1;
+    if (count > 0) pendingByKey.set(key, count);
     else {
-      pending.delete(key);
+      pendingByKey.delete(key);
       cancelled.delete(key);
     }
   };
@@ -881,7 +876,7 @@ export async function serveMcp(
       });
     }
     const key = idKey(id);
-    pending.set(key, (pending.get(key) ?? 0) + 1);
+    pendingByKey.set(key, (pendingByKey.get(key) ?? 0) + 1);
     pendingCount++;
     const request = { id, key, method, params };
     if (batch === undefined) enqueue(request);
@@ -892,7 +887,7 @@ export async function serveMcp(
   /** Notifications: a cancellation marks a request still queued or running; others are ignored. */
   const notify = (method: string, params: unknown) => {
     const key = cancellationKey(method, params);
-    if (key !== undefined && pending.has(key)) cancelled.add(key);
+    if (key !== undefined && pendingByKey.has(key)) cancelled.add(key);
   };
 
   for await (const chunk of input) {

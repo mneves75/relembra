@@ -56,7 +56,6 @@ export function readStdinText(): Promise<string> {
   });
 }
 
-/** The bytes as UTF-8, a BOM kept, one trailing line break removed. */
 function decode(bytes: Uint8Array): string {
   let text: string;
   try {

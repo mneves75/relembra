@@ -123,13 +123,11 @@ function provenanceFrom(context: Context): NoteProvenance {
   };
 }
 
-/** The write's text: its text argument, or stdin when there is none. */
-async function textFrom(positional: string | undefined): Promise<string> {
+async function textOrStdin(positional: string | undefined): Promise<string> {
   return positional ?? (await readStdinText());
 }
 
-/** Whether a memory's current revision was written with owner trust. */
-const ownerTrust = (memory: StoredMemory): memory is Memory =>
+const hasOwnerTrust = (memory: StoredMemory): memory is Memory =>
   memory.status !== "redacted" && memory.revision.provenance.trust === "owner";
 
 /**
@@ -141,7 +139,7 @@ function ownersIn(plan: readonly Memory[], which: "all" | "live"): Memory[] {
   const [target, ...derived] = plan;
   if (target === undefined) return [];
   const summaries = which === "all" ? derived : derived.filter((m) => m.status === "live");
-  return [target, ...summaries].filter(ownerTrust);
+  return [target, ...summaries].filter(hasOwnerTrust);
 }
 
 /** How many plans a gated command previews before it gives up with plan-changed. */
@@ -298,8 +296,8 @@ async function serveStdio(env: CliEnv, scopes: SessionScopes, store: SqliteStore
       relembra,
       scope: scopes.session,
       ...(scopes.global === undefined ? {} : { globalScope: scopes.global }),
-      // The protocol is stateless, so this process is the session: a fresh id per process, which
-      // names it as one carrier of everything it rendered (docs/CLI.md, relembra mcp).
+      // One carrier per server process, for both protocol eras: a fresh id per process names it
+      // as the carrier of everything it rendered (docs/CLI.md, relembra mcp, Exposure).
       carrier: { id: `mcp:${randomUUID()}`, kind: "mcp" },
       provenance: {
         agent: pick(env.RELEMBRA_AGENT, "unknown"),
@@ -358,7 +356,7 @@ async function runStoreCommand(
   switch (name) {
     case "note": {
       const provenance = provenanceFrom(context);
-      const text = await textFrom(first);
+      const text = await textOrStdin(first);
       confirmedText(text, provenance, [`note: ${text}`]);
       const memory = await relembra.note(null, {
         scope,
@@ -426,7 +424,7 @@ async function runStoreCommand(
     case "supersede": {
       const memoryId = first as string;
       const provenance = provenanceFrom(context);
-      const text = await textFrom(second);
+      const text = await textOrStdin(second);
       const memory = await gated(async (changed) => {
         const expect = await relembra.redactionPreview(null, { memoryId });
         const owners = ownersIn(expect, "live");
@@ -461,7 +459,7 @@ async function runStoreCommand(
         throw usage("bad-value", `summarize takes at most ${MAX_SUMMARY_SOURCES} --of sources`);
       }
       const provenance = provenanceFrom(context);
-      const text = await textFrom(first);
+      const text = await textOrStdin(first);
       confirmedText(text, provenance, [`summary: ${text}`]);
       const memory = await relembra.submitSummary(null, {
         scope,
@@ -478,7 +476,7 @@ async function runStoreCommand(
       // redacts (superseded memories and derived summaries included).
       const redaction = await gated(async (changed) => {
         const expect = await relembra.sweepPreview(now);
-        const owners = expect.filter(ownerTrust);
+        const owners = expect.filter(hasOwnerTrust);
         if (owners.length > 0) {
           requireOwner([
             ...changed,
@@ -566,7 +564,6 @@ async function importFromOptmem(
   });
 }
 
-/** How much readRegularFile reads at a time. */
 const READ_CHUNK = 64 * 1024;
 
 /**
@@ -714,7 +711,6 @@ async function check(scope: string, store: SqliteStore, path: string): Promise<O
   return { data, text };
 }
 
-/** `count` and `noun`, plural with an s when count is not 1. */
 function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
