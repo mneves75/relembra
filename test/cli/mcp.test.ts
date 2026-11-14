@@ -584,6 +584,21 @@ describe("server/discover, tools/list: required metadata, resultType and cache f
     expect(result._meta["io.modelcontextprotocol/serverInfo"].name).toBe("relembra");
   });
 
+  cliTest("the instructions and the find description say reads cover the global scope", () => {
+    const run1 = mcp(box, lines(request(1, "server/discover"), request(2, "tools/list")));
+    const described = (name: string) =>
+      run1
+        .byId(2)
+        .result.tools.find((tool: { name: string }) => tool.name === name)
+        ?.description as string;
+    // Positive control: both texts still name the project they serve.
+    expect(run1.byId(1).result.instructions).toContain("this project");
+    expect(described("find")).toContain("this project's memories");
+    // The same static text holds with and without RELEMBRA_GLOBAL_SCOPE, so it names both cases.
+    expect(run1.byId(1).result.instructions).toContain("the global scope when the host sets one");
+    expect(described("find")).toContain("the global scope's when the host sets one");
+  });
+
   cliTest("public cache scope is honest: neither list names the scope or the user", () => {
     const out = mcp(box, lines(request(1, "server/discover"), request(2, "tools/list"))).stdout;
     expect(out).not.toContain(box.scope);
