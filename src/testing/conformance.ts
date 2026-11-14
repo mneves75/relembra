@@ -2412,76 +2412,6 @@ export function storeConformanceCases(target: ConformanceTarget): readonly Confo
     },
   );
 
-  if (!target.durable) return cases;
-
-  define("a reopened store keeps committed writes and drops rolled-back ones", async (opened) => {
-    assert.ok(opened.reopen, "a durable target provides reopen");
-    const committed = memory("m-committed", SCOPE_A, 1);
-    const rolledBack = memory("m-rolled-back", SCOPE_A, 2);
-    await commit(opened.store, committed);
-    await assert.rejects(
-      opened.store.transaction(async (tx) => {
-        await tx.putMemory(rolledBack);
-        throw new Error("roll back");
-      }),
-    );
-
-    const reopened = await opened.reopen();
-
-    assert.deepStrictEqual(await reopened.recall({ scopes: [SCOPE_A], limit: 10 }), [committed]);
-    // Positive control: the reopened handle can write, and the first handle sees it.
-    await commit(reopened, rolledBack);
-    assert.deepStrictEqual(ids(await opened.store.recall({ scopes: [SCOPE_A], limit: 10 })), [
-      "m-rolled-back",
-      "m-committed",
-    ]);
-  });
-
-  define(
-    "committed events persist in seq order and a rolled-back append leaves none",
-    async (opened) => {
-      assert.ok(opened.inspectEvents, "a durable target provides inspectEvents");
-      const first = await opened.store.transaction((tx) =>
-        tx.append(noteEvent(memory("m-1", SCOPE_A, 1))),
-      );
-      const second = await opened.store.transaction((tx) =>
-        tx.append(noteEvent(memory("m-2", SCOPE_A, 2))),
-      );
-      await assert.rejects(
-        opened.store.transaction(async (tx) => {
-          await tx.append(noteEvent(memory("m-rolled-back", SCOPE_A, 3)));
-          throw new Error("roll back");
-        }),
-      );
-
-      assert.deepStrictEqual(await opened.inspectEvents(), [first, second]);
-      // Positive control: the same append, committed, is persisted after them.
-      const third = await opened.store.transaction((tx) =>
-        tx.append(noteEvent(memory("m-rolled-back", SCOPE_A, 3))),
-      );
-      assert.deepStrictEqual(await opened.inspectEvents(), [first, second, third]);
-    },
-  );
-
-  define("seq keeps increasing across reopened handles", async (opened) => {
-    assert.ok(opened.reopen && opened.inspectEvents, "a durable target provides both");
-    const first = await opened.store.transaction((tx) =>
-      tx.append(noteEvent(memory("m-1", SCOPE_A, 1))),
-    );
-
-    const reopened = await opened.reopen();
-    const second = await reopened.transaction((tx) =>
-      tx.append(noteEvent(memory("m-2", SCOPE_A, 2))),
-    );
-    const third = await opened.store.transaction((tx) =>
-      tx.append(noteEvent(memory("m-3", SCOPE_A, 3))),
-    );
-
-    assert.ok(second.seq > first.seq, "a reopened handle continues after the first's seq");
-    assert.ok(third.seq > second.seq, "the first handle continues after the reopened one's seq");
-    assert.deepStrictEqual(await opened.inspectEvents(), [first, second, third]);
-  });
-
   define(
     "events returns the committed events of the requested scopes in seq order, redacted forms included",
     async (opened) => {
@@ -2589,6 +2519,76 @@ export function storeConformanceCases(target: ConformanceTarget): readonly Confo
       }
     },
   );
+
+  if (!target.durable) return cases;
+
+  define("a reopened store keeps committed writes and drops rolled-back ones", async (opened) => {
+    assert.ok(opened.reopen, "a durable target provides reopen");
+    const committed = memory("m-committed", SCOPE_A, 1);
+    const rolledBack = memory("m-rolled-back", SCOPE_A, 2);
+    await commit(opened.store, committed);
+    await assert.rejects(
+      opened.store.transaction(async (tx) => {
+        await tx.putMemory(rolledBack);
+        throw new Error("roll back");
+      }),
+    );
+
+    const reopened = await opened.reopen();
+
+    assert.deepStrictEqual(await reopened.recall({ scopes: [SCOPE_A], limit: 10 }), [committed]);
+    // Positive control: the reopened handle can write, and the first handle sees it.
+    await commit(reopened, rolledBack);
+    assert.deepStrictEqual(ids(await opened.store.recall({ scopes: [SCOPE_A], limit: 10 })), [
+      "m-rolled-back",
+      "m-committed",
+    ]);
+  });
+
+  define(
+    "committed events persist in seq order and a rolled-back append leaves none",
+    async (opened) => {
+      assert.ok(opened.inspectEvents, "a durable target provides inspectEvents");
+      const first = await opened.store.transaction((tx) =>
+        tx.append(noteEvent(memory("m-1", SCOPE_A, 1))),
+      );
+      const second = await opened.store.transaction((tx) =>
+        tx.append(noteEvent(memory("m-2", SCOPE_A, 2))),
+      );
+      await assert.rejects(
+        opened.store.transaction(async (tx) => {
+          await tx.append(noteEvent(memory("m-rolled-back", SCOPE_A, 3)));
+          throw new Error("roll back");
+        }),
+      );
+
+      assert.deepStrictEqual(await opened.inspectEvents(), [first, second]);
+      // Positive control: the same append, committed, is persisted after them.
+      const third = await opened.store.transaction((tx) =>
+        tx.append(noteEvent(memory("m-rolled-back", SCOPE_A, 3))),
+      );
+      assert.deepStrictEqual(await opened.inspectEvents(), [first, second, third]);
+    },
+  );
+
+  define("seq keeps increasing across reopened handles", async (opened) => {
+    assert.ok(opened.reopen && opened.inspectEvents, "a durable target provides both");
+    const first = await opened.store.transaction((tx) =>
+      tx.append(noteEvent(memory("m-1", SCOPE_A, 1))),
+    );
+
+    const reopened = await opened.reopen();
+    const second = await reopened.transaction((tx) =>
+      tx.append(noteEvent(memory("m-2", SCOPE_A, 2))),
+    );
+    const third = await opened.store.transaction((tx) =>
+      tx.append(noteEvent(memory("m-3", SCOPE_A, 3))),
+    );
+
+    assert.ok(second.seq > first.seq, "a reopened handle continues after the first's seq");
+    assert.ok(third.seq > second.seq, "the first handle continues after the reopened one's seq");
+    assert.deepStrictEqual(await opened.inspectEvents(), [first, second, third]);
+  });
 
   return cases;
 }
