@@ -67,6 +67,7 @@ type Flaw =
   | "no-derived"
   | "forgets-erasures"
   | "erasures-outside-transaction"
+  | "erasures-insertion-order"
   | "keeps-freed-bytes"
   | "expiring-inclusive"
   | "expiring-ignores-scope"
@@ -156,6 +157,8 @@ const OUTCOME_CASE =
   "a carrier's outcome commits with its transaction, the first one stays, and a rolled-back one is not kept";
 const PENDING_ERASURES_CASE =
   "pendingErasures pages through the rows with a pending carrier, in seq order, with only those carriers, and the count follows";
+const ERASURES_ORDER_CASE =
+  "erasures returns every committed outbox row in seq order, whatever order they were put in";
 const RETRACTED_SCOPES_CASE =
   "recall returns retracted memories, marked, only in the scopes it names as retracted";
 
@@ -322,6 +325,8 @@ const expectations: readonly (readonly [Flaw, string])[] = [
   ["pending-count-stale", PENDING_ERASURES_CASE],
   ["forgets-settlements", PENDING_ERASURES_CASE],
   ["drops-carriers", PENDING_ERASURES_CASE],
+  ["erasures-insertion-order", ERASURES_ORDER_CASE],
+  ["forgets-erasures", ERASURES_ORDER_CASE],
 ];
 
 describe("the conformance suite catches a flawed store", () => {
@@ -693,7 +698,8 @@ function createFlawedStore(flaw: Flaw, shared: { committed: State }): Store {
       return next;
     },
     async erasures() {
-      return shared.committed.erasures;
+      if (flaw === "erasures-insertion-order") return shared.committed.erasures;
+      return [...shared.committed.erasures].sort((x, y) => x.seq - y.seq);
     },
     async settlements() {
       return [...shared.committed.settlements.values()];

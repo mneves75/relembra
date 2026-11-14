@@ -2385,6 +2385,33 @@ export function storeConformanceCases(target: ConformanceTarget): readonly Confo
     },
   );
 
+  define(
+    "erasures returns every committed outbox row in seq order, whatever order they were put in",
+    async (opened) => {
+      const { store } = opened;
+      const carrier: Carrier = { id: "carrier-a", kind: "kind-a" };
+      await store.transaction(async (tx) => {
+        await tx.putErasure({ seq: 9, memoryId: "m-9", carriers: [carrier] });
+        await tx.putErasure({ seq: 3, memoryId: "m-3", carriers: [] });
+      });
+      await store.transaction((tx) => tx.putErasure({ seq: 5, memoryId: "m-5", carriers: [] }));
+      const rows = async (target: Store) =>
+        (await target.erasures()).map((work) => ({ seq: work.seq, memoryId: work.memoryId }));
+      const expected = [
+        { seq: 3, memoryId: "m-3" },
+        { seq: 5, memoryId: "m-5" },
+        { seq: 9, memoryId: "m-9" },
+      ];
+      // Positive control: every row is there, whatever the order.
+      assert.deepStrictEqual(
+        [...(await rows(store))].sort((x, y) => x.seq - y.seq),
+        expected,
+      );
+      assert.deepStrictEqual(await rows(store), expected);
+      if (opened.reopen) assert.deepStrictEqual(await rows(await opened.reopen()), expected);
+    },
+  );
+
   if (!target.durable) return cases;
 
   define("a reopened store keeps committed writes and drops rolled-back ones", async (opened) => {
