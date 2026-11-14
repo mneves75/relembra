@@ -40,7 +40,6 @@ export class CandidateProcess {
   #bufferBytes = 0;
   /** The first line that arrived with no exchange waiting; set, the candidate is killed. */
   #unsolicited: string | undefined;
-  /** Whether an exchange has returned `#unsolicited` to the scorer. */
   #unsolicitedReported = false;
   /** Other stdout no exchange returned, at most `#maxLine` bytes of it. */
   #unread = "";

@@ -109,7 +109,6 @@ if passed cli; then
   step tests scripts/with-postgres.sh env RELEMBRA_REQUIRE_BINARY=1 \
     RELEMBRA_BINARY="$root/bin/relembra" bun run test:all
   step node bun run test:node
-  # These rebuild dist/, so they run one after the other.
   step pack pack_stage
   step sbom sh -c 'npm sbom --sbom-format cyclonedx >"$1"' sbom "$logs/relembra.cdx.json"
   step eval bun run eval --out "$logs/eval"

@@ -5,7 +5,7 @@ import { join } from "node:path";
 export type Trust = "owner" | "agent" | "untrusted";
 export const TRUST_LEVELS: readonly Trust[] = ["owner", "agent", "untrusted"];
 
-/** Mirrors `Principal` in src/model.ts, plus `pinnable` (implementation plan §4.1). */
+/** The protocol's principal; `pinnable` is a flag here, a scope list in src/model.ts. */
 export interface EvalPrincipal {
   readonly id: string;
   readonly readable: readonly string[];
