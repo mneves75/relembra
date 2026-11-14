@@ -11,10 +11,11 @@
 # it at the end, so two clean runs on different commits cannot make a release. The first Bun this
 # starts runs inside ci.sh, behind its guard against inherited runtime overrides. Each run keeps
 # everything in its own .scratch/release/release-<time>-XXXXXX: gate/ (manifest.json, step logs,
-# the tested tarball), bench/ (the benchmark attempt with its raw samples) and
-# identity-final.json. After the gate it pins the manifest's sha256, before the benchmark; at the
-# end the manifest must still have it, and the binary and the package it names must still be the
-# tested bytes, the package alone in its directory. The paths printed at the end are those.
+# the tested tarball), bench/ (the benchmark attempt with its raw samples), identity-final.json
+# and, written last and only on a pass, release-check.json, which scripts/deploy.sh hmo requires.
+# After the gate it pins the manifest's sha256, before the benchmark; at the end the manifest must
+# still have it, and the binary and the package it names must still be the tested bytes, the
+# package alone in its directory. The paths printed at the end are those.
 set -u
 
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P) || {
