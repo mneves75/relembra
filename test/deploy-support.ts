@@ -19,7 +19,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-export const repoRoot = join(import.meta.dir, "..");
+const repoRoot = join(import.meta.dir, "..");
 export const script = join(repoRoot, "scripts", "deploy.sh");
 export const VERSION = "1.2.3-test.1";
 export const TAG = `v${VERSION}`;
@@ -217,9 +217,9 @@ export function fixture(options: Options = {}): Fixture {
   writeFileSync(join(attempt, "identity-final.json"), identity.stdout);
   const record = join(attempt, "bench", "bench-test", "bench.json");
   writeFileSync(record, '{"check":{"passed":true}}\n');
-  const manifestPath = join(attempt, "gate", "manifest.json");
+  const gateManifest = join(attempt, "gate", "manifest.json");
   writeFileSync(
-    manifestPath,
+    gateManifest,
     JSON.stringify(
       {
         verdict: "pass",
@@ -252,8 +252,8 @@ export function fixture(options: Options = {}): Fixture {
     join(attempt, "release-check.json"),
     JSON.stringify({
       passed: true,
-      manifest: manifestPath,
-      manifestSha256: sha256(readFileSync(manifestPath)),
+      manifest: gateManifest,
+      manifestSha256: sha256(readFileSync(gateManifest)),
       benchmark: record,
       finishedAt: "2026-11-04T05:24:00Z",
     }),
@@ -406,7 +406,7 @@ export interface Artifact {
   sha256After: string;
   verified: boolean;
 }
-export const manifestPath = (f: Fixture) => join(f.attempt, "gate", "manifest.json");
+const manifestPath = (f: Fixture) => join(f.attempt, "gate", "manifest.json");
 /** Edits the manifest and keeps release-check.json's hash of it in step, as a rerun would. */
 export function editManifest(
   f: Fixture,
