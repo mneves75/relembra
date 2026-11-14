@@ -15,7 +15,7 @@ export format, the SQLite schema and the CLI's exit codes are unchanged.
 
 - Windows: a new store under a path with non-ASCII characters (such as `C:\Users\João`) is
   created. The request to the PowerShell helper is now pure ASCII; before, the console code page
-  garbled it and creation failed closed.
+  garbled the path.
 - `exportJsonl`: a principal whose `owned` lists a scope twice exports a file `importJsonl`
   accepts. The header used to repeat the scope, and the import refused the file.
 - Postgres: the schema identifier is quoted, so reserved words such as `user` or `select` work as
