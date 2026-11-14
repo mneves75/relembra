@@ -540,6 +540,17 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
     refused(box, ["wake"], 2, "bad-scope", { env: { RELEMBRA_SCOPE: "a\nb" } });
   });
 
+  cliTest("RELEMBRA_SCOPE holds at most 256 UTF-8 bytes, counted in bytes, not characters", () => {
+    for (const fits of ["x".repeat(256), "é".repeat(128)]) {
+      expect(ok(box, ["check"], { env: { RELEMBRA_SCOPE: fits } }).scope).toBe(fits);
+    }
+    // 129 two-byte characters: under the limit in UTF-16 code units, over it in UTF-8 bytes.
+    for (const over of ["x".repeat(257), "é".repeat(129)]) {
+      const result = refused(box, ["check"], 2, "bad-scope", { env: { RELEMBRA_SCOPE: over } });
+      expect(result.json?.ok === false && result.json.error.rule).toBe("too-long");
+    }
+  });
+
   cliTest("a .env or bunfig.toml in the project cannot set the scope, the home or run code", () => {
     const marker = join(box.home, "preloaded");
     writeFileSync(

@@ -4,7 +4,7 @@ import { accessSync, constants, existsSync, realpathSync, statSync } from "node:
 import { homedir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { findGuardViolation } from "../guard.js";
-import { MAX_SCOPE_BYTES, utf8Bytes } from "../render.js";
+import { MAX_SCOPE_BYTES } from "../render.js";
 import { windowsUserSid } from "../sqlite/database.js";
 import { CliError } from "./errors.js";
 import type { SessionScopes } from "./wake.js";
@@ -361,7 +361,7 @@ function safeRealpath(path: string): string {
 function checkScope(scope: string): string {
   // The guard's character rules, so a scope renders as plainly as the text it holds.
   const rule = findGuardViolation(scope, MAX_SCOPE_BYTES);
-  if (rule !== undefined || utf8Bytes(scope) > MAX_SCOPE_BYTES) {
+  if (rule !== undefined) {
     throw new CliError(
       "bad-scope",
       `the scope must be 1 to ${MAX_SCOPE_BYTES} UTF-8 bytes on one line of visible characters`,
