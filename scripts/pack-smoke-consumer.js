@@ -74,7 +74,7 @@ try {
   statements.length = 0;
   assert.equal(await postgres.transaction((tx) => tx.fenceEpoch("smoke")), undefined);
   assert.equal(statements[0], "SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
-  assert.match(statements[2], /^SELECT id FROM smoke\.store_lock WHERE id = 1 FOR UPDATE$/);
+  assert.match(statements[2], /^SELECT id FROM "smoke"\.store_lock WHERE id = 1 FOR UPDATE$/);
 
   // relembra/pi-durable loads without its optional peer installed: it imports pi-durable's types only.
   assert.throws(() => import.meta.resolve("@earendil-works/pi-durable"));
