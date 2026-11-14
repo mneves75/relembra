@@ -268,6 +268,38 @@ describePostgres("postgres store: contention and transactions (IMPLEMENTATION-PL
     expect((await store.recall({ scopes: [SCOPE], limit: 10 })).length).toBe(1);
   });
 
+  test("recordExposure retries 40001 and 40P01 up to maxAttempts, then throws StoreRetryError", async () => {
+    let failures: string[] = [];
+    const store = await open(
+      {
+        before: (text) => {
+          if (text.includes("INSERT INTO") && text.includes("exposures") && failures.length > 0) {
+            throw serverError(failures.shift() as string);
+          }
+        },
+      },
+      { maxAttempts: 3 },
+    );
+    const carrier = { id: "carrier-1", kind: "prompt" };
+
+    // Positive control: two retryable failures, then the third attempt records.
+    failures = ["40P01", "40001"];
+    expect(await store.recordExposure({ carrier, memoryIds: ["m-1"], at: 1 })).toEqual([]);
+    expect(failures).toEqual([]);
+
+    failures = ["40P01", "40P01", "40P01", "40P01"];
+    const exhausted = store.recordExposure({ carrier, memoryIds: ["m-2"], at: 2 });
+    await expect(exhausted).rejects.toBeInstanceOf(StoreRetryError);
+    await expect(exhausted).rejects.toMatchObject({ attempts: 3, cause: { errno: "40P01" } });
+    expect(failures).toEqual(["40P01"]);
+
+    failures = ["23505"];
+    await expect(
+      store.recordExposure({ carrier, memoryIds: ["m-3"], at: 3 }),
+    ).rejects.toMatchObject({ errno: "23505" });
+    expect(failures).toEqual([]);
+  });
+
   test("a commit whose answer was lost is resolved by its op id", async () => {
     let loseAfterCommit = false;
     let loseBeforeCommit = false;

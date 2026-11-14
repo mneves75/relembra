@@ -39,9 +39,10 @@ export interface PostgresStoreOptions {
    */
   readonly lockTimeoutMs?: number;
   /**
-   * How many times a transaction runs in all when Postgres aborts it with a serialization failure
-   * (40001) or a deadlock (40P01), or its COMMIT got no answer after it wrote an op record (it then
-   * runs again, so the op-id check resolves it). Default 5.
+   * How many times a transaction, recordExposure's included, runs in all when Postgres aborts it
+   * with a serialization failure (40001) or a deadlock (40P01), or its COMMIT got no answer after
+   * it wrote an op record (it then runs again, so the op-id check resolves it). Then it fails with
+   * StoreRetryError. Default 5.
    */
   readonly maxAttempts?: number;
 }
@@ -125,7 +126,7 @@ export async function openPostgresStore(options: PostgresStoreOptions): Promise<
   try {
     await migrate(client, schema, lockTimeoutMs, MIGRATIONS);
   } catch (error) {
-    throw busy(error, lockTimeoutMs);
+    throw asStoreBusy(error, lockTimeoutMs);
   }
   const s = schema;
   // The advisory lock that orders exposure recordings against redactions (see recordExposure).
@@ -394,7 +395,7 @@ export async function openPostgresStore(options: PostgresStoreOptions): Promise<
             // outcome, a redaction since) instead of trusting this attempt's result.
             retry = error;
           } else {
-            throw busy(error, lockTimeoutMs);
+            throw asStoreBusy(error, lockTimeoutMs);
           }
         }
         if (attempts >= maxAttempts) throw new StoreRetryError(attempts, { cause: retry });
@@ -539,9 +540,8 @@ export async function openPostgresStore(options: PostgresStoreOptions): Promise<
           return memoryIds.filter((id) => found.has(id));
         } catch (error) {
           const state = sqlState(error);
-          if (state === undefined || !RETRYABLE.has(state) || attempts >= maxAttempts) {
-            throw busy(error, lockTimeoutMs);
-          }
+          if (state === undefined || !RETRYABLE.has(state)) throw asStoreBusy(error, lockTimeoutMs);
+          if (attempts >= maxAttempts) throw new StoreRetryError(attempts, { cause: error });
           await pause(attempts);
         }
       }
@@ -561,9 +561,7 @@ export async function openPostgresStore(options: PostgresStoreOptions): Promise<
 
 /** What one attempt did, read after it fails. */
 interface Attempt<T> {
-  /** Whether the work wrote anything. */
   wrote: boolean;
-  /** The op records it wrote. */
   readonly ops: OpRecord[];
   /** Set when the work resolved, before the COMMIT. */
   finished: { readonly result: T } | undefined;
@@ -578,7 +576,7 @@ function noAnswer(state: string | undefined): boolean {
 }
 
 /** A lock timeout (55P03) as StoreBusyError; any other error as it is. */
-function busy(error: unknown, lockTimeoutMs: number): unknown {
+function asStoreBusy(error: unknown, lockTimeoutMs: number): unknown {
   return sqlState(error) === "55P03" ? new StoreBusyError(lockTimeoutMs, { cause: error }) : error;
 }
 
