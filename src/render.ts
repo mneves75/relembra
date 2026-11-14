@@ -209,11 +209,6 @@ export function frameBytes(kind: RenderingKind): number {
   return utf8Bytes(frame(kind, []));
 }
 
-/** The bytes `entries` add to a frame: each line and its newline. */
-export function entriesBytes(entries: readonly Entry[]): number {
-  return entries.reduce((sum, entry) => sum + utf8Bytes(entry.line) + 1, 0);
-}
-
 /**
  * How many entries, from the first, fit in `room` bytes. The first that does not fit ends the
  * prefix, so the composition order is kept and no entry is ever cut.
@@ -295,14 +290,24 @@ function carried(entries: readonly Entry[]): MemoryId[] {
 
 /**
  * The wake's entries within `budgetBytes`: the longest prefix of `ordered` in full, then the
- * longest prefix of the remaining memories as index entries.
+ * longest prefix of the remaining memories as index entries. Each memory is rendered only when
+ * its turn comes, and the first entry that does not fit ends its part, so a large scope costs
+ * no more rendering than the budget holds.
  */
 export function wakeEntries(ordered: readonly Memory[], budgetBytes: number): Entry[] {
-  const room = budgetBytes - frameBytes("wake");
-  const full = ordered.map(fullEntry);
-  const shown = full.slice(0, fittingPrefix(full, room));
-  const index = ordered.slice(shown.length).map(indexEntry);
-  return [...shown, ...index.slice(0, fittingPrefix(index, room - entriesBytes(shown)))];
+  let room = budgetBytes - frameBytes("wake");
+  const entries: Entry[] = [];
+  let next = 0;
+  for (const toEntry of [fullEntry, indexEntry]) {
+    for (; next < ordered.length; next++) {
+      const entry = toEntry(ordered[next] as Memory);
+      const bytes = utf8Bytes(entry.line) + 1;
+      if (bytes > room) break;
+      room -= bytes;
+      entries.push(entry);
+    }
+  }
+  return entries;
 }
 
 /**
