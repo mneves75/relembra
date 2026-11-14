@@ -65,18 +65,22 @@ export function utf8Bytes(text: string): number {
  * point at another memory. The error names the field, never the value.
  */
 export function renderMemory(memory: Memory): string {
+  checkMetadata(memory);
   const { id, scope, revision } = memory;
-  const { number, at, text } = revision;
-  bounded("id", id, MAX_ID_BYTES);
-  bounded("scope", scope, MAX_SCOPE_BYTES);
+  const time = new Date(revision.at).toISOString();
+  return `<memory id="${escapeText(id)}" scope="${escapeText(scope)}" rev="${revision.number}" at="${time}" trust="${trustOf(memory)}">${escapeText(revision.text)}</memory>`;
+}
+
+function checkMetadata(memory: Memory): void {
+  const { number, at } = memory.revision;
+  bounded("id", memory.id, MAX_ID_BYTES);
+  bounded("scope", memory.scope, MAX_SCOPE_BYTES);
   if (!Number.isSafeInteger(number) || number < 1) {
     throw new TypeError("a stored memory's rev is not a positive integer");
   }
   if (!Number.isFinite(at) || Math.abs(at) > MAX_TIME) {
     throw new TypeError("a stored memory's at is not a time");
   }
-  const time = new Date(at).toISOString();
-  return `<memory id="${escapeText(id)}" scope="${escapeText(scope)}" rev="${number}" at="${time}" trust="${trustOf(memory)}">${escapeText(text)}</memory>`;
 }
 
 function bounded(field: "id" | "scope", value: unknown, maxBytes: number): void {
@@ -291,7 +295,7 @@ function carried(entries: readonly Entry[]): MemoryId[] {
  * The wake's entries within `budgetBytes`: the longest prefix of `ordered` in full, then the
  * longest prefix of the remaining memories as index entries. Each memory is rendered only when
  * its turn comes, and the first entry that does not fit ends its part, so a large scope costs
- * no more rendering than the budget holds.
+ * no more rendering than the budget holds; every other memory's metadata is still checked.
  */
 export function wakeEntries(ordered: readonly Memory[], budgetBytes: number): Entry[] {
   let room = budgetBytes - frameBytes("wake");
@@ -306,6 +310,8 @@ export function wakeEntries(ordered: readonly Memory[], budgetBytes: number): En
       entries.push(entry);
     }
   }
+  // A store or host bug is refused wherever its memory falls, not only within the budget.
+  for (const memory of ordered.slice(carried(entries).length)) checkMetadata(memory);
   return entries;
 }
 

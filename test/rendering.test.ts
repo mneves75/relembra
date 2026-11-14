@@ -321,22 +321,43 @@ describe("a wake renders only what its budget can hold", () => {
     const large = Array.from({ length: 20_000 }, (_, n) => {
       const memory = stored({ id: `m-${n}`, text: `Memory number ${n} of a large store.` });
       const { revision } = memory;
-      return Object.defineProperty({ ...memory }, "revision", {
+      const lazy = Object.defineProperty({ ...revision }, "text", {
         get() {
           read.add(memory.id);
-          return revision;
+          return revision.text;
         },
-      }) as Memory;
+      });
+      return { ...memory, revision: lazy } as Memory;
     });
     const entries = wakeEntries(large, 9_500);
     const full = entries.filter((entry) => entry.carries !== undefined);
     expect(full.length).toBeGreaterThan(0);
     expect(entries.length).toBeGreaterThan(full.length);
-    // The memories shown in full and the first that did not fit; index entries need no revision.
+    // The memories shown in full and the first that did not fit; index entries need no text.
     expect(read.size).toBe(full.length + 1);
     read.clear();
     expect(entries).toEqual(eagerWakeEntries(large, 9_500));
     // Positive control: the full computation reads every memory.
     expect(read.size).toBe(large.length);
+  });
+
+  test("a memory with metadata out of bounds is refused wherever it falls, past the budget too", () => {
+    const corrupt = (memory: Memory, revision: Partial<Memory["revision"]>): Memory =>
+      ({ ...memory, revision: { ...memory.revision, ...revision } }) as Memory;
+    const long = stored({ id: "m-a", text: "x".repeat(200) });
+    for (const bad of [
+      corrupt(stored({ id: "m-bad", text: "Corrupt rev." }), { number: 0 }),
+      corrupt(stored({ id: "m-bad", text: "Corrupt time." }), { at: Number.NaN }),
+      { ...stored({ id: "m-bad", text: "Corrupt scope." }), scope: "" } as Memory,
+    ]) {
+      // Shown in full, as an index entry, and past the budget: refused each time.
+      for (const budget of [9_500, 300, 0]) {
+        expect(() => wakeEntries([long, bad], budget)).toThrow(TypeError);
+      }
+    }
+    // Positive control: the same order with a sound memory in its place renders.
+    const sound = stored({ id: "m-ok", text: "Sound." });
+    for (const budget of [9_500, 300, 0])
+      expect(() => wakeEntries([long, sound], budget)).not.toThrow();
   });
 });
