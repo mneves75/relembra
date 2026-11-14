@@ -154,6 +154,26 @@ describe("export", () => {
     expect(both).toContain("In the other scope.");
     expect(lines(both)[0].scopes).toEqual([SCOPE, OTHER_SCOPE]);
   });
+
+  test("a scope `owned` lists twice is exported once, so the file imports and round-trips", async () => {
+    const { store, note } = open();
+    await note("In the main scope.");
+    await note("In the other scope.", { scope: OTHER_SCOPE });
+    const twice: Principal = { ...owner, owned: [SCOPE, OTHER_SCOPE, SCOPE] };
+
+    const exported = await exportJsonl(store, twice);
+    expect(lines(exported)[0].scopes).toEqual([SCOPE, OTHER_SCOPE]);
+    expect(lines(exported)).toHaveLength(3);
+    const target = createMemoryStore();
+    expect(await importJsonl(target, twice, exported)).toEqual({
+      imported: 2,
+      skipped: 0,
+      refused: [],
+    });
+    expect(await exportJsonl(target, twice)).toBe(exported);
+    // Positive control: the same principal with each scope once exports the same file.
+    expect(await exportJsonl(store, owner)).toBe(exported);
+  });
 });
 
 describe("import of a relembra export", () => {

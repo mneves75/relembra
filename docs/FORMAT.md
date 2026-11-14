@@ -225,9 +225,17 @@ all of it, or nothing and an error naming the rule and line (`docs/CLI.md`, `imp
   guard allows excepted) and no credential shape, and the rule is the detail: a memory id holding
   ESC is refused as `malformed`, detail `memoryId:control-character`. A string that is not one,
   is empty or is not well-formed Unicode stays plain `malformed`. Provenance fields already go
-  through the guard (`provenance`). The whole file is checked before the store is opened for
-  writing, so a refusal writes nothing. The importing principal itself is checked first, as for
-  every operation: a principal listing a scope the rule refuses is an `IdentifierError`.
+  through the guard (`provenance`). What a line holds on its own (its JSON
+  shape, format, fields, `seq` order, identifiers, text, provenance and the `future-time` bound) is
+  checked for every line of the file, then the header's scopes against the importer's rights
+  (see Principal), before the first event is written. That happens inside the import's
+  transaction, because the `future-time` bound needs the acceptance time read there (see Time).
+  What depends on the store or on earlier lines (an event about a memory no earlier line noted, a
+  replacement's whereabouts, and the rules under Identity, Summary sources, Promotions, Live
+  target and replacement and Authority) is checked as each line is applied, after the lines
+  before it were written in that transaction. A refusal at any point rolls the transaction back,
+  so it writes nothing. The importing principal itself is checked first, before the transaction,
+  as for every operation: a principal listing a scope the rule refuses is an `IdentifierError`.
 - **Identity.** Memories keep their ids. A memory the store holds with the same scope, text,
   sources and origin is skipped, so importing a file twice adds nothing; one it holds with other content
   refuses the import (`conflict`). A memory keeps its scope through the file: a line that names
@@ -291,9 +299,10 @@ all of it, or nothing and an error naming the rule and line (`docs/CLI.md`, `imp
   no ceiling applies to it.
 - **Tombstones win.** A memory the store holds as a tombstone, with text in the file, refuses the
   import (`redacted-in-target`): a stale export never resurrects a redaction. A `redact` line for a
-  memory the store holds with text redacts it there, with the summaries derived from it, and
-  records erasure work as any redaction does. A tombstone for a memory the store never held is
-  written with its `redact` event and no `erasure_outbox` row: no text of it was ever there.
+  memory the store holds with text redacts it there, with the summaries and promoted copies derived
+  from it, and records erasure work as any redaction does. A tombstone for a memory the store
+  never held is written with its `redact` event and no `erasure_outbox` row: no text of it was ever
+  there.
 - **Trust and pins.** An imported memory is never pinned, and its trust is at most `agent` (and at
   most the importing principal's ceiling); `untrusted` stays `untrusted`. A summary's trust is
   also at most its sources' in the store, and a copy's at most its origin's.

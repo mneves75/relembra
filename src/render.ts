@@ -3,7 +3,10 @@ import { replaceUnseen } from "./guard.js";
 import type { Memory, MemoryId, Principal, Trust } from "./model.js";
 import type { EgressFilter } from "./ports.js";
 
-/** What a wake or brief hands the host: the text, and the memories it carried in full. */
+/**
+ * What a wake, brief or find rendering hands the host: the text, and the memories it carried in
+ * full.
+ */
 export interface Rendering {
   /** The frame and its lines, after the egress filter, within the byte budget. */
   readonly text: string;
@@ -82,7 +85,6 @@ function bounded(field: "id" | "scope", value: unknown, maxBytes: number): void 
   }
 }
 
-/** The frame around the lines, one element per line. */
 export function frame(kind: RenderingKind, lines: readonly string[]): string {
   return [`<${kind}>`, ...lines, `</${kind}>`].join("\n");
 }
@@ -94,7 +96,6 @@ export function newestFirst(a: Memory, b: Memory): number {
   return a.id < b.id ? -1 : 1;
 }
 
-/** A summary is a memory with sources. */
 export function isSummary(memory: Memory): boolean {
   return memory.sources !== undefined;
 }
@@ -177,7 +178,7 @@ export function briefSummaries(ranked: readonly Memory[], live: readonly Memory[
   return trustedFirst(covering);
 }
 
-/** The default byte budget of a wake or brief. */
+/** The default byte budget of a wake, brief or find rendering. */
 export const DEFAULT_BUDGET_BYTES = 9_500;
 
 export function checkBudget(budgetBytes: number): number {
@@ -193,8 +194,7 @@ export interface Entry {
   readonly carries?: MemoryId;
 }
 
-/** A memory in full: its text, attributed. */
-export function fullEntry(memory: Memory): Entry {
+function fullEntry(memory: Memory): Entry {
   return { line: renderMemory(memory), carries: memory.id };
 }
 
@@ -204,21 +204,15 @@ export function indexEntry(memory: Memory): Entry {
   return { line: `<index id="${escapeText(memory.id)}"/>` };
 }
 
-/** The bytes of a frame with no lines. */
 export function frameBytes(kind: RenderingKind): number {
   return utf8Bytes(frame(kind, []));
-}
-
-/** The bytes `entries` add to a frame: each line and its newline. */
-export function entriesBytes(entries: readonly Entry[]): number {
-  return entries.reduce((sum, entry) => sum + utf8Bytes(entry.line) + 1, 0);
 }
 
 /**
  * How many entries, from the first, fit in `room` bytes. The first that does not fit ends the
  * prefix, so the composition order is kept and no entry is ever cut.
  */
-export function fittingPrefix(entries: readonly Entry[], room: number): number {
+function fittingPrefix(entries: readonly Entry[], room: number): number {
   let used = 0;
   for (let count = 0; count < entries.length; count++) {
     used += utf8Bytes((entries[count] as Entry).line) + 1;
@@ -295,14 +289,24 @@ function carried(entries: readonly Entry[]): MemoryId[] {
 
 /**
  * The wake's entries within `budgetBytes`: the longest prefix of `ordered` in full, then the
- * longest prefix of the remaining memories as index entries.
+ * longest prefix of the remaining memories as index entries. Each memory is rendered only when
+ * its turn comes, and the first entry that does not fit ends its part, so a large scope costs
+ * no more rendering than the budget holds.
  */
 export function wakeEntries(ordered: readonly Memory[], budgetBytes: number): Entry[] {
-  const room = budgetBytes - frameBytes("wake");
-  const full = ordered.map(fullEntry);
-  const shown = full.slice(0, fittingPrefix(full, room));
-  const index = ordered.slice(shown.length).map(indexEntry);
-  return [...shown, ...index.slice(0, fittingPrefix(index, room - entriesBytes(shown)))];
+  let room = budgetBytes - frameBytes("wake");
+  const entries: Entry[] = [];
+  let next = 0;
+  for (const toEntry of [fullEntry, indexEntry]) {
+    for (; next < ordered.length; next++) {
+      const entry = toEntry(ordered[next] as Memory);
+      const bytes = utf8Bytes(entry.line) + 1;
+      if (bytes > room) break;
+      room -= bytes;
+      entries.push(entry);
+    }
+  }
+  return entries;
 }
 
 /**
