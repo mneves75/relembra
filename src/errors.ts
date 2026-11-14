@@ -76,8 +76,9 @@ export type ProvenanceRule =
   | "above-sources";
 
 /**
- * A note's provenance field is missing or breaks a guard rule. The message names the field and the
- * rule, never the value.
+ * A write's provenance field is refused (ProvenanceRule: a guard rule, missing, not a tier, above
+ * the principal's ceiling or above a summary's sources); note, summary, promote and supersede throw
+ * it. The message names the field and the rule, never the value.
  */
 export class ProvenanceError extends Error {
   override readonly name = "ProvenanceError";
@@ -212,7 +213,8 @@ export class SourceChangedError extends Error {
  * - `malformed`: a line is not what the format says (bad JSON, a missing header, an unknown kind,
  *   a missing or mistyped field, seqs out of order, an event about a memory never noted);
  * - `guard`, `provenance`: a memory's text or a provenance field broke a guard rule;
- * - `future-time`: a revision is dated later than the host's clock allows (FORMAT.md);
+ * - `future-time`: a revision is dated later than the import's acceptance time allows (the
+ *   store's time when it keeps one, else the host's clock; FORMAT.md);
  * - `redacted-in-target`: the file holds text of a memory the target has redacted (a stale export);
  * - `conflict`: the file and the target disagree about a memory with the same id, or about its
  *   scope;
@@ -248,10 +250,10 @@ export type NamingField =
   | "carrier kind";
 
 /**
- * A scope, principal id, memory id or fence key holds a lone surrogate (ill-formed UTF-16). Once
- * encoded as UTF-8 it would become U+FFFD, so two different strings would name the same thing in a
- * store, a hash or a file. A TypeError, like the other refusals of a malformed argument. The
- * message names the field, never the value.
+ * A scope, principal id, memory id, fence key, carrier id or carrier kind holds a lone surrogate
+ * (ill-formed UTF-16). Once encoded as UTF-8 it would become U+FFFD, so two different strings
+ * would name the same thing in a store, a hash or a file. A TypeError, like the other refusals of
+ * a malformed argument. The message names the field, never the value.
  */
 export class IllFormedStringError extends TypeError {
   override readonly name = "IllFormedStringError";
@@ -264,12 +266,12 @@ export class IllFormedStringError extends TypeError {
 }
 
 /**
- * A scope, principal id, memory id or fence key breaks the identifier rule: it is blank, over its
- * byte cap, more than one line, or holds a control, format, bidi, zero-width or other invisible
- * character, or a credential shape (the guard's rules, docs/FORMAT.md "Identifiers"). Refused
- * where it enters, before any store call, so every store holds the same names and no rendering
- * shows one raw. A TypeError, like IllFormedStringError. The message names the field and the rule,
- * never the value.
+ * A scope, principal id, memory id, fence key, carrier id or carrier kind breaks the identifier
+ * rule: it is blank, over its byte cap, more than one line, or holds a control, format, bidi,
+ * zero-width or other invisible character, or a credential shape (the guard's rules,
+ * docs/FORMAT.md "Identifiers"). Refused where it enters, before any store call, so every store
+ * holds the same names and no rendering shows one raw. A TypeError, like IllFormedStringError.
+ * The message names the field and the rule, never the value.
  */
 export class IdentifierError extends TypeError {
   override readonly name = "IdentifierError";
@@ -293,8 +295,9 @@ export class ImportError extends Error {
   readonly line: number;
   /**
    * The guard rule, `<field>:<rule>` for provenance and for a malformed identifier (such as
-   * `memoryId:control-character`), the `denied` reason (`above-ceiling`, `pin`) or
-   * `summary-supersede` for a malformed supersede of or by a summary, when there is one.
+   * `memoryId:control-character`), the `denied` reason (`above-ceiling`, `pin`, `promote`), the
+   * malformed line's rule (`summary-supersede`, `copy-replacement`, `summary-promote`) or the
+   * `too-large` limit (`file`, `line`, `events`, `records`), when there is one.
    */
   readonly detail: string | undefined;
 

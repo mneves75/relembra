@@ -299,9 +299,10 @@ all of it, or nothing and an error naming the rule and line (`docs/CLI.md`, `imp
   no ceiling applies to it.
 - **Tombstones win.** A memory the store holds as a tombstone, with text in the file, refuses the
   import (`redacted-in-target`): a stale export never resurrects a redaction. A `redact` line for a
-  memory the store holds with text redacts it there, with the summaries derived from it, and
-  records erasure work as any redaction does. A tombstone for a memory the store never held is
-  written with its `redact` event and no `erasure_outbox` row: no text of it was ever there.
+  memory the store holds with text redacts it there, with the summaries and promoted copies derived
+  from it, and records erasure work as any redaction does. A tombstone for a memory the store
+  never held is written with its `redact` event and no `erasure_outbox` row: no text of it was ever
+  there.
 - **Trust and pins.** An imported memory is never pinned, and its trust is at most `agent` (and at
   most the importing principal's ceiling); `untrusted` stays `untrusted`. A summary's trust is
   also at most its sources' in the store, and a copy's at most its origin's.

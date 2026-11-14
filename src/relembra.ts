@@ -82,7 +82,10 @@ export interface RelembraOptions<Context> {
   readonly policy: Policy<Context>;
   readonly clock?: Clock;
   readonly ids?: Ids;
-  /** Runs on every wake and brief for the principal it is for. The identity filter when absent. */
+  /**
+   * Runs on every wake, brief and find rendering for the principal it is for. The identity
+   * filter when absent.
+   */
   readonly egress?: EgressFilter;
   /** What sweep redacts: at most one rule per scope. Nothing expires when absent. */
   readonly retention?: readonly RetentionRule[];
@@ -305,7 +308,8 @@ export interface Relembra<Context> {
   supersede(context: Context, input: SupersedeInput): Promise<Memory>;
   /**
    * Redacts every memory, in any status, first noted more than its scope's `maxAgeDays` before
-   * `now` (epoch milliseconds), with the summaries derived from it, in one transaction, and
+   * `now` (epoch milliseconds), with the summaries and promoted copies derived from it (copies in
+   * any scope, even one with no retention rule), in one transaction, and
    * reports them. A store that keeps its own time (StoreTransaction.now, such as Postgres) counts
    * from that time instead, and `now` is ignored, so retention follows the clock writes were
    * accepted by. Cause `retention`, no principal, so no trust ceiling applies: retention is the
@@ -313,9 +317,9 @@ export interface Relembra<Context> {
    */
   sweep(now: number, approval?: Approval): Promise<Redaction>;
   /**
-   * The memories `sweep(now)` would redact if it ran now, expired ones and the summaries derived
-   * from them, found by the same query and boundary; changes nothing. For a host that gates a
-   * sweep on what it would erase.
+   * The memories `sweep(now)` would redact if it ran now, expired ones and the summaries and
+   * promoted copies derived from them, found by the same query and boundary; changes nothing.
+   * For a host that gates a sweep on what it would erase.
    */
   sweepPreview(now: number): Promise<readonly Memory[]>;
   /**
@@ -330,7 +334,7 @@ export interface Relembra<Context> {
   redactionPreview(context: Context, input: ZoomInput): Promise<readonly Memory[]>;
   /**
    * The memories due for a summary, oldest first: live, unpinned, not summaries themselves, and
-   * not a source of a live summary at their current revision.
+   * not a source of a live summary, at least as trusted as they are, at their current revision.
    */
   pending(context: Context, options?: PendingOptions): Promise<readonly Memory[]>;
   /**
@@ -734,9 +738,9 @@ export function createRelembra<Context>(options: RelembraOptions<Context>): Rele
       const requestedTrust = input.provenance.trust;
       const provenance = writerProvenance(principal, input.provenance, opId ?? ids.opId());
       const fingerprint = promoteFingerprint({
-        origin: originId,
+        originId,
         revision,
-        scope,
+        targetScope: scope,
         principalId: principal.id,
         requestedTrust,
         provenance,
@@ -1172,7 +1176,6 @@ function promotedOutcome(stored: Memory): Memory {
   });
 }
 
-/** A new memory's fields, checked, before it is committed. */
 interface NewMemory {
   readonly memoryId: MemoryId;
   readonly scope: Scope;
@@ -1325,7 +1328,7 @@ function mayRead(principal: Principal, scope: Scope): boolean {
   return owns(principal, scope) || principal.readable.includes(scope);
 }
 
-/** A memory to redact and the summaries derived from it that go with it. */
+/** A memory to redact and the summaries and promoted copies derived from it that go with it. */
 interface RedactionItem {
   readonly memory: Memory;
   readonly derived: readonly Memory[];
@@ -1349,8 +1352,9 @@ export async function redactionPlan(
 
 /**
  * What sweep(now) redacts, in its order: each expired memory once (any status but redacted,
- * noted before the scope's cutoff, exclusive) with the summaries derived from it that no earlier
- * item covers. Shared by sweep and sweepPreview, so a preview is exactly the sweep.
+ * noted before the scope's cutoff, exclusive) with the summaries and promoted copies derived from
+ * it that no earlier item covers. Shared by sweep and sweepPreview, so a preview is exactly the
+ * sweep.
  */
 async function sweepPlan(
   tx: StoreTransaction,
@@ -1428,7 +1432,10 @@ function approves(expected: readonly unknown[], planned: readonly Memory[]): boo
   return seen.size === planned.length;
 }
 
-/** Retract and supersede act on what redactionPreview lists: the memory and its derived closure. */
+/**
+ * Retract and supersede are approved against what redactionPreview lists: the memory and its
+ * derived closure.
+ */
 async function checkApproval(
   expected: readonly Memory[] | undefined,
   tx: StoreTransaction,
@@ -1441,9 +1448,10 @@ async function checkApproval(
 }
 
 /**
- * Redacts a planned memory and the summaries derived from it, in the caller's transaction, and
- * returns the summaries' ids. Each gets a redact event, its tombstone (the store scrubs its text,
- * events and op fingerprints) and an outbox row naming the carriers recorded as having received it.
+ * Redacts a planned memory and the summaries and promoted copies derived from it, in the caller's
+ * transaction, and returns the derived memories' ids. Each gets a redact event, its tombstone (the
+ * store scrubs its text, events and op fingerprints) and an outbox row naming the carriers recorded
+ * as having received it.
  */
 export async function redactWithDerived(
   tx: StoreTransaction,
@@ -1564,8 +1572,9 @@ function checkWellFormed(field: NamingField, value: string): void {
 }
 
 /**
- * `principal`, once its id and every scope it lists are checked to be well-formed strings. Called
- * on every principal a policy gives, and by the functions that take a principal directly.
+ * `principal`, once its id and every scope it lists are checked to be strings that pass the
+ * identifier rule (checkName). Called on every principal a policy gives, and by the functions
+ * that take a principal directly.
  */
 export function checkPrincipal(principal: Principal): Principal {
   if (typeof principal.id !== "string") throw new TypeError("a principal id must be a string");
@@ -1628,7 +1637,6 @@ async function firstTimes(tx: StoreTransaction, prior: OpRecord): Promise<WriteT
 const TRUST_ORDER: readonly Trust[] = ["untrusted", "agent", "owner"];
 const DEFAULT_TRUST: Trust = "agent";
 
-/** The principal's ceiling, `agent` when unset. A ceiling outside the tiers is a host bug. */
 /**
  * Refuses, with ProvenanceError("trust", "above-ceiling") and before anything is written, a
  * principal's change to any of `memories` whose trust is above its trust ceiling. Each change
@@ -1646,6 +1654,7 @@ export function enforceCeiling(principal: Principal, memories: readonly Memory[]
   }
 }
 
+/** The principal's ceiling, `agent` when unset. A ceiling outside the tiers is a host bug. */
 export function trustCeiling(principal: Principal): Trust {
   const ceiling = principal.trustCeiling ?? DEFAULT_TRUST;
   if (!TRUST_ORDER.includes(ceiling)) {

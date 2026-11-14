@@ -165,12 +165,12 @@ export async function exportJsonl(
 
 /**
  * Replays a relembra export into `store`, in one transaction: all of it or nothing.
- * - Memories keep their ids. One the store already holds with the same scope and text is skipped,
- *   so importing a file twice adds nothing.
+ * - Memories keep their ids. One the store already holds with the same scope, text, sources and
+ *   origin is skipped, so importing a file twice adds nothing.
  * - A memory the store holds as a tombstone, with text in the file, refuses the import
  *   (`redacted-in-target`): a stale export never resurrects a redaction.
- * - A redaction in the file reaches the store's copy of the memory and the summaries derived
- *   from it there.
+ * - A redaction in the file reaches the store's copy of the memory and the summaries and promoted
+ *   copies derived from it there.
  * - Imported memories are never pinned, and their trust is at most `agent` (and the principal's
  *   ceiling). Events carry the importing principal's id; no op records are written.
  * - Needs ownership of, and write access to, every scope the header names.
@@ -186,7 +186,7 @@ export async function importJsonl(
   // Read before the transaction: no host callback runs while the store is locked.
   const hostNow = (options.clock ?? systemClock).now();
   const fence = principal.fence === undefined ? undefined : checkFence(principal.fence);
-  const cap = lowerTrust(trustCeiling(principal), "agent");
+  const maxTrust = lowerTrust(trustCeiling(principal), "agent");
   return store.transaction(async (tx) => {
     // Revision times are bounded by the store's time when it keeps one, else the host's clock;
     // the file is parsed under that bound inside the transaction, so refusals keep line order.
@@ -197,13 +197,12 @@ export async function importJsonl(
       if (!principal.writable.includes(scope)) throw new ScopeDeniedError("write");
     }
     if (fence !== undefined) await enforceFence(tx, fence);
-    const replay = new Replay(tx, principal, cap);
+    const replay = new Replay(tx, principal, maxTrust);
     for (const parsed of events) await replay.apply(parsed);
     return replay.finish();
   });
 }
 
-/** One event of an export, checked, with the line it came from. */
 interface Parsed {
   readonly line: number;
   readonly event: Event;
@@ -231,7 +230,6 @@ function parseExport(jsonl: string, latest: number): { header: ExportHeader; eve
     if (event.kind === "supersede" && event.by === event.memoryId) {
       throw new ImportError("malformed", line);
     }
-    // Nor its own origin.
     if (event.kind === "promote" && event.origin.memoryId === event.memoryId) {
       throw new ImportError("malformed", line);
     }
@@ -258,7 +256,7 @@ function checkBounds(lines: readonly string[]): void {
 }
 
 /** A parsed line: the fields docs/FORMAT.md names, each still unchecked. */
-type Json = Partial<
+type UncheckedLine = Partial<
   Record<
     | "export"
     | "format"
@@ -291,7 +289,7 @@ type Json = Partial<
   >
 >;
 
-function parseLine(text: string, line: number): Json {
+function parseLine(text: string, line: number): UncheckedLine {
   let value: unknown;
   try {
     value = JSON.parse(text);
@@ -301,7 +299,7 @@ function parseLine(text: string, line: number): Json {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new ImportError("malformed", line);
   }
-  return value as Json;
+  return value as UncheckedLine;
 }
 
 function checkFormat(format: unknown, line: number): asserts format is number {
@@ -311,7 +309,7 @@ function checkFormat(format: unknown, line: number): asserts format is number {
   if ((format as number) > LATEST_EVENT_FORMAT) throw new ImportError("format-too-new", line);
 }
 
-function checkHeader(value: Json): ExportHeader {
+function checkHeader(value: UncheckedLine): ExportHeader {
   if (value.export !== "relembra") throw new ImportError("malformed", 1);
   checkFormat(value.format, 1);
   const { relembra, scopes } = value;
@@ -372,7 +370,12 @@ function checkPrincipalId(id: unknown, line: number): asserts id is string {
 const CAUSES: readonly RedactionCause[] = ["request", "retention", "source"];
 
 /** One event line, checked field by field; anything else in the line is ignored. */
-function checkEvent(value: Json, line: number, header: ExportHeader, latest: number): Event {
+function checkEvent(
+  value: UncheckedLine,
+  line: number,
+  header: ExportHeader,
+  latest: number,
+): Event {
   const { scopes } = header;
   checkFormat(value.format, line);
   // The header names the newest format of its lines.
@@ -436,7 +439,6 @@ function checkEvent(value: Json, line: number, header: ExportHeader, latest: num
   }
 }
 
-/** A promote line's origin: a memory id and a positive revision. */
 function checkOrigin(value: unknown, line: number): SourceRevision {
   if (typeof value !== "object" || value === null) throw new ImportError("malformed", line);
   const { memoryId, revision } = value as { memoryId?: unknown; revision?: unknown };
@@ -448,7 +450,7 @@ function checkOrigin(value: unknown, line: number): SourceRevision {
 }
 
 /** Whether a note, summarize or promote line is in its redacted form: `redacted: true`, no revision. */
-function isRedactedForm(value: Json, line: number): boolean {
+function isRedactedForm(value: UncheckedLine, line: number): boolean {
   if (value.redacted === undefined) return false;
   if (value.redacted !== true || value.revision !== undefined) {
     throw new ImportError("malformed", line);
@@ -459,7 +461,7 @@ function isRedactedForm(value: Json, line: number): boolean {
 /** A revision's fields, checked; `latest` is the last epoch millisecond its `at` may be. */
 function checkRevision(value: unknown, line: number, latest: number): Revision {
   if (typeof value !== "object" || value === null) throw new ImportError("malformed", line);
-  const { number, text, at, provenance } = value as Json;
+  const { number, text, at, provenance } = value as UncheckedLine;
   if (!Number.isSafeInteger(number) || (number as number) < 1) {
     throw new ImportError("malformed", line);
   }
@@ -478,7 +480,7 @@ function checkRevision(value: unknown, line: number, latest: number): Revision {
 
 function checkImportedProvenance(value: unknown, line: number): Provenance {
   if (typeof value !== "object" || value === null) throw new ImportError("malformed", line);
-  const { agent, harness, model, host, source, trust, opId } = value as Json;
+  const { agent, harness, model, host, source, trust, opId } = value as UncheckedLine;
   if (!TRUSTS.includes(trust as Trust))
     throw new ImportError("provenance", line, "trust:unknown-tier");
   try {
@@ -508,7 +510,6 @@ interface Pending {
   status: "live" | "retracted" | "superseded";
 }
 
-/** Applies checked events to a store, inside the import's transaction. */
 class Replay {
   private imported = 0;
   private skipped = 0;
@@ -522,13 +523,12 @@ class Replay {
 
   private readonly tx: StoreTransaction;
   private readonly principal: Principal;
-  /** The highest trust an imported memory may carry. */
-  private readonly cap: Trust;
+  private readonly maxTrust: Trust;
 
-  constructor(tx: StoreTransaction, principal: Principal, cap: Trust) {
+  constructor(tx: StoreTransaction, principal: Principal, maxTrust: Trust) {
     this.tx = tx;
     this.principal = principal;
-    this.cap = cap;
+    this.maxTrust = maxTrust;
   }
 
   async apply({ line, event }: Parsed): Promise<void> {
@@ -662,9 +662,9 @@ class Replay {
   }
 
   /**
-   * A note or summarize line in its redacted form. The store's tombstone, or its copy that the
-   * file's redact event will redact, already stands for it; otherwise the redacted event is
-   * written, and the tombstone with the redact event that must follow.
+   * A note, summarize or promote line in its redacted form. The store's tombstone, or its copy
+   * that the file's redact event will redact, already stands for it; otherwise the redacted event
+   * is written, and the tombstone with the redact event that must follow.
    */
   private async redactedForm(
     line: number,
@@ -778,7 +778,7 @@ class Replay {
     return pending;
   }
 
-  private capped(revision: Revision, floor: Trust = this.cap): Revision {
+  private capped(revision: Revision, floor: Trust = this.maxTrust): Revision {
     const trust = lowerTrust(revision.provenance.trust, floor);
     return Object.freeze({
       ...revision,
@@ -816,7 +816,7 @@ class Replay {
     given: Revision,
     sources: readonly SourceRevision[],
   ): Promise<void> {
-    let floor = this.cap;
+    let floor = this.maxTrust;
     for (const { memoryId: sourceId, revision } of sources) {
       const source = await this.tx.memory(sourceId);
       // Scope before status: a source in another scope answers as an absent one, whatever its state.
@@ -880,7 +880,7 @@ class Replay {
     if (event.revision.text !== origin.revision.text) throw new ImportError("conflict", line);
     const revision = this.capped(
       { ...event.revision, text: origin.revision.text },
-      lowerTrust(this.cap, origin.revision.provenance.trust),
+      lowerTrust(this.maxTrust, origin.revision.provenance.trust),
     );
     const { seq } = await this.tx.append({
       format: PROMOTE_FORMAT,

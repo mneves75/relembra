@@ -3,7 +3,10 @@ import { replaceUnseen } from "./guard.js";
 import type { Memory, MemoryId, Principal, Trust } from "./model.js";
 import type { EgressFilter } from "./ports.js";
 
-/** What a wake or brief hands the host: the text, and the memories it carried in full. */
+/**
+ * What a wake, brief or find rendering hands the host: the text, and the memories it carried in
+ * full.
+ */
 export interface Rendering {
   /** The frame and its lines, after the egress filter, within the byte budget. */
   readonly text: string;
@@ -82,7 +85,6 @@ function bounded(field: "id" | "scope", value: unknown, maxBytes: number): void 
   }
 }
 
-/** The frame around the lines, one element per line. */
 export function frame(kind: RenderingKind, lines: readonly string[]): string {
   return [`<${kind}>`, ...lines, `</${kind}>`].join("\n");
 }
@@ -94,7 +96,6 @@ export function newestFirst(a: Memory, b: Memory): number {
   return a.id < b.id ? -1 : 1;
 }
 
-/** A summary is a memory with sources. */
 export function isSummary(memory: Memory): boolean {
   return memory.sources !== undefined;
 }
@@ -177,7 +178,7 @@ export function briefSummaries(ranked: readonly Memory[], live: readonly Memory[
   return trustedFirst(covering);
 }
 
-/** The default byte budget of a wake or brief. */
+/** The default byte budget of a wake, brief or find rendering. */
 export const DEFAULT_BUDGET_BYTES = 9_500;
 
 export function checkBudget(budgetBytes: number): number {
@@ -193,7 +194,6 @@ export interface Entry {
   readonly carries?: MemoryId;
 }
 
-/** A memory in full: its text, attributed. */
 function fullEntry(memory: Memory): Entry {
   return { line: renderMemory(memory), carries: memory.id };
 }
@@ -204,7 +204,6 @@ export function indexEntry(memory: Memory): Entry {
   return { line: `<index id="${escapeText(memory.id)}"/>` };
 }
 
-/** The bytes of a frame with no lines. */
 export function frameBytes(kind: RenderingKind): number {
   return utf8Bytes(frame(kind, []));
 }

@@ -150,12 +150,10 @@ export function summaryFingerprint(payload: SummaryPayload): string {
 
 /** The semantic inputs of a promotion, before its trust is floored by the origin's. */
 export interface PromotePayload {
-  /** The origin's id. */
-  readonly origin: MemoryId;
+  readonly originId: MemoryId;
   /** The origin's revision, as the promoter read it. */
   readonly revision: number;
-  /** The target scope. */
-  readonly scope: Scope;
+  readonly targetScope: Scope;
   readonly principalId: string;
   /** The trust the promoter asked for, or undefined for the default. */
   readonly requestedTrust: Trust | undefined;
@@ -172,15 +170,15 @@ export interface PromotePayload {
  * requested trust is used, not the stored one, which also depends on the origin's trust.
  */
 export function promoteFingerprint(payload: PromotePayload): string {
-  const { origin, revision, scope, principalId, requestedTrust, provenance } = payload;
+  const { originId, revision, targetScope, principalId, requestedTrust, provenance } = payload;
   const { agent, harness, model, host, source } = provenance;
   return sha256(
     JSON.stringify([
       1,
       "promote",
-      origin,
+      originId,
       revision,
-      scope,
+      targetScope,
       principalId,
       requestedTrust ?? null,
       agent,
