@@ -65,7 +65,7 @@ export function storePath(env: CliEnv, cwd: string): string {
 }
 
 /** The global scope RELEMBRA_GLOBAL_SCOPE names, checked like RELEMBRA_SCOPE; undefined unset. */
-export function resolveGlobalScope(env: CliEnv): string | undefined {
+function resolveGlobalScope(env: CliEnv): string | undefined {
   const given = env.RELEMBRA_GLOBAL_SCOPE;
   return given === undefined || given === "" ? undefined : checkScope(given);
 }
@@ -210,7 +210,7 @@ function runGit(
  * `ls-remote --get-url origin` prints "origin" and exits 0, which reads like a relative remote;
  * `remote get-url` exits 2 (git 2.30 and later).
  */
-export function gitProject(env: CliEnv, cwd: string): { key: string; name: string } | undefined {
+function gitProject(env: CliEnv, cwd: string): { key: string; name: string } | undefined {
   const git = hostGit(env, cwd);
   const common = runGit(git, env, [
     "-C",
@@ -258,16 +258,15 @@ const DEFAULT_PORTS: Readonly<Record<string, string>> = {
  * against `base()` (asked only then). `url` is git's answer as runGit returns it; a space in it,
  * leading or trailing, is part of the URL and kept.
  */
-export function normalizeRemote(url: string, base: () => string): string {
-  const rest = url;
-  const scheme = /^([A-Za-z][A-Za-z0-9+.-]*):\/\//.exec(rest);
+function normalizeRemote(url: string, base: () => string): string {
+  const scheme = /^([A-Za-z][A-Za-z0-9+.-]*):\/\//.exec(url);
   let host: string;
   let port = "";
   let path: string;
   if (scheme !== null) {
     const name = (scheme[1] as string).toLowerCase();
-    if (name === "file") return localKey(filePath(rest.slice(scheme[0].length)), base);
-    const after = rest.slice(scheme[0].length);
+    if (name === "file") return localKey(filePath(url.slice(scheme[0].length)), base);
+    const after = url.slice(scheme[0].length);
     const slash = after.indexOf("/");
     const authority = slash < 0 ? after : after.slice(0, slash);
     path = slash < 0 ? "" : after.slice(slash + 1);
@@ -276,13 +275,13 @@ export function normalizeRemote(url: string, base: () => string): string {
     host = split?.[1] ?? hostPort;
     port = split?.[2] ?? "";
     if (port === DEFAULT_PORTS[name]) port = "";
-  } else if (WINDOWS && /^[A-Za-z]:[\\/]/.test(rest)) {
+  } else if (WINDOWS && /^[A-Za-z]:[\\/]/.test(url)) {
     // A drive path, which git on Windows reads as local, never as an scp-like host "C".
-    return localKey(rest, base);
+    return localKey(url, base);
   } else {
     // scp-like `[user@]host:path`, as git reads it: a colon before any slash.
-    const scp = /^(?:[^@/]+@)?(\[[^\]]*\]|[^/:]+):(.*)$/.exec(rest);
-    if (scp === null) return localKey(rest, base);
+    const scp = /^(?:[^@/]+@)?(\[[^\]]*\]|[^/:]+):(.*)$/.exec(url);
+    if (scp === null) return localKey(url, base);
     host = scp[1] as string;
     path = scp[2] as string;
   }

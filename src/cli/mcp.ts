@@ -28,7 +28,7 @@ import { type Frame, LineSplitter, MAX_MESSAGE_BYTES } from "./mcp-lines.js";
 import { composeWake } from "./wake.js";
 
 /** The stateless protocol revision. */
-export const PROTOCOL_VERSION = "2026-07-28";
+const PROTOCOL_VERSION = "2026-07-28";
 const LEGACY_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"] as const;
 type LegacyVersion = (typeof LEGACY_VERSIONS)[number];
 type ProtocolVersion = typeof PROTOCOL_VERSION | LegacyVersion;
