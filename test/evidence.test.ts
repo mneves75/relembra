@@ -354,7 +354,9 @@ describe.skipIf(NO_RELEASE_TOOLING)("scripts/evidence.ts", () => {
       const printed = JSON.parse(overridden.stdout) as Snapshot;
       // Refused before either runtime is started: neither ran under the override.
       expect(printed.runtimes).toMatchObject({ available: false, bun: null, node: null });
+      // The value as set, and the marker inside the path in any form a path may be printed.
       expect(`${overridden.stdout}${overridden.stderr}`).not.toContain(set);
+      expect(`${overridden.stdout}${overridden.stderr}`).not.toContain(value);
     }
     // Positive control: set but empty is no override.
     const empty = run(["--root", root], { ...cleanEnv, NODE_OPTIONS: "", BUN_OPTIONS: "" });
