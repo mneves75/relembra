@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { BUILD_FLAGS, missingBuildFlags } from "../build/cli.js";
 
 // Stable Bun 1.4.4 has no --aot or --trim and ignores unknown flags, so a build with it exits 0
@@ -24,6 +26,18 @@ test("a flag only counts as itself, not as the prefix of a longer one", () => {
     "--no-compile-autoload-dotenv",
     "--no-compile-autoload-bunfig",
   ]);
+});
+
+test("the refusal points at the pinned toolchain instead of carrying a copy of the pin", () => {
+  const root = join(import.meta.dir, "..");
+  const pin = readFileSync(join(root, "build", "bun-toolchain.txt"), "utf8");
+  // Positive control: the pin file names a version and a revision a copy could go stale against.
+  const pinned = [...pin.matchAll(/^(?:version|revision) (\S+)$/gm)].map((m) => m[1] as string);
+  expect(pinned).toHaveLength(2);
+  const cli = readFileSync(join(root, "build", "cli.ts"), "utf8");
+  expect(cli).toContain("build/bun-toolchain.txt");
+  for (const value of pinned) expect(cli).not.toContain(value);
+  expect(cli).not.toMatch(/\d+\.\d+\.\d+-canary/);
 });
 
 // The release toolchain check. CI's stable-Bun test jobs set RELEMBRA_SKIP_BUILD_TOOLCHAIN=1: they
