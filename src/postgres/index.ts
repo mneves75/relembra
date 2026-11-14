@@ -18,7 +18,7 @@ import type {
   StoreTransaction,
 } from "../ports.js";
 import { type SqlClient, type SqlQuery, sqlState } from "./client.js";
-import { MIGRATIONS, migrate } from "./migrations.js";
+import { MIGRATIONS, migrate, quoted } from "./migrations.js";
 import { derivedQuery } from "./queries.js";
 import { indexMemory, readIndex, unindexMemory } from "./term-index.js";
 
@@ -30,7 +30,8 @@ export interface PostgresStoreOptions {
   readonly client: SqlClient;
   /**
    * The schema that holds the store's tables, created if missing: lower-case letters, digits and
-   * underscores, starting with a letter or underscore, at most 63 bytes. Default `relembra`.
+   * underscores, starting with a letter or underscore but not `pg_` (Postgres reserves it), at
+   * most 63 bytes. Default `relembra`.
    */
   readonly schema?: string;
   /**
@@ -106,9 +107,9 @@ const MEMORY_COLUMNS =
 export async function openPostgresStore(options: PostgresStoreOptions): Promise<Store> {
   const { client } = options;
   const schema = options.schema ?? DEFAULT_SCHEMA;
-  if (!SCHEMA_NAME.test(schema)) {
+  if (!SCHEMA_NAME.test(schema) || schema.startsWith("pg_")) {
     throw new RangeError(
-      "a Postgres schema name must be 1 to 63 lower-case letters, digits or underscores, not starting with a digit",
+      "a Postgres schema name must be 1 to 63 lower-case letters, digits or underscores, not starting with a digit or pg_",
     );
   }
   const lockTimeoutMs = options.lockTimeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS;
@@ -128,7 +129,8 @@ export async function openPostgresStore(options: PostgresStoreOptions): Promise<
   } catch (error) {
     throw asStoreBusy(error, lockTimeoutMs);
   }
-  const s = schema;
+  // Quoted, so a reserved word (user, select) names a schema like any other.
+  const s = quoted(schema);
   // The advisory lock that orders exposure recordings against redactions (see recordExposure).
   const exposureLock = `relembra exposures ${schema}`;
 

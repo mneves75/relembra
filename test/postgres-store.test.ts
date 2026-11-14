@@ -164,6 +164,40 @@ describePostgres("postgres store: contention and transactions (IMPLEMENTATION-PL
     await admin.close();
   });
 
+  // Reserved words are valid names: the store quotes the schema wherever it names it.
+  for (const name of ["user", "select"]) {
+    test(`a schema named ${name} opens, writes and reads`, async () => {
+      schema = name;
+      await dropSchema(admin, schema);
+      const store = await open();
+      const relembra = relembraOver(store, name);
+      const noted = await relembra.note(null, { scope: SCOPE, text: "Quoted.", provenance });
+      expect((await store.recall({ scopes: [SCOPE], limit: 10 })).map((m) => m.id)).toEqual([
+        noted.id,
+      ]);
+      expect(await openPostgresStore({ client: client(), schema })).toBeDefined();
+    });
+  }
+
+  test("a schema name starting with pg_ is refused before any statement", async () => {
+    const statements: string[] = [];
+    const watched = (name: string) =>
+      openPostgresStore({
+        client: client({
+          before: (text) => void statements.push(text),
+          outside: (text) => void statements.push(text),
+        }),
+        schema: name,
+      });
+    await expect(watched("pg_x")).rejects.toBeInstanceOf(RangeError);
+    await expect(watched("pg_x")).rejects.toThrow(/pg_/);
+    expect(statements).toEqual([]);
+    // Positive control: a name that only contains pg_ opens, sending statements.
+    schema = `x${freshSchema()}_pg_`;
+    await watched(schema);
+    expect(statements.length).toBeGreaterThan(0);
+  });
+
   test("a mutation locks the store row first, and every statement after it uses the transaction's connection", async () => {
     const statements: string[] = [];
     const outside: string[] = [];
@@ -187,10 +221,12 @@ describePostgres("postgres store: contention and transactions (IMPLEMENTATION-PL
 
     expect(statements[0]).toBe("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
     expect(statements[1]).toMatch(/^SET LOCAL lock_timeout/);
-    expect(statements[2]).toBe(`SELECT id FROM ${schema}.store_lock WHERE id = 1 FOR UPDATE`);
+    expect(statements[2]).toBe(`SELECT id FROM "${schema}".store_lock WHERE id = 1 FOR UPDATE`);
     // Positive control: the work after the lock read and wrote through the same handle.
-    expect(statements.slice(3).some((s) => s.includes(`${schema}.ops`))).toBe(true);
-    expect(statements.slice(3).some((s) => s.includes(`INSERT INTO ${schema}.events`))).toBe(true);
+    expect(statements.slice(3).some((s) => s.includes(`"${schema}".ops`))).toBe(true);
+    expect(statements.slice(3).some((s) => s.includes(`INSERT INTO "${schema}".events`))).toBe(
+      true,
+    );
     expect(outside).toEqual([]);
   });
 
@@ -549,7 +585,7 @@ describePostgres("postgres store: contention and transactions (IMPLEMENTATION-PL
   test("race: the same op id from two hosts at once stores one memory and both get its outcome", async () => {
     const meet = rendezvous(2, 1_000);
     const hooks: Hooks = {
-      before: (text) => (text.includes(`FROM ${schema}.ops`) ? meet() : undefined),
+      before: (text) => (text.includes(`FROM "${schema}".ops`) ? meet() : undefined),
     };
     const a = relembraOver(await open(hooks), "host-a");
     const b = relembraOver(await open(hooks), "host-b");
@@ -571,7 +607,7 @@ describePostgres("postgres store: contention and transactions (IMPLEMENTATION-PL
   test("race, negative control: without the store row lock, two hosts with the same op id collide", async () => {
     const meet = rendezvous(2, 1_000);
     const hooks: Hooks = {
-      before: (text) => (text.includes(`FROM ${schema}.ops`) ? meet() : undefined),
+      before: (text) => (text.includes(`FROM "${schema}".ops`) ? meet() : undefined),
       rewrite: (text) => (text.includes("store_lock") ? "SELECT 1" : text),
     };
     const a = relembraOver(await open(hooks), "host-a");
@@ -592,7 +628,7 @@ describePostgres("postgres store: contention and transactions (IMPLEMENTATION-PL
     const other = await setup.note(null, { scope: SCOPE, text: "Other rule.", provenance });
     const meet = rendezvous(2, 1_000);
     const hooks: Hooks = {
-      before: (text) => (text.includes(`FROM ${schema}.ops`) ? meet() : undefined),
+      before: (text) => (text.includes(`FROM "${schema}".ops`) ? meet() : undefined),
     };
     const a = relembraOver(await open(hooks), "host-a");
     const b = relembraOver(await open(hooks), "host-b");
@@ -635,7 +671,7 @@ describePostgres("postgres store: contention and transactions (IMPLEMENTATION-PL
       let stopped = false;
       const firstHooks: Hooks = {
         before: async (text) => {
-          if (stopped || !text.includes(`FROM ${schema}.memories WHERE id`)) return;
+          if (stopped || !text.includes(`FROM "${schema}".memories WHERE id`)) return;
           stopped = true;
           holding();
           await new Promise((resolve) => setTimeout(resolve, 300));
