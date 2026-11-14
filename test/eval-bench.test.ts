@@ -54,6 +54,21 @@ describe("bulkCorpus", () => {
     expect(new Set(largest.memories.map((m) => m.text)).size).toBe(SUPPORTED);
   });
 
+  test("the benchmark's ten queries alternate pt-BR and English, each answered by a memory", () => {
+    const { memories, queries } = bulkCorpus({ seed: DEFAULT_SEED, memories: 20_000 });
+    expect(queries).toHaveLength(10);
+    // Every pt-BR query template ends in "do <entity>"; no English one does.
+    const portuguese = queries.map((q) => / do [a-z]+$/.test(q));
+    expect(portuguese).toEqual([true, false, true, false, true, false, true, false, true, false]);
+    // An invented name: onset, vowel, onset, vowel, coda.
+    const NAME = /^[bdfgklmnprtvz][aeiou][bdfgklmnprtvz][aeiou][knrxl]$/;
+    for (const query of queries) {
+      const name = query.split(" ").find((word) => NAME.test(word));
+      expect(name).toBeDefined();
+      expect(memories.some((m) => m.text.toLowerCase().includes(name as string))).toBe(true);
+    }
+  });
+
   test("the benchmark's 20,000-memory corpus is unchanged (docs/eval/bench-2026-10-31.json)", () => {
     const { memories } = bulkCorpus({ seed: DEFAULT_SEED, memories: 20_000 });
     const text = memories.map((m) => m.text).join("\n");

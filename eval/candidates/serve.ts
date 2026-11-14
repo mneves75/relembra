@@ -1,7 +1,6 @@
 /**
  * The candidate side of eval/PROTOCOL.md. A candidate implements `CandidateHandler` and calls
  * `serve`, which reads requests from stdin, dispatches them and writes one response line each.
- * The relembra candidate (ticket 09, after the CLI) implements this same interface.
  */
 import { createInterface } from "node:readline";
 import type { Readable, Writable } from "node:stream";

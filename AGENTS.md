@@ -82,7 +82,7 @@ Publication runs through `scripts/deploy.sh hmo|prd` ([docs/RELEASE.md](docs/REL
 
 Commit release eval reports only when preparing a release. The gate and strict benchmark must
 name the same committed candidate. If report-only commits follow, compare every relevant input
-with the final release ref, not just `src/eval/build/bun.lock`. `scripts/evidence.ts` is the
+with the final release ref, not just `bun.lock`. `scripts/evidence.ts` is the
 authoritative input list (including the Node runtime loader under `test/`):
 
 ```sh
@@ -93,8 +93,9 @@ git diff --quiet <evidence-commit> <release-ref> -- \
   install.sh README.md LICENSE docs/FORMAT.md docs/CLI.md ':!eval/out'
 ```
 
-Generated output (`.scratch`, `docs/eval`, `eval/out`, `bin`, `dist`, `node_modules`) is excluded
-from input identity, not from artifact verification. Any changed relevant input requires a new
+Generated output (`.scratch`, `docs/eval`, `eval/out`, `bin`, `dist`, `node_modules`) and local
+sealed eval sets (`eval/sealed`) are excluded from input identity; generated output is not excluded
+from artifact verification. Any changed relevant input requires a new
 gate and benchmark; bind the final candidate, evidence and release asset hashes explicitly.
 
 ## Agent skills

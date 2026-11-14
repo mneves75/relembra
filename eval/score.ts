@@ -146,7 +146,6 @@ export function aggregate(outcomes: readonly Outcome[], questions: number): Row 
 
 /** A memory element as a whole line; its escaped body holds no raw `<` or `>`. */
 const MEMORY_LINE = /^<memory((?: [^>]*)?)>([^<>]*)<\/memory>$/;
-/** An id-only index line. */
 const INDEX_LINE = /^<index id="([^"<>]*)"\/>$/;
 /** The frame lines a brief or wake may open and close with (eval/PROTOCOL.md, "Rendering"). */
 const FRAME_LINES: Readonly<Record<"brief" | "wake", readonly string[]>> = {
@@ -318,11 +317,6 @@ export async function score(
     wakeCovered: 0,
   });
 
-  /**
-   * Leak, staleness and label checks every find, brief and wake response gets, then the content
-   * check: a find's texts, a brief's or wake's lines. Returns the call as scored (failed when its
-   * content is), with the memories its response exposes.
-   */
   /** The call inspected last: a stray belongs to it, since it arrived after that call's answer. */
   let last:
     | { outcome: Outcome; probe: Probe; surface: Surface; principal: EvalPrincipal }
@@ -358,6 +352,11 @@ export async function score(
     }
   };
 
+  /**
+   * Leak, staleness and label checks every find, brief and wake response gets, then the content
+   * check: a find's texts, a brief's or wake's lines. Returns the call as scored (failed when its
+   * content is), with the memories its response exposes.
+   */
   const inspect = <C extends Surface>(
     outcome: Outcome,
     probe: Probe,

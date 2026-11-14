@@ -139,6 +139,21 @@ describe.skipIf(NO_RELEASE_TOOLING)("inputIdentity", () => {
     expect(inputIdentity(root)).toMatchObject({ clean: false, untracked: ["eval/new.ts"] });
   });
 
+  test("a sealed eval set where eval/README.md keeps it leaves it clean; other eval files do not", () => {
+    const root = fixture({ "eval/.gitignore": "sealed/\n" });
+    const clean = inputIdentity(root);
+    write(root, "eval/sealed/real/manifest.json", "{}\n");
+    write(root, "eval/sealed/real/questions.jsonl", "{}\n");
+    expect(inputIdentity(root)).toEqual(clean);
+    // Positive controls: an ignored file elsewhere under eval/, and a look-alike name, are seen.
+    write(root, "eval/sealed-not/manifest.json", "{}\n");
+    write(root, "eval/other/sealed/manifest.json", "{}\n");
+    expect(inputIdentity(root)).toMatchObject({
+      clean: false,
+      untracked: ["eval/other/sealed/manifest.json", "eval/sealed-not/manifest.json"],
+    });
+  });
+
   test("the files the package ships and the tests read are inputs, present or not", () => {
     const root = fixture({ "README.md": "# r\n" });
     expect(inputIdentity(root).files["README.md"]).toBeDefined();

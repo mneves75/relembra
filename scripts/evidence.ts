@@ -11,8 +11,8 @@
  *
  * The inputs are read from the disk and compared with HEAD's tree directly, so neither the index
  * nor a .gitignore can hide a changed or new source file. Only the fixed list below is an input:
- * generated output and planning documents are not, so evidence can be committed without
- * invalidating the code it measured.
+ * generated output, local sealed eval sets and planning documents are not, so evidence can be
+ * committed without invalidating the code it measured.
  */
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -65,8 +65,19 @@ const INPUT_FILES = [
   "docs/FORMAT.md",
   "docs/CLI.md",
 ];
-/** Generated output, never an input wherever the lists above reach. */
-const GENERATED = [".scratch", "docs/eval", "eval/out", "bin", "dist", "node_modules"];
+/**
+ * Never an input wherever the lists above reach: generated output, and the sealed eval sets
+ * eval/README.md keeps under eval/sealed/ (git-ignored real questions the gate never scores).
+ */
+const GENERATED = [
+  ".scratch",
+  "docs/eval",
+  "eval/out",
+  "eval/sealed",
+  "bin",
+  "dist",
+  "node_modules",
+];
 
 /** Whether a repository-relative path is a relevant input. */
 export function isInput(path: string): boolean {

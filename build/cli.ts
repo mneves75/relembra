@@ -98,7 +98,7 @@ function main(): number {
     help.status === 0 ? missingBuildFlags(help.stdout) : ["(bun build --help failed)"];
   if (missing.length > 0) {
     console.error(
-      `bun ${Bun.version} does not support ${missing.join(", ")}; build with a Bun that has them (v0.1.0 used 1.4.4-canary.1+da867c60b)`,
+      `bun ${Bun.version} does not support ${missing.join(", ")}; build with the Bun pinned in build/bun-toolchain.txt (scripts/bun-toolchain.sh fetches it)`,
     );
     return 1;
   }
