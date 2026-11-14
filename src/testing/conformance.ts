@@ -411,6 +411,14 @@ export function storeConformanceCases(target: ConformanceTarget): readonly Confo
 
     await assert.rejects(leaked.putMemory(memory("m-late", SCOPE_A, 1)));
     assert.deepStrictEqual(await store.recall({ scopes: [SCOPE_A], limit: 10 }), []);
+
+    // Positive control: the same write through a handle whose transaction is open is kept.
+    const inTime = memory("m-in-time", SCOPE_A, 2);
+    await store.transaction((tx) => tx.putMemory(inTime));
+    assert.deepStrictEqual(
+      (await store.recall({ scopes: [SCOPE_A], limit: 10 })).map((m) => m.id),
+      [inTime.id],
+    );
   });
 
   define("an op record commits with its transaction and is read back intact", async ({ store }) => {
@@ -2108,8 +2116,11 @@ export function storeConformanceCases(target: ConformanceTarget): readonly Confo
         opened.rawBytes ? decoder.decode(await opened.rawBytes()) : "",
       ];
       const piece = "harbour lantern code";
-      // Positive control: the scan finds the text before the redaction.
-      assert.ok((await surfaces()).some((text) => text.includes(piece)));
+      // Positive control: before the redaction the scan finds the text on every surface.
+      for (const text of await surfaces()) {
+        if (text === "") continue;
+        assert.ok(text.includes(piece), "the scan sees the text before redaction");
+      }
       const promoteEvent = (await opened.store.events({ scopes: [SCOPE_B] })).find(
         (e) => e.kind === "promote",
       );
@@ -2706,10 +2717,6 @@ const CURATOR_PRINCIPAL: Principal = {
   trustCeiling: "owner",
 };
 
-/**
- * A relembra over `store` for the suite's writer (WRITER) and owner (CURATOR), whose clock reads
- * 1 s, 2 s, … and whose memory ids are curated-1, curated-2, ….
- */
 /** Owns SCOPE_A, but may not pin, and writes at most agent trust (the default ceiling). */
 const REVISER = "reviser";
 const REVISER_PRINCIPAL: Principal = {
@@ -2720,6 +2727,10 @@ const REVISER_PRINCIPAL: Principal = {
   owned: [SCOPE_A],
 };
 
+/**
+ * A relembra over `store` for the suite's writer (WRITER), owner (CURATOR) and REVISER, whose
+ * clock reads 1 s, 2 s, … and whose ids start with curated- (memory and op ids share one counter).
+ */
 function curator(store: Store) {
   let next = 0;
   let seconds = 0;
@@ -2747,7 +2758,7 @@ const PROMOTER_PRINCIPAL: Principal = {
   trustCeiling: "owner",
 };
 
-/** A relembra over `store` for PROMOTER, whose ids are promoted-1, promoted-2, …. */
+/** A relembra over `store` for PROMOTER, whose ids start with promoted- (one shared counter). */
 function promoter(store: Store) {
   let next = 0;
   let seconds = 0;
