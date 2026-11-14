@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync, StatementSync } from "node:sqlite";
@@ -132,17 +131,11 @@ describe("sqlite crash and first-open processes", () => {
     const raw = new DatabaseSync(path);
     raw.exec("PRAGMA journal_mode = DELETE");
     raw.close();
-    const files = [path, `${path}-wal`, `${path}-shm`, `${path}-journal`];
-    const hashes = () =>
-      files.map((file) =>
-        existsSync(file) ? createHash("sha256").update(readFileSync(file)).digest("hex") : null,
-      );
     expect(readFileSync(path).subarray(18, 20)).toEqual(Buffer.from([1, 1]));
     // Another connection tries to commit a newer schema version at two moments: right after the
     // writable side's version check (the second version read; the first is the read-only probe),
     // and right before the first switch to WAL.
     const outcomes: ("committed" | "busy")[] = [];
-    let before: (string | null)[] | undefined;
     const upgrade = () => {
       const upgrader = new DatabaseSync(path);
       try {
@@ -151,7 +144,6 @@ describe("sqlite crash and first-open processes", () => {
           `INSERT INTO schema_version (version, applied_at) VALUES (${90 + outcomes.length}, 0)`,
         );
         outcomes.push("committed");
-        before = hashes();
       } catch (error) {
         if ((error as { errcode?: number }).errcode !== 5) throw error;
         outcomes.push("busy");
@@ -182,12 +174,7 @@ describe("sqlite crash and first-open processes", () => {
       DatabaseSync.prototype.prepare = prepare;
     }
 
-    if (outcomes.includes("committed")) {
-      // The race happened: the refusal must still leave every file byte for byte as it was.
-      expect(refusal).toBeInstanceOf(SchemaTooNewError);
-      expect(hashes()).toEqual(before as (string | null)[]);
-    }
-    // It cannot happen: the version is checked and the journal switched under one exclusive lock.
+    // Both attempts find the store busy: the version is checked and the journal switched under one exclusive lock.
     expect(outcomes).toEqual(["busy", "busy"]);
     expect(refusal).toBeUndefined();
     expect(readFileSync(path).subarray(18, 20)).toEqual(Buffer.from([2, 2]));

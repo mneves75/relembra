@@ -51,7 +51,7 @@ describe("a mutation bound to the plan a person approved aborts when the plan ch
     const { relembra, source, concurrentSummary } = await open();
     const approved = await relembra.redactionPreview(null, { memoryId: source.id });
     const summary: Memory = await concurrentSummary();
-    // Sol's repro: the summary, never shown, was redacted with the source.
+    // The summary, never shown, is redacted with the source.
     await expect(
       relembra.redact(null, { memoryId: source.id, expect: approved }),
     ).rejects.toBeInstanceOf(PlanChangedError);
@@ -116,7 +116,7 @@ describe("a mutation bound to the plan a person approved aborts when the plan ch
     await expect(
       relembra.redact(null, { memoryId: source.id, expect: approved }),
     ).rejects.toBeInstanceOf(PlanChangedError);
-    // Without `expect`, redact behaves as it always has.
+    // Without `expect`, redact compares no plan.
     expect((await relembra.redact(null, { memoryId: source.id })).redacted).toEqual([source.id]);
   });
 });
@@ -167,7 +167,7 @@ describe("the approval covers every field of every memory, not only its id, revi
         const opened = await open();
         const { store, relembra, source } = opened;
         const approved = await mutation.preview(opened);
-        // Sol's round-4 repro: a direct store write, same id, seq, revision number and status.
+        // A direct store write: same id, seq, revision number and status.
         await store.transaction(async (tx) => tx.putMemory(edit(source)));
         await expect(mutation.run(opened, approved)).rejects.toBeInstanceOf(PlanChangedError);
         expect((await relembra.zoom(null, { memoryId: source.id })).status).toBe("live");
@@ -245,7 +245,7 @@ describe("a sparse approval is a changed plan: every slot must hold an approved 
     test(`${name}: new Array(1) does not approve a one-memory plan`, async () => {
       const opened = await open();
       expect(await mutation.preview(opened)).toHaveLength(1);
-      // Sol's round-6 repro: holes were skipped, so an empty approval committed the plan.
+      // A sparse approval's holes are not skipped: an empty one is a changed plan.
       await expect(mutation.run(opened, new Array(1))).rejects.toBeInstanceOf(PlanChangedError);
       expect((await opened.relembra.zoom(null, { memoryId: opened.source.id })).status).toBe(
         "live",
@@ -279,7 +279,7 @@ describe("the approval is read once: what changes between reads cannot skip the 
     const opened = await open();
     const { relembra, source } = opened;
     expect(await MUTATIONS.redact.preview(opened)).toHaveLength(1);
-    // Sol's round-7 repro: the first length read passed the size check, the loop then saw 0.
+    // The approval's length is read once: one that shrinks between reads must not pass.
     let reads = 0;
     const shifting = new Proxy([] as Memory[], {
       get: (target, key, receiver) =>

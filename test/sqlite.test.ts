@@ -163,7 +163,7 @@ describe("sqlite store files", () => {
     after.close();
   });
 
-  test("a schema 3 file with data migrates to 4, and its term index equals the one writes build", async () => {
+  test("a schema 3 file with data migrates to the current schema, and its term index equals the one writes build", async () => {
     const path = join(dir.path, "store", "relembra.db");
     // A store built through the library, so its index was kept write by write.
     const store = openSqliteStore({ path });
@@ -465,14 +465,14 @@ describe("sqlite store opening", () => {
     await openSqliteStore({ path, busyTimeoutMs: 2_147_483_647 }).close();
   });
 
-  test("a busy timeout that is not a finite non-negative integer is refused before the file is touched", () => {
+  test("a busy timeout that is not a finite non-negative integer is refused before the file is touched", async () => {
     const path = join(dir.path, "store", "relembra.db");
     for (const busyTimeoutMs of [Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5]) {
       expect(() => openSqliteStore({ path, busyTimeoutMs })).toThrow(RangeError);
     }
     expect(existsSync(path)).toBe(false);
     // Positive control: zero is a valid timeout.
-    expect(() => openSqliteStore({ path, busyTimeoutMs: 0 }).close()).not.toThrow();
+    await expect(openSqliteStore({ path, busyTimeoutMs: 0 }).close()).resolves.toBeUndefined();
   });
 });
 

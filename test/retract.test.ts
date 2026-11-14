@@ -22,7 +22,7 @@ const principals: Record<string, Principal> = {
     promotable: [],
     owned: [OTHER_SCOPE],
   },
-  // Owns both scopes but reads only SCOPE.
+  // Reads both scopes but owns only SCOPE.
   both: {
     id: "both",
     readable: [SCOPE, OTHER_SCOPE],

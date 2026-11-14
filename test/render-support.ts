@@ -10,9 +10,9 @@ import { createMemoryStore } from "../src/testing/memory-store.js";
 import { OTHER_SCOPE, provenance, SCOPE } from "./support.js";
 
 /** Host users for the wake, brief and egress tests. */
-export type User = "owner" | "agent" | "reader" | "outsider" | "both";
+type User = "owner" | "agent" | "reader" | "outsider" | "both";
 
-export const principals: Record<User, Principal> = {
+const principals: Record<User, Principal> = {
   owner: {
     id: "owner",
     readable: [SCOPE],
@@ -28,7 +28,7 @@ export const principals: Record<User, Principal> = {
 };
 
 /** 2026-10-30T12:00:00.000Z; the clock advances one second per note. */
-export const T0 = Date.UTC(2026, 9, 30, 12, 0, 0);
+const T0 = Date.UTC(2026, 9, 30, 12, 0, 0);
 
 /** A relembra with deterministic ids (m-1, m-2, …) and clock, over `store`. */
 export function openRendering(options: { store?: Store; egress?: EgressFilter } = {}) {
@@ -70,7 +70,7 @@ export function utf8Bytes(text: string): number {
 }
 
 /** One parsed `<memory …>text</memory>` line. */
-export interface ParsedMemory {
+interface ParsedMemory {
   readonly id: string;
   readonly scope: string;
   readonly rev: string;

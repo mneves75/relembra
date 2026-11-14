@@ -387,8 +387,7 @@ describe("site: the page", () => {
     const stated = [
       ...html.matchAll(/\b(?:[Vv]ersão|[Vv]ersion) (\d+\.\d+\.\d+(?:-[0-9A-Za-z.]*[0-9A-Za-z])?)/g),
     ].map((m) => m[1]);
-    // Rewritten for the 2026-11 redesign, whose install line adds a mention: the exact count was
-    // incidental; what matters is at least one mention (scripts/deploy.sh needs it) and all equal.
+    // At least one mention (scripts/deploy.sh's live-site check needs one), and all equal.
     expect(stated.length).toBeGreaterThanOrEqual(1);
     expect(new Set(stated)).toEqual(new Set([version]));
   });
@@ -428,8 +427,8 @@ describe("site: the page", () => {
     expect(Number.isNaN(Date.parse(expires))).toBe(false);
   });
 
-  // Rewritten for the 2026-11 redesign: the page is dark only, with no theme or motion toggle, so
-  // the bootstrap sets the language and nothing else.
+  // The page is dark only, with no theme or motion toggle, so the bootstrap sets the language and
+  // nothing else.
   test("theme and motion: the bootstrap sets neither, and the page has no toggle for them", async () => {
     const boot = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1] ?? "";
     // positive control: the bootstrap exists and still sets the language
@@ -484,8 +483,8 @@ describe("site: the page", () => {
     expect(langFor("?lang=<b>", "en", "pt-BR")).toBe("en");
   });
 
-  // Rewritten for the 2026-11 redesign: the motion toggles are gone, so the stylesheet must honour
-  // the system's reduced-motion preference itself, with every transition behind it.
+  // With no motion toggle, the stylesheet honours the system's reduced-motion preference itself,
+  // with every transition behind it.
   test("motion: every transition and animation sits behind prefers-reduced-motion", () => {
     const css = readFileSync(join(site, "assets", "site.css"), "utf8");
     const js = readFileSync(join(site, "assets", "site.js"), "utf8");
@@ -617,8 +616,7 @@ describe("site: the page", () => {
 
   test("explains plainly without naming the method it borrows", () => {
     const page = readFileSync(join(site, "index.html"), "utf8");
-    // Rewritten for the 2026-11 redesign, which dropped the explain__lead chapter: the positive
-    // control is now the "how it works" section this rule guards.
+    // Positive control: the "how it works" section this rule guards.
     expect(page).toContain('id="como"');
     expect(page.match(/[^<>]{0,40}feynman[^<>]{0,40}/gi)).toBeNull();
   });

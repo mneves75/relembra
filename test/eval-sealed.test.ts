@@ -10,9 +10,8 @@ const inWorkTree = git("rev-parse", "--is-inside-work-tree").stdout.trim() === "
 // and never committed, since real questions carry personal data.
 (inWorkTree ? describe : describe.skip)("the sealed eval set stays out of the repository", () => {
   test("git ignores eval/sealed/", () => {
-    // Positive control first: a file there would be ignored, so the empty listing below means
-    // something.
     expect(git("check-ignore", "-q", "eval/sealed/questions.jsonl").status).toBe(0);
+    // Positive control: a file outside eval/sealed/ is not ignored.
     expect(git("check-ignore", "-q", "eval/README.md").status).toBe(1);
   });
 
@@ -20,5 +19,7 @@ const inWorkTree = git("rev-parse", "--is-inside-work-tree").stdout.trim() === "
     const listed = git("ls-files", "--", "eval/sealed");
     expect(listed.status).toBe(0);
     expect(listed.stdout).toBe("");
+    // Positive control: the same listing names a tracked file, so an empty one means none.
+    expect(git("ls-files", "--", "eval/README.md").stdout).toBe("eval/README.md\n");
   });
 });

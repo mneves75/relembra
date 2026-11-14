@@ -1,8 +1,7 @@
 /**
  * The review's cases for scripts/deploy.sh, written from docs/RELEASE.md and the release request:
  * what hmo must refuse, what prd must not publish, what a failed prd step must report, and
- * portability. The first round of these found that prd checked SHA256SUMS against itself, that a
- * refusal inside `$(...)` left only a subshell, and that waiver expiry was compared as text.
+ * portability.
  */
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawnSync } from "node:child_process";

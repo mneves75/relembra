@@ -32,4 +32,18 @@ describe("the Postgres tests cannot pass without a Postgres", () => {
     expect(output).toMatch(/[1-9]\d* skip/);
     expect(output).toMatch(/\b0 fail/);
   });
+
+  test("an empty RELEMBRA_POSTGRES_URL is no Postgres: skipped under RELEMBRA_SKIP_POSTGRES=1", () => {
+    const result = withoutPostgres({ RELEMBRA_POSTGRES_URL: "", RELEMBRA_SKIP_POSTGRES: "1" });
+    const output = `${result.stdout}${result.stderr}`;
+    expect(result.status).toBe(0);
+    expect(output).toMatch(/[1-9]\d* skip/);
+    expect(output).toMatch(/\b0 fail/);
+  });
+
+  test("an empty RELEMBRA_POSTGRES_URL without the skip fails and says how to run them", () => {
+    const result = withoutPostgres({ RELEMBRA_POSTGRES_URL: "" });
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toContain("scripts/with-postgres.sh");
+  });
 });
