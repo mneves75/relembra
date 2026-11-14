@@ -76,9 +76,10 @@ export type ProvenanceRule =
   | "above-sources";
 
 /**
- * A write's provenance field is refused (ProvenanceRule: a guard rule, missing, not a tier, above
- * the principal's ceiling or above a summary's sources); note, summary, promote and supersede throw
- * it. The message names the field and the rule, never the value.
+ * A provenance field is refused (ProvenanceRule): a write's field is missing, breaks a guard rule,
+ * is not a tier, or asks for trust above the principal's ceiling or a summary's sources; or a
+ * retract, supersede or redact would change a memory more trusted than the principal's ceiling
+ * (`trust`, `above-ceiling`). The message names the field and the rule, never the value.
  */
 export class ProvenanceError extends Error {
   override readonly name = "ProvenanceError";
