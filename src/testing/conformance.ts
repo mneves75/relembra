@@ -404,21 +404,19 @@ export function storeConformanceCases(target: ConformanceTarget): readonly Confo
 
   define("a transaction handle refuses writes after its transaction ends", async ({ store }) => {
     let leaked: Parameters<Parameters<Store["transaction"]>[0]>[0] | undefined;
+    const inTime = memory("m-in-time", SCOPE_A, 1);
     await store.transaction(async (tx) => {
       leaked = tx;
+      // Positive control: the same handle takes a write while its transaction is open.
+      await tx.putMemory(inTime);
     });
     assert.ok(leaked);
+    const recalled = async () =>
+      (await store.recall({ scopes: [SCOPE_A], limit: 10 })).map((m) => m.id);
+    assert.deepStrictEqual(await recalled(), [inTime.id]);
 
-    await assert.rejects(leaked.putMemory(memory("m-late", SCOPE_A, 1)));
-    assert.deepStrictEqual(await store.recall({ scopes: [SCOPE_A], limit: 10 }), []);
-
-    // Positive control: the same write through a handle whose transaction is open is kept.
-    const inTime = memory("m-in-time", SCOPE_A, 2);
-    await store.transaction((tx) => tx.putMemory(inTime));
-    assert.deepStrictEqual(
-      (await store.recall({ scopes: [SCOPE_A], limit: 10 })).map((m) => m.id),
-      [inTime.id],
-    );
+    await assert.rejects(leaked.putMemory(memory("m-late", SCOPE_A, 2)));
+    assert.deepStrictEqual(await recalled(), [inTime.id]);
   });
 
   define("an op record commits with its transaction and is read back intact", async ({ store }) => {
