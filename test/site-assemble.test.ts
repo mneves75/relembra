@@ -122,7 +122,7 @@ describe.skipIf(NO_RELEASE_TOOLING)("site assembly", () => {
     const run = spawnSync("bash", [script, "missing/site"], { cwd: repo, encoding: "utf8" });
     expect(run.status).not.toBe(0);
     expect(run.stderr).toContain("missing");
-    // It stops at the parent, before creating anything: never `mkdir /site`, the old fallback.
+    // It stops at the parent, before creating anything: never `mkdir /site`.
     expect(run.stderr).not.toContain("mkdir");
   });
 

@@ -48,7 +48,7 @@ describe("sweepPreview: exactly what sweep(now) would redact, changing nothing",
     const fact = await note("Builds run nightly.");
     const summary = await summarize([fact], "Nightly builds.", "agent");
     at(10 * DAY);
-    // Sol's repro: the owner rule is superseded, so recall no longer lists it; sweep still expires it.
+    // The owner rule is superseded, so recall no longer lists it; sweep still expires it.
     await relembra.supersede("owner", {
       memoryId: rule.id,
       text: "Keep it on for 90 days.",

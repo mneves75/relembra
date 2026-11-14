@@ -92,7 +92,7 @@ describe("parseDacl reads an SDDL access list", () => {
   });
 
   test("a parenthesis inside a condition's quoted string does not end the entry", () => {
-    // Sol's review of PR #7: counted naively, the first entry swallows the Users grant.
+    // Counted naively, the first entry swallows the Users grant.
     const sddl = 'D:(XA;;FR;;;SY;(@User.Title=="("))(A;;FA;;;BU)(XA;;FR;;;SY;(@User.Title==")"))';
     expect(parseDacl(sddl)?.map((ace) => ace.sid)).toEqual([
       "S-1-5-18",
@@ -237,7 +237,7 @@ describe("chainRefusal applies the four rules", () => {
 
 describe("storeFolderChain is the path as given, never its canonical form", () => {
   test("every folder from the store folder's parent to the root, short names kept", () => {
-    // Sol's review of PR #7: reading the canonical path instead skips what lies on this one.
+    // Reading the canonical path instead skips what lies on this one.
     expect(storeFolderChain("C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\x\\home")).toEqual([
       "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\x",
       "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp",

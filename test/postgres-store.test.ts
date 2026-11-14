@@ -123,7 +123,6 @@ async function settle<T>(promise: Promise<T>): Promise<{ value?: T; error?: unkn
   }
 }
 
-/** Resolves after `ms` milliseconds. */
 function pause(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
