@@ -11,20 +11,21 @@ import type { ConformanceTarget } from "relembra/testing";
  */
 const { RELEMBRA_POSTGRES_URL: URL, RELEMBRA_SKIP_POSTGRES } = process.env;
 const SKIP = RELEMBRA_SKIP_POSTGRES === "1";
-/** An empty URL configures no Postgres, the same as an unset one. */
-const UNSET = URL === undefined || URL === "";
+/** The URL, or undefined when none is configured: an empty one counts as unset. */
+const CONFIGURED = URL === undefined || URL === "" ? undefined : URL;
 
 /** `describe` when a Postgres is configured, `describe.skip` when none is and skipping was asked. */
-export const describePostgres: typeof describe = UNSET && SKIP ? describe.skip : describe;
+export const describePostgres: typeof describe =
+  CONFIGURED === undefined && SKIP ? describe.skip : describe;
 
 /** The configured URL; throws, failing the test, when none is set and skipping was not asked. */
 export function postgresUrl(): string {
-  if (URL === undefined || URL === "") {
+  if (CONFIGURED === undefined) {
     throw new Error(
       "RELEMBRA_POSTGRES_URL is not set: run the tests through scripts/with-postgres.sh, or set RELEMBRA_SKIP_POSTGRES=1 to skip the Postgres tests on purpose",
     );
   }
-  return URL;
+  return CONFIGURED;
 }
 
 /** A pool of its own on the test database. */
