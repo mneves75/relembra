@@ -142,7 +142,8 @@ export async function exportJsonl(
 ): Promise<string> {
   const { scope } = input;
   const owned = checkPrincipal(principal).owned ?? [];
-  const scopes = scope === undefined ? [...owned] : [scope];
+  // Each scope once: an import refuses a header that names a scope twice.
+  const scopes = scope === undefined ? [...new Set(owned)] : [scope];
   if (scopes.length === 0 || scopes.some((exported) => !owned.includes(exported))) {
     throw new ScopeDeniedError("own");
   }
