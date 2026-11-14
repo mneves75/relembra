@@ -225,7 +225,7 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
       gitInit(target);
       // Bun's option parser reads a backslash as an escape, so a Windows path goes with slashes.
       const other = keyPath(target);
-      // Sol's repro: --cwd through BUN_OPTIONS answered with the other repository's scope.
+      // Regression: --cwd through BUN_OPTIONS answered with the other repository's scope.
       refused(box, ["check"], 2, "unsafe-runtime-env", { env: { BUN_OPTIONS: `--cwd ${other}` } });
       refused(box, ["note", "x"], 2, "unsafe-runtime-env", { env: { BUN_OPTIONS: "--smol" } });
       refused(box, ["check"], 2, "unsafe-runtime-env", {
@@ -266,7 +266,7 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
       writeFileSync(config, `${readFileSync(config, "utf8")}[remote "origin"]\n\t${line}\n`);
       return ok(box, ["check"], { cwd: dir }).scope as string;
     };
-    // Sol's repro: these are two URLs to git, and they collided.
+    // Regression: these are two URLs to git, and they collided.
     const one = scopeWith(join(base, "q1", "team"), 'url = "https://example.invalid/team/"one.git');
     const two = scopeWith(join(base, "q2", "team"), 'url = "https://example.invalid/team/"two.git');
     expect(one).not.toBe(two);
@@ -374,7 +374,7 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
         chmodSync(join(dir, "git"), 0o755);
       }
       const hostPath = `${dirname(realGit)}:/usr/bin:/bin`;
-      // Sol's repro: PATH=.:… ran ./git from the repository, twice per call.
+      // Regression: PATH=.:… ran ./git from the repository, twice per call.
       for (const path of [
         `.:${hostPath}`,
         `:${hostPath}`,
@@ -412,7 +412,7 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
     mkdirSync(outside, { recursive: true });
     symlinkSync(join(repo, "bin", "git"), join(outside, "git"));
     const path = `${outside}:${dirname(realGit)}:/usr/bin:/bin`;
-    // Sol's repro: the entry is outside the repository, the executable it names is not.
+    // Regression: the entry is outside the repository, the executable it names is not.
     expect(ok(box, ["check"], { cwd: repo, env: { PATH: path } }).scope).toBe(scopeFor(repo));
     run(box, ["hook"], { cwd: repo, env: { PATH: path } });
     expect(existsSync(marker)).toBe(false);
@@ -435,12 +435,12 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
         git(dir, "remote", "add", "origin", origin);
         return ok(box, ["check"], { cwd: dir }).scope;
       };
-      // Sol's repro: trimming made both origins `file:<base>/upstream`, one scope.
+      // Regression: trimming made both origins `file:<base>/upstream`, one scope.
       const toPlain = clone("to-plain", plain);
       expect(clone("to-spaced", spaced)).not.toBe(toPlain);
       // Positive control: another clone of the same origin shares the scope.
       expect(clone("to-plain-again", plain)).toBe(toPlain);
-      // Sol's round-4 repro: the same two as raw file URLs; URL parsing dropped the trailing space.
+      // Regression: the same two as raw file URLs; URL parsing dropped the trailing space.
       const byUrl = clone("url-to-plain", `file://${plain}`);
       expect(clone("url-to-spaced", `file://${spaced}`)).not.toBe(byUrl);
       // Positive controls: a file URL is its path, and so is its percent-encoded form.
@@ -457,7 +457,7 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
     const two = join(base, "newline\ntwo");
     gitInit(one);
     gitInit(two);
-    // Sol's repro: both scopes were cut at the newline and collided.
+    // Regression: both scopes were cut at the newline and collided.
     for (const repo of [one, two]) {
       const result = refused(box, ["note", "x"], 2, "no-scope", { cwd: repo });
       expect(result.json?.ok === false && result.json.error.rule).toBe("unsupported-path");
@@ -477,7 +477,7 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
     const ordinary = join(base, "metadata", "ordinary");
     gitInit(ordinary);
     git(ordinary, "remote", "add", "origin", "../up.git");
-    // Sol's repro: the separate checkout resolved ../up.git from its git directory and collided.
+    // Regression: the separate checkout resolved ../up.git from its git directory and collided.
     const separate = ok(box, ["check"], { cwd: checkout }).scope;
     expect(separate).not.toBe(ok(box, ["check"], { cwd: ordinary }).scope);
     expect(separate).toBe(
@@ -538,6 +538,17 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
   cliTest("an invalid RELEMBRA_SCOPE is a usage error", () => {
     refused(box, ["wake"], 2, "bad-scope", { env: { RELEMBRA_SCOPE: "x".repeat(257) } });
     refused(box, ["wake"], 2, "bad-scope", { env: { RELEMBRA_SCOPE: "a\nb" } });
+  });
+
+  cliTest("RELEMBRA_SCOPE holds at most 256 UTF-8 bytes, counted in bytes, not characters", () => {
+    for (const fits of ["x".repeat(256), "é".repeat(128)]) {
+      expect(ok(box, ["check"], { env: { RELEMBRA_SCOPE: fits } }).scope).toBe(fits);
+    }
+    // 129 two-byte characters: under the limit in UTF-16 code units, over it in UTF-8 bytes.
+    for (const over of ["x".repeat(257), "é".repeat(129)]) {
+      const result = refused(box, ["check"], 2, "bad-scope", { env: { RELEMBRA_SCOPE: over } });
+      expect(result.json?.ok === false && result.json.error.rule).toBe("too-long");
+    }
   });
 
   cliTest("a .env or bunfig.toml in the project cannot set the scope, the home or run code", () => {

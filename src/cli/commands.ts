@@ -9,13 +9,10 @@ export interface FlagSpec {
   readonly name: string;
   /** Whether the flag takes a value (`--limit 5`, `--limit=5`). */
   readonly value: boolean;
-  /** Whether the flag may be given more than once. */
   readonly repeat?: boolean;
 }
 
-/** What a command takes as positional arguments. */
 export type Positionals =
-  /** None. */
   | "none"
   /** Exactly one memory id. */
   | "id"
@@ -180,7 +177,6 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
 ];
 
-/** Flags every command takes. */
 export const GLOBAL_FLAGS = ["--json", "--help"] as const;
 
 /** The environment the CLI reads, in the order docs/CLI.md lists it. */

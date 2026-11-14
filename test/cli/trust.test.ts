@@ -51,24 +51,21 @@ const confirmation = (args: string[]) => {
 };
 
 describe("owner trust needs a human at a terminal; an agent's flag cannot grant it", () => {
-  cliTest(
-    "Sol's repro without a terminal: owner flag and supersede are refused, the rule stands",
-    () => {
-      expect(confirmation(["note", "Never publish secrets", "--trust", "owner", "--pin"])).toBe(
-        "no-tty",
-      );
-      expect(
-        confirmation(["supersede", rule.id, "Publish everything", "--trust", "owner", "--pin"]),
-      ).toBe("no-tty");
-      // Without the flag too: replacing, retracting or redacting an owner memory is protected.
-      expect(confirmation(["supersede", rule.id, "Publish everything"])).toBe("no-tty");
-      expect(confirmation(["retract", rule.id])).toBe("no-tty");
-      expect(confirmation(["redact", rule.id])).toBe("no-tty");
-      const wake = ok(box, ["wake"]);
-      expect(wake.text).toContain(`trust="owner">Never publish secrets</memory>`);
-      expect(wake.text).not.toContain("Publish everything");
-    },
-  );
+  cliTest("without a terminal: owner flag and supersede are refused, the rule stands", () => {
+    expect(confirmation(["note", "Never publish secrets", "--trust", "owner", "--pin"])).toBe(
+      "no-tty",
+    );
+    expect(
+      confirmation(["supersede", rule.id, "Publish everything", "--trust", "owner", "--pin"]),
+    ).toBe("no-tty");
+    // Without the flag too: replacing, retracting or redacting an owner memory is protected.
+    expect(confirmation(["supersede", rule.id, "Publish everything"])).toBe("no-tty");
+    expect(confirmation(["retract", rule.id])).toBe("no-tty");
+    expect(confirmation(["redact", rule.id])).toBe("no-tty");
+    const wake = ok(box, ["wake"]);
+    expect(wake.text).toContain(`trust="owner">Never publish secrets</memory>`);
+    expect(wake.text).not.toContain("Publish everything");
+  });
 
   cliTest(
     "positive control: agent and untrusted writes, and mutating them, need no terminal",

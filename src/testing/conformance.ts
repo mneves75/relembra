@@ -404,13 +404,19 @@ export function storeConformanceCases(target: ConformanceTarget): readonly Confo
 
   define("a transaction handle refuses writes after its transaction ends", async ({ store }) => {
     let leaked: Parameters<Parameters<Store["transaction"]>[0]>[0] | undefined;
+    const inTime = memory("m-in-time", SCOPE_A, 1);
     await store.transaction(async (tx) => {
       leaked = tx;
+      // Positive control: the same handle takes a write while its transaction is open.
+      await tx.putMemory(inTime);
     });
     assert.ok(leaked);
+    const recalled = async () =>
+      (await store.recall({ scopes: [SCOPE_A], limit: 10 })).map((m) => m.id);
+    assert.deepStrictEqual(await recalled(), [inTime.id]);
 
-    await assert.rejects(leaked.putMemory(memory("m-late", SCOPE_A, 1)));
-    assert.deepStrictEqual(await store.recall({ scopes: [SCOPE_A], limit: 10 }), []);
+    await assert.rejects(leaked.putMemory(memory("m-late", SCOPE_A, 2)));
+    assert.deepStrictEqual(await recalled(), [inTime.id]);
   });
 
   define("an op record commits with its transaction and is read back intact", async ({ store }) => {
@@ -2108,8 +2114,11 @@ export function storeConformanceCases(target: ConformanceTarget): readonly Confo
         opened.rawBytes ? decoder.decode(await opened.rawBytes()) : "",
       ];
       const piece = "harbour lantern code";
-      // Positive control: the scan finds the text before the redaction.
-      assert.ok((await surfaces()).some((text) => text.includes(piece)));
+      // Positive control: before the redaction the scan finds the text on every surface.
+      for (const text of await surfaces()) {
+        if (text === "") continue;
+        assert.ok(text.includes(piece), "the scan sees the text before redaction");
+      }
       const promoteEvent = (await opened.store.events({ scopes: [SCOPE_B] })).find(
         (e) => e.kind === "promote",
       );
@@ -2385,75 +2394,32 @@ export function storeConformanceCases(target: ConformanceTarget): readonly Confo
     },
   );
 
-  if (!target.durable) return cases;
-
-  define("a reopened store keeps committed writes and drops rolled-back ones", async (opened) => {
-    assert.ok(opened.reopen, "a durable target provides reopen");
-    const committed = memory("m-committed", SCOPE_A, 1);
-    const rolledBack = memory("m-rolled-back", SCOPE_A, 2);
-    await commit(opened.store, committed);
-    await assert.rejects(
-      opened.store.transaction(async (tx) => {
-        await tx.putMemory(rolledBack);
-        throw new Error("roll back");
-      }),
-    );
-
-    const reopened = await opened.reopen();
-
-    assert.deepStrictEqual(await reopened.recall({ scopes: [SCOPE_A], limit: 10 }), [committed]);
-    // Positive control: the reopened handle can write, and the first handle sees it.
-    await commit(reopened, rolledBack);
-    assert.deepStrictEqual(ids(await opened.store.recall({ scopes: [SCOPE_A], limit: 10 })), [
-      "m-rolled-back",
-      "m-committed",
-    ]);
-  });
-
   define(
-    "committed events persist in seq order and a rolled-back append leaves none",
+    "erasures returns every committed outbox row in seq order, whatever order they were put in",
     async (opened) => {
-      assert.ok(opened.inspectEvents, "a durable target provides inspectEvents");
-      const first = await opened.store.transaction((tx) =>
-        tx.append(noteEvent(memory("m-1", SCOPE_A, 1))),
+      const { store } = opened;
+      const carrier: Carrier = { id: "carrier-a", kind: "kind-a" };
+      await store.transaction(async (tx) => {
+        await tx.putErasure({ seq: 9, memoryId: "m-9", carriers: [carrier] });
+        await tx.putErasure({ seq: 3, memoryId: "m-3", carriers: [] });
+      });
+      await store.transaction((tx) => tx.putErasure({ seq: 5, memoryId: "m-5", carriers: [] }));
+      const rows = async (target: Store) =>
+        (await target.erasures()).map((work) => ({ seq: work.seq, memoryId: work.memoryId }));
+      const expected = [
+        { seq: 3, memoryId: "m-3" },
+        { seq: 5, memoryId: "m-5" },
+        { seq: 9, memoryId: "m-9" },
+      ];
+      // Positive control: every row is there, whatever the order.
+      assert.deepStrictEqual(
+        [...(await rows(store))].sort((x, y) => x.seq - y.seq),
+        expected,
       );
-      const second = await opened.store.transaction((tx) =>
-        tx.append(noteEvent(memory("m-2", SCOPE_A, 2))),
-      );
-      await assert.rejects(
-        opened.store.transaction(async (tx) => {
-          await tx.append(noteEvent(memory("m-rolled-back", SCOPE_A, 3)));
-          throw new Error("roll back");
-        }),
-      );
-
-      assert.deepStrictEqual(await opened.inspectEvents(), [first, second]);
-      // Positive control: the same append, committed, is persisted after them.
-      const third = await opened.store.transaction((tx) =>
-        tx.append(noteEvent(memory("m-rolled-back", SCOPE_A, 3))),
-      );
-      assert.deepStrictEqual(await opened.inspectEvents(), [first, second, third]);
+      assert.deepStrictEqual(await rows(store), expected);
+      if (opened.reopen) assert.deepStrictEqual(await rows(await opened.reopen()), expected);
     },
   );
-
-  define("seq keeps increasing across reopened handles", async (opened) => {
-    assert.ok(opened.reopen && opened.inspectEvents, "a durable target provides both");
-    const first = await opened.store.transaction((tx) =>
-      tx.append(noteEvent(memory("m-1", SCOPE_A, 1))),
-    );
-
-    const reopened = await opened.reopen();
-    const second = await reopened.transaction((tx) =>
-      tx.append(noteEvent(memory("m-2", SCOPE_A, 2))),
-    );
-    const third = await opened.store.transaction((tx) =>
-      tx.append(noteEvent(memory("m-3", SCOPE_A, 3))),
-    );
-
-    assert.ok(second.seq > first.seq, "a reopened handle continues after the first's seq");
-    assert.ok(third.seq > second.seq, "the first handle continues after the reopened one's seq");
-    assert.deepStrictEqual(await opened.inspectEvents(), [first, second, third]);
-  });
 
   define(
     "events returns the committed events of the requested scopes in seq order, redacted forms included",
@@ -2562,6 +2528,76 @@ export function storeConformanceCases(target: ConformanceTarget): readonly Confo
       }
     },
   );
+
+  if (!target.durable) return cases;
+
+  define("a reopened store keeps committed writes and drops rolled-back ones", async (opened) => {
+    assert.ok(opened.reopen, "a durable target provides reopen");
+    const committed = memory("m-committed", SCOPE_A, 1);
+    const rolledBack = memory("m-rolled-back", SCOPE_A, 2);
+    await commit(opened.store, committed);
+    await assert.rejects(
+      opened.store.transaction(async (tx) => {
+        await tx.putMemory(rolledBack);
+        throw new Error("roll back");
+      }),
+    );
+
+    const reopened = await opened.reopen();
+
+    assert.deepStrictEqual(await reopened.recall({ scopes: [SCOPE_A], limit: 10 }), [committed]);
+    // Positive control: the reopened handle can write, and the first handle sees it.
+    await commit(reopened, rolledBack);
+    assert.deepStrictEqual(ids(await opened.store.recall({ scopes: [SCOPE_A], limit: 10 })), [
+      "m-rolled-back",
+      "m-committed",
+    ]);
+  });
+
+  define(
+    "committed events persist in seq order and a rolled-back append leaves none",
+    async (opened) => {
+      assert.ok(opened.inspectEvents, "a durable target provides inspectEvents");
+      const first = await opened.store.transaction((tx) =>
+        tx.append(noteEvent(memory("m-1", SCOPE_A, 1))),
+      );
+      const second = await opened.store.transaction((tx) =>
+        tx.append(noteEvent(memory("m-2", SCOPE_A, 2))),
+      );
+      await assert.rejects(
+        opened.store.transaction(async (tx) => {
+          await tx.append(noteEvent(memory("m-rolled-back", SCOPE_A, 3)));
+          throw new Error("roll back");
+        }),
+      );
+
+      assert.deepStrictEqual(await opened.inspectEvents(), [first, second]);
+      // Positive control: the same append, committed, is persisted after them.
+      const third = await opened.store.transaction((tx) =>
+        tx.append(noteEvent(memory("m-rolled-back", SCOPE_A, 3))),
+      );
+      assert.deepStrictEqual(await opened.inspectEvents(), [first, second, third]);
+    },
+  );
+
+  define("seq keeps increasing across reopened handles", async (opened) => {
+    assert.ok(opened.reopen && opened.inspectEvents, "a durable target provides both");
+    const first = await opened.store.transaction((tx) =>
+      tx.append(noteEvent(memory("m-1", SCOPE_A, 1))),
+    );
+
+    const reopened = await opened.reopen();
+    const second = await reopened.transaction((tx) =>
+      tx.append(noteEvent(memory("m-2", SCOPE_A, 2))),
+    );
+    const third = await opened.store.transaction((tx) =>
+      tx.append(noteEvent(memory("m-3", SCOPE_A, 3))),
+    );
+
+    assert.ok(second.seq > first.seq, "a reopened handle continues after the first's seq");
+    assert.ok(third.seq > second.seq, "the first handle continues after the reopened one's seq");
+    assert.deepStrictEqual(await opened.inspectEvents(), [first, second, third]);
+  });
 
   return cases;
 }
@@ -2679,10 +2715,6 @@ const CURATOR_PRINCIPAL: Principal = {
   trustCeiling: "owner",
 };
 
-/**
- * A relembra over `store` for the suite's writer (WRITER) and owner (CURATOR), whose clock reads
- * 1 s, 2 s, … and whose memory ids are curated-1, curated-2, ….
- */
 /** Owns SCOPE_A, but may not pin, and writes at most agent trust (the default ceiling). */
 const REVISER = "reviser";
 const REVISER_PRINCIPAL: Principal = {
@@ -2693,6 +2725,10 @@ const REVISER_PRINCIPAL: Principal = {
   owned: [SCOPE_A],
 };
 
+/**
+ * A relembra over `store` for the suite's writer (WRITER), owner (CURATOR) and REVISER, whose
+ * clock reads 1 s, 2 s, … and whose ids start with curated- (memory and op ids share one counter).
+ */
 function curator(store: Store) {
   let next = 0;
   let seconds = 0;
@@ -2720,7 +2756,7 @@ const PROMOTER_PRINCIPAL: Principal = {
   trustCeiling: "owner",
 };
 
-/** A relembra over `store` for PROMOTER, whose ids are promoted-1, promoted-2, …. */
+/** A relembra over `store` for PROMOTER, whose ids start with promoted- (one shared counter). */
 function promoter(store: Store) {
   let next = 0;
   let seconds = 0;

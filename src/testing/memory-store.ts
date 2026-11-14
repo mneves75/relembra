@@ -206,7 +206,7 @@ export function createMemoryStore(): Store {
     },
 
     async erasures() {
-      return committed.erasures;
+      return [...committed.erasures].sort((x, y) => x.seq - y.seq);
     },
 
     async settlements() {
@@ -297,7 +297,6 @@ function pendingIn(state: State): ErasureWork[] {
     });
 }
 
-/** One key per (outbox seq, carrier id) pair. */
 function settlementKey(seq: number, carrierId: string): string {
   return JSON.stringify([seq, carrierId]);
 }

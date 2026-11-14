@@ -18,7 +18,7 @@ function suiteWithoutBinary(extra: Record<string, string>) {
 }
 
 describe("CI cannot pass the CLI suite without the binary", () => {
-  test("with CI set, a missing binary fails the run (Sol's repro: 13 pass, 46 skip, exit 0)", () => {
+  test("with CI set, a missing binary fails the run (it once gave 13 pass, 46 skip, exit 0)", () => {
     const result = suiteWithoutBinary({ CI: "1" });
     expect(result.status).not.toBe(0);
     expect(`${result.stdout}${result.stderr}`).toContain("there is no CLI binary to test");

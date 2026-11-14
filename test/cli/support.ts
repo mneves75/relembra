@@ -157,7 +157,7 @@ export interface RunOptions {
   /** Added to the sandbox's environment; `undefined` removes a variable. */
   readonly env?: Record<string, string | undefined>;
   readonly input?: string | Uint8Array;
-  /** Kills the binary after this many milliseconds (default 30,000); a kill leaves status null. */
+  /** Kills the binary after this many milliseconds (default 30,000); a timeout throws. */
   readonly timeoutMs?: number;
 }
 
@@ -177,7 +177,6 @@ export type JsonDocument =
 /** Every command run with exit 0 in --json mode, so a test can prove each one was exercised. */
 export const exercised = new Set<string>();
 
-/** The sandbox's environment: no RELEMBRA_SCOPE, HOME in the sandbox, plus `extra`. */
 /** The shell a harness runs a hook command in: Claude Code uses Git Bash on Windows. */
 export const HOOK_SHELL = process.platform === "win32" ? "bash" : "/bin/sh";
 
@@ -201,6 +200,7 @@ export function hookSilence(
   return `silent; wake through the same command: status ${wake.status}\n${wake.stdout}\n${wake.stderr}`;
 }
 
+/** The sandbox's environment: no RELEMBRA_SCOPE, HOME in the sandbox, plus `extra`. */
 export function sandboxEnv(
   box: Sandbox,
   extra: Record<string, string | undefined> = {},
@@ -259,10 +259,6 @@ export function run(box: Sandbox, args: readonly string[], options: RunOptions =
 }
 
 /**
- * Runs the binary with `input` written to stdin, which then stays open (never EOF), and resolves
- * when it exits or is killed after `killAfterMs`, with how long it took.
- */
-/**
  * `relembra export` of `box`'s store: its stdout. A failed export throws with the CLI's stderr, so
  * a test never parses an empty or partial export and reports a JSON error instead of the cause.
  */
@@ -274,6 +270,10 @@ export function exportedText(box: Sandbox): string {
   return result.stdout;
 }
 
+/**
+ * Runs the binary with `input` written to stdin, which then stays open (never EOF), and resolves
+ * when it exits or is killed after `killAfterMs`, with how long it took.
+ */
 export function runStdinOpen(
   box: Sandbox,
   args: readonly string[],

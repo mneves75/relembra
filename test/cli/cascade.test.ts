@@ -50,7 +50,7 @@ describe("owner confirmation covers everything a command would change, not just 
     async () => {
       box = sandbox();
       ok(box, ["init"]);
-      // Sol's repro: an owner rule from 400 days ago, superseded today by an agent memory.
+      // Regression: an owner rule from 400 days ago, superseded today by an agent memory.
       const old = await asHost(Date.now() - 400 * DAY, (r) =>
         r.note(null, {
           scope: box.scope,
