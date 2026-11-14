@@ -113,7 +113,6 @@ export function windowsSystem32(systemRoot: string | undefined): string {
   return win32.join(root, "System32");
 }
 
-/** Runs a System32 tool; any failure is thrown with its output. */
 function runSystemTool(systemRoot: string | undefined, exe: string, args: string[]): string {
   const result = spawnSync(win32.join(windowsSystem32(systemRoot), exe), args, {
     encoding: "utf8",
@@ -205,7 +204,7 @@ export function storeFolderAccounts(userSid: string): string[] {
  * follows a symbolic link) that grant group and others nothing. A loose file is refused, never
  * chmodded: someone else may already have read it.
  */
-export function checkOwnerOnly(path: string): void {
+function checkOwnerOnly(path: string): void {
   for (const file of [path, `${path}-wal`, `${path}-shm`]) {
     let stats: ReturnType<typeof lstatSync>;
     try {
@@ -217,8 +216,8 @@ export function checkOwnerOnly(path: string): void {
     }
     if (!stats.isFile()) throw new StoreFileTypeError(file);
     // Windows has no mode bits: Node and Bun report 0o666 for every writable file, whatever its
-    // access control list grants. There the store relies on its folder's ACL, which under the
-    // user profile grants only the user, SYSTEM and Administrators (docs/CLI.md, Windows).
+    // access control list grants. A new store's folder is created private (createWindowsStore);
+    // an existing one keeps its folder's ACL (docs/CLI.md, Windows).
     if (OWNER_MODES) {
       const mode = Number(stats.mode) & 0o777;
       if ((mode & 0o077) !== 0) throw new StoreFileModeError(file, mode);
