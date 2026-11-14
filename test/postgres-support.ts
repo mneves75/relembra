@@ -55,7 +55,7 @@ export function freshSchema(prefix = "relembra_test"): string {
 
 /** Drops `schema` and everything in it. */
 export async function dropSchema(sql: SQL, schema: string): Promise<void> {
-  await sql.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+  await sql.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
 }
 
 /**

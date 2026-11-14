@@ -1,11 +1,10 @@
 import { SchemaTooNewError } from "../errors.js";
 import type { SqlClient, SqlQuery } from "./client.js";
 
-export { SchemaTooNewError };
-
 /**
  * One forward-only schema step: statements run one at a time (a host's driver may not accept
- * several in one query), each given the store's schema name. Versions start at 1 and increase by 1.
+ * several in one query), each given the store's quoted schema identifier. Versions start at 1 and
+ * increase by 1.
  */
 export interface Migration {
   readonly version: number;
@@ -170,6 +169,7 @@ export async function migrate(
   const latest = migrations.length;
   if (checked(await schemaVersion(client, schema), latest) === latest) return;
 
+  const s = quoted(schema);
   await client.transaction(async (q) => {
     // READ COMMITTED whatever the client's default, so the reread after the lock sees a migration
     // another opener committed while this one waited.
@@ -178,16 +178,16 @@ export async function migrate(
     await q.query("SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))", [
       `relembra migrate ${schema}`,
     ]);
-    await q.query(`CREATE SCHEMA IF NOT EXISTS ${schema}`);
+    await q.query(`CREATE SCHEMA IF NOT EXISTS ${s}`);
     await q.query(
-      `CREATE TABLE IF NOT EXISTS ${schema}.schema_version (version integer PRIMARY KEY, applied_at bigint NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS ${s}.schema_version (version integer PRIMARY KEY, applied_at bigint NOT NULL)`,
     );
     // Another opener may have migrated between the first read and the lock.
     const current = checked(await schemaVersion(q, schema), latest);
     for (const migration of migrations.slice(current)) {
-      for (const statement of migration.statements(schema)) await q.query(statement);
+      for (const statement of migration.statements(s)) await q.query(statement);
       await q.query(
-        `INSERT INTO ${schema}.schema_version (version, applied_at)
+        `INSERT INTO ${s}.schema_version (version, applied_at)
          VALUES ($1::integer, floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint)`,
         [migration.version],
       );
@@ -199,13 +199,18 @@ export async function migrate(
 export async function schemaVersion(client: SqlQuery, schema: string): Promise<number> {
   const [table] = await client.query<{ found: string | null }>(
     "SELECT to_regclass($1::text)::text AS found",
-    [`${schema}.schema_version`],
+    [`${quoted(schema)}.schema_version`],
   );
   if (table?.found === null || table?.found === undefined) return 0;
   const [row] = await client.query<{ version: unknown }>(
-    `SELECT coalesce(max(version), 0) AS version FROM ${schema}.schema_version`,
+    `SELECT coalesce(max(version), 0) AS version FROM ${quoted(schema)}.schema_version`,
   );
   return Number(row?.version ?? 0);
+}
+
+/** `schema` as a quoted identifier; openPostgresStore admits no name with a `"` in it. */
+export function quoted(schema: string): string {
+  return `"${schema}"`;
 }
 
 function checked(version: number, latest: number): number {

@@ -3,8 +3,8 @@
  * file and the -wal file, without opening either for writing. Follows the WAL format
  * (https://www.sqlite.org/fileformat2.html#walformat): a frame counts only while its salts match
  * the header and its cumulative checksum holds, and only frames up to the last commit frame
- * apply. Undefined when the WAL is malformed in a way SQLite's own recovery would not accept as
- * "no frames" (an unknown magic or a bad page size); an empty or stale WAL yields the main file.
+ * apply. Undefined for an unknown magic or a bad page size, which SQLite would ignore as an empty
+ * WAL: relembra refuses to guess. An empty or stale WAL yields the main file.
  */
 export function walImage(main: Uint8Array, wal: Uint8Array): Uint8Array | undefined {
   if (wal.length < WAL_HEADER) return main;
@@ -12,7 +12,7 @@ export function walImage(main: Uint8Array, wal: Uint8Array): Uint8Array | undefi
   const magic = header.getUint32(0);
   if (magic !== MAGIC_LITTLE && magic !== MAGIC_BIG) return undefined;
   const bigEndian = magic === MAGIC_BIG;
-  const pageSize = header.getUint32(8) === 1 ? 65_536 : header.getUint32(8);
+  const pageSize = header.getUint32(8);
   if (pageSize < 512 || pageSize > 65_536 || (pageSize & (pageSize - 1)) !== 0) return undefined;
   const salt = [header.getUint32(16), header.getUint32(20)];
   let sum = checksum(wal.subarray(0, 24), bigEndian, [0, 0]);

@@ -22,6 +22,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createOwnerOnly, storeFolderAccounts, windowsSystem32 } from "../src/sqlite/database.js";
+import { openSqliteStore } from "../src/sqlite/index.js";
 import { storeFolderChain } from "../src/sqlite/windows-acl.js";
 import { createStoreUnderLock, readWindowsChain } from "../src/sqlite/windows-security.js";
 import { windowsSid, windowsTool } from "./platform-support.js";
@@ -216,6 +217,18 @@ describe.skipIf(!WINDOWS)("Windows store ACL", () => {
     const store = join(home, "relembra.db");
     createOwnerOnly(store);
     expectOwnerOnly(home, store);
+  });
+
+  test("a store under a folder named with an accent is created private and opens", async () => {
+    const parent = leakyParent();
+    // Positive control: the same flow under a plain ASCII name.
+    for (const name of ["Joao", "João"]) {
+      const home = join(parent, name);
+      const store = join(home, "relembra.db");
+      const opened = openSqliteStore({ path: store });
+      await opened.close();
+      expectOwnerOnly(home, store);
+    }
   });
 
   test("an ancestor owned by another account is refused even without a grant to it", () => {

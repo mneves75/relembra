@@ -24,10 +24,11 @@ const ROOT =
   "D:PAI(A;OICI;FA;;;BA)(A;OICI;FA;;;SY)(A;OICI;0x1200a9;;;BU)(A;OICIIO;SDGXGWGR;;;AU)(A;;LC;;;AU)";
 /**
  * C:\ on the windows-latest runner, as `icacls C:\ /save` wrote it (PR #7's first run): an app
- * container's read, and the mandatory label's SACL on the same line.
+ * container's read. icacls also wrote the mandatory label's SACL on the same line; the store reads
+ * the access list alone (AccessControlSections::Access), so it is left out here.
  */
 const RUNNER_ROOT =
-  "D:AI(A;;0x1000a1;;;S-1-15-3-65536-1888954469-739942743-1668119174-2468466756-4239452838-1296943325-355587736-700089176)(A;;LC;;;AU)(A;OICIIO;SDGXGWGR;;;AU)(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)S:PAI(ML;OINPIO;NW;;;HI)";
+  "D:AI(A;;0x1000a1;;;S-1-15-3-65536-1888954469-739942743-1668119174-2468466756-4239452838-1296943325-355587736-700089176)(A;;LC;;;AU)(A;OICIIO;SDGXGWGR;;;AU)(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)";
 
 const chain = (parent: string, ...above: string[]) => [
   { path: "C:\\Users\\me\\AppData", dacl: parent, ownerSid: USER, holdsStoreFolder: true },
@@ -69,7 +70,7 @@ describe("parseDacl reads an SDDL access list", () => {
     ]);
   });
 
-  test("a SACL after the access list ends it", () => {
+  test("the runner's drive root parses; text after the access list, a SACL included, is refused", () => {
     expect(parseDacl(RUNNER_ROOT)?.map((ace) => ace.sid)).toEqual([
       "S-1-15-3-65536-1888954469-739942743-1668119174-2468466756-4239452838-1296943325-355587736-700089176",
       "S-1-5-11",
@@ -79,9 +80,10 @@ describe("parseDacl reads an SDDL access list", () => {
       "S-1-5-32-545",
     ]);
     expect(chainRefusal(chain(PROFILE, PROFILE, USERS, RUNNER_ROOT), TRUSTED)).toBeUndefined();
-    expect(parseDacl("D:PS:PAI(ML;OINPIO;NW;;;HI)")).toEqual([]);
-    // Only a SACL may follow: anything else is refused.
-    expect(() => parseDacl("D:(A;;FA;;;BA)O:BA")).toThrow();
+    // The store asks for the access list alone, so any other section is unexpected text.
+    expect(() => parseDacl(`${RUNNER_ROOT}S:PAI(ML;OINPIO;NW;;;HI)`)).toThrow(/unexpected text/);
+    expect(() => parseDacl("D:PS:PAI(ML;OINPIO;NW;;;HI)")).toThrow(/unexpected text/);
+    expect(() => parseDacl("D:(A;;FA;;;BA)O:BA")).toThrow(/unexpected text/);
   });
 
   test("a null DACL and an empty one differ", () => {
