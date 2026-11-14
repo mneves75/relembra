@@ -100,7 +100,6 @@ function checkPositionals(command: CommandSpec, positionals: readonly string[]):
   if (count < min) throw usage("missing-argument", `usage: ${command.usage}`);
 }
 
-/** The single value of a flag, or undefined when it was not given. */
 export function flagValue(parsed: Parsed, name: string): string | undefined {
   return parsed.flags.get(name)?.[0];
 }

@@ -11,19 +11,21 @@ import type { ConformanceTarget } from "relembra/testing";
  */
 const { RELEMBRA_POSTGRES_URL: URL, RELEMBRA_SKIP_POSTGRES } = process.env;
 const SKIP = RELEMBRA_SKIP_POSTGRES === "1";
+/** The URL, or undefined when none is configured: an empty one counts as unset. */
+const CONFIGURED = URL === undefined || URL === "" ? undefined : URL;
 
-/** `describe` when a Postgres is configured, `describe.skip` under RELEMBRA_SKIP_POSTGRES=1. */
+/** `describe` when a Postgres is configured, `describe.skip` when none is and skipping was asked. */
 export const describePostgres: typeof describe =
-  URL === undefined && SKIP ? describe.skip : describe;
+  CONFIGURED === undefined && SKIP ? describe.skip : describe;
 
 /** The configured URL; throws, failing the test, when none is set and skipping was not asked. */
 export function postgresUrl(): string {
-  if (URL === undefined || URL === "") {
+  if (CONFIGURED === undefined) {
     throw new Error(
       "RELEMBRA_POSTGRES_URL is not set: run the tests through scripts/with-postgres.sh, or set RELEMBRA_SKIP_POSTGRES=1 to skip the Postgres tests on purpose",
     );
   }
-  return URL;
+  return CONFIGURED;
 }
 
 /** A pool of its own on the test database. */
@@ -53,15 +55,14 @@ export function freshSchema(prefix = "relembra_test"): string {
   return `${prefix}_${process.pid}_${Date.now().toString(36)}_${++schemas}`;
 }
 
-/** Drops `schema` and everything in it. */
 export async function dropSchema(sql: SQL, schema: string): Promise<void> {
-  await sql.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+  await sql.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
 }
 
 /**
  * Every row of every table in `schema`, as text, read through `sql` (not the store under test):
  * what the store holds in its tables, term index included. The physical pages may hold more (dead
- * tuples until VACUUM, the WAL); see test/postgres.test.ts for that part.
+ * tuples until VACUUM, the WAL); see test/postgres-erasure.test.ts for that part.
  */
 export async function tableText(sql: SQL, schema: string): Promise<string> {
   const tables = (await sql.unsafe(

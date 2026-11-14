@@ -38,6 +38,8 @@ failure. Keep other gates, builds and timings idle during measurement. Every run
 - `identity-final.json`: final identity compared with the gate's initial snapshot. The wrapper
   also recomputes the strict verdict from the benchmark record and compares both benchmark
   snapshots with the gate candidate. Different commits cannot combine into one passing run.
+- `release-check.json`: written last, only when every check passed; it names the pinned manifest
+  and its sha256 and the benchmark record. `scripts/deploy.sh hmo` refuses a run without it.
 
 Once the gate passes, and before the benchmark starts, the wrapper pins the manifest's sha256
 (`bun scripts/gate-manifest.ts pin`) and prints it as `gate manifest sha256:`. The pin is

@@ -701,12 +701,10 @@ select {
 }
 
 /* tick bullets: the list marker is a tick */
-.tick-list li,
 .drawer__hits li {
   position: relative;
   padding-inline-start: 18px;
 }
-.tick-list li::before,
 .drawer__hits li::before {
   content: "";
   position: absolute;

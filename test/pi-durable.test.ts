@@ -64,7 +64,6 @@ beforeAll(() => {
 });
 afterAll(() => {
   network.restore();
-  // Nothing in these tests reached the network.
   expect(network.calls).toEqual([]);
 });
 

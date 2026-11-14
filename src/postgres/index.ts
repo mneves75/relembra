@@ -18,7 +18,7 @@ import type {
   StoreTransaction,
 } from "../ports.js";
 import { type SqlClient, type SqlQuery, sqlState } from "./client.js";
-import { MIGRATIONS, migrate } from "./migrations.js";
+import { MIGRATIONS, migrate, quoted } from "./migrations.js";
 import { derivedQuery } from "./queries.js";
 import { indexMemory, readIndex, unindexMemory } from "./term-index.js";
 
@@ -30,7 +30,8 @@ export interface PostgresStoreOptions {
   readonly client: SqlClient;
   /**
    * The schema that holds the store's tables, created if missing: lower-case letters, digits and
-   * underscores, starting with a letter or underscore, at most 63 bytes. Default `relembra`.
+   * underscores, starting with a letter or underscore but not `pg_` (Postgres reserves it), at
+   * most 63 bytes. Default `relembra`.
    */
   readonly schema?: string;
   /**
@@ -39,9 +40,10 @@ export interface PostgresStoreOptions {
    */
   readonly lockTimeoutMs?: number;
   /**
-   * How many times a transaction runs in all when Postgres aborts it with a serialization failure
-   * (40001) or a deadlock (40P01), or its COMMIT got no answer after it wrote an op record (it then
-   * runs again, so the op-id check resolves it). Default 5.
+   * How many times a transaction, recordExposure's included, runs in all when Postgres aborts it
+   * with a serialization failure (40001) or a deadlock (40P01), or its COMMIT got no answer after
+   * it wrote an op record (it then runs again, so the op-id check resolves it). Then it fails with
+   * StoreRetryError. Default 5.
    */
   readonly maxAttempts?: number;
 }
@@ -105,9 +107,9 @@ const MEMORY_COLUMNS =
 export async function openPostgresStore(options: PostgresStoreOptions): Promise<Store> {
   const { client } = options;
   const schema = options.schema ?? DEFAULT_SCHEMA;
-  if (!SCHEMA_NAME.test(schema)) {
+  if (!SCHEMA_NAME.test(schema) || schema.startsWith("pg_")) {
     throw new RangeError(
-      "a Postgres schema name must be 1 to 63 lower-case letters, digits or underscores, not starting with a digit",
+      "a Postgres schema name must be 1 to 63 lower-case letters, digits or underscores, not starting with a digit or pg_",
     );
   }
   const lockTimeoutMs = options.lockTimeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS;
@@ -125,9 +127,10 @@ export async function openPostgresStore(options: PostgresStoreOptions): Promise<
   try {
     await migrate(client, schema, lockTimeoutMs, MIGRATIONS);
   } catch (error) {
-    throw busy(error, lockTimeoutMs);
+    throw asStoreBusy(error, lockTimeoutMs);
   }
-  const s = schema;
+  // Quoted, so a reserved word (user, select) names a schema like any other.
+  const s = quoted(schema);
   // The advisory lock that orders exposure recordings against redactions (see recordExposure).
   const exposureLock = `relembra exposures ${schema}`;
 
@@ -394,7 +397,7 @@ export async function openPostgresStore(options: PostgresStoreOptions): Promise<
             // outcome, a redaction since) instead of trusting this attempt's result.
             retry = error;
           } else {
-            throw busy(error, lockTimeoutMs);
+            throw asStoreBusy(error, lockTimeoutMs);
           }
         }
         if (attempts >= maxAttempts) throw new StoreRetryError(attempts, { cause: retry });
@@ -539,9 +542,8 @@ export async function openPostgresStore(options: PostgresStoreOptions): Promise<
           return memoryIds.filter((id) => found.has(id));
         } catch (error) {
           const state = sqlState(error);
-          if (state === undefined || !RETRYABLE.has(state) || attempts >= maxAttempts) {
-            throw busy(error, lockTimeoutMs);
-          }
+          if (state === undefined || !RETRYABLE.has(state)) throw asStoreBusy(error, lockTimeoutMs);
+          if (attempts >= maxAttempts) throw new StoreRetryError(attempts, { cause: error });
           await pause(attempts);
         }
       }
@@ -561,9 +563,7 @@ export async function openPostgresStore(options: PostgresStoreOptions): Promise<
 
 /** What one attempt did, read after it fails. */
 interface Attempt<T> {
-  /** Whether the work wrote anything. */
   wrote: boolean;
-  /** The op records it wrote. */
   readonly ops: OpRecord[];
   /** Set when the work resolved, before the COMMIT. */
   finished: { readonly result: T } | undefined;
@@ -578,7 +578,7 @@ function noAnswer(state: string | undefined): boolean {
 }
 
 /** A lock timeout (55P03) as StoreBusyError; any other error as it is. */
-function busy(error: unknown, lockTimeoutMs: number): unknown {
+function asStoreBusy(error: unknown, lockTimeoutMs: number): unknown {
   return sqlState(error) === "55P03" ? new StoreBusyError(lockTimeoutMs, { cause: error }) : error;
 }
 

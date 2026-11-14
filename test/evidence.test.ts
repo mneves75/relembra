@@ -139,6 +139,21 @@ describe.skipIf(NO_RELEASE_TOOLING)("inputIdentity", () => {
     expect(inputIdentity(root)).toMatchObject({ clean: false, untracked: ["eval/new.ts"] });
   });
 
+  test("a sealed eval set where eval/README.md keeps it leaves it clean; other eval files do not", () => {
+    const root = fixture({ "eval/.gitignore": "sealed/\n" });
+    const clean = inputIdentity(root);
+    write(root, "eval/sealed/real/manifest.json", "{}\n");
+    write(root, "eval/sealed/real/questions.jsonl", "{}\n");
+    expect(inputIdentity(root)).toEqual(clean);
+    // Positive controls: an ignored file elsewhere under eval/, and a look-alike name, are seen.
+    write(root, "eval/sealed-not/manifest.json", "{}\n");
+    write(root, "eval/other/sealed/manifest.json", "{}\n");
+    expect(inputIdentity(root)).toMatchObject({
+      clean: false,
+      untracked: ["eval/other/sealed/manifest.json", "eval/sealed-not/manifest.json"],
+    });
+  });
+
   test("the files the package ships and the tests read are inputs, present or not", () => {
     const root = fixture({ "README.md": "# r\n" });
     expect(inputIdentity(root).files["README.md"]).toBeDefined();
@@ -327,9 +342,10 @@ describe.skipIf(NO_RELEASE_TOOLING)("scripts/evidence.ts", () => {
       ["BUN_BE_BUN", value],
       // Bun writes this file: keep it in the scratch directory.
       ["BUN_BYTECODE_ORDER_OUT", join(scratch, `order-${value}`)],
-      // A valid JSC value: Bun refuses to start on an invalid one, and prints it itself.
-      ["BUN_JSC_useJIT", "0"],
-      ["JSC_useJIT", "0"],
+      // A valid JSC value: Bun refuses to start on an invalid one, and prints it itself. A number
+      // this long appears in no output by chance, so the check below can catch it.
+      ["BUN_JSC_thresholdForJITAfterWarmUp", "2099040990"],
+      ["JSC_thresholdForJITAfterWarmUp", "2099040990"],
     ];
     for (const [name, set] of overrides) {
       const overridden = run(["--root", root], { ...cleanEnv, [name]: set });
@@ -338,12 +354,14 @@ describe.skipIf(NO_RELEASE_TOOLING)("scripts/evidence.ts", () => {
       const printed = JSON.parse(overridden.stdout) as Snapshot;
       // Refused before either runtime is started: neither ran under the override.
       expect(printed.runtimes).toMatchObject({ available: false, bun: null, node: null });
+      // The value as set, and the marker inside the path in any form a path may be printed.
+      expect(`${overridden.stdout}${overridden.stderr}`).not.toContain(set);
       expect(`${overridden.stdout}${overridden.stderr}`).not.toContain(value);
     }
     // Positive control: set but empty is no override.
     const empty = run(["--root", root], { ...cleanEnv, NODE_OPTIONS: "", BUN_OPTIONS: "" });
     expect(empty.stderr).toBe("");
     expect(empty.status).toBe(0);
-    // Eight runs, each hashing both runtimes' executables.
+    // Eight runs of scripts/evidence.ts.
   }, 60_000);
 });

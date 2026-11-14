@@ -31,10 +31,12 @@ function parseFlag(cell: string): { name: string; value: boolean } {
   return { name: match[1] as string, value: match[2] !== undefined };
 }
 
-/** Each `### name` heading in Commands with the flags in its table. */
-function documentedCommands(): Map<string, { name: string; value: boolean }[]> {
+/** Each `### name` heading in `text` (by default, Commands) with the flags in its table. */
+function documentedCommands(
+  text = section("Commands"),
+): Map<string, { name: string; value: boolean }[]> {
   const commands = new Map<string, { name: string; value: boolean }[]>();
-  const parts = section("Commands").split("\n### ").slice(1);
+  const parts = text.split("\n### ").slice(1);
   for (const part of parts) {
     const name = /^`relembra ([a-z]+)`/.exec(part)?.[1];
     if (name === undefined) throw new Error(`docs/CLI.md has a malformed command heading: ${part}`);
@@ -114,8 +116,18 @@ describe("docs/CLI.md is the contract, checked against the command table both wa
     ).toEqual([...ENV_VARS]);
   });
 
-  test("positive control: the parser sees a flag that is missing from the table", () => {
-    const tampered = `${section("Commands")}\n### \`relembra ghost\`\n\n| \`--boo\` | x |\n`;
-    expect(tampered.split("\n### ").length - 1).toBe(documentedCommands().size + 1);
+  test("positive control: the parser sees a command and a flag that are missing from the table", () => {
+    const commands = section("Commands");
+    const real = documentedCommands();
+    const ghost = documentedCommands(`${commands}\n### \`relembra ghost\`\n\n| \`--boo\` | x |\n`);
+    expect(ghost.get("ghost")).toEqual([{ name: "--boo", value: false }]);
+    expect([...ghost.keys()].sort()).not.toEqual(COMMANDS.map((command) => command.name).sort());
+
+    // A row appended to the section lands in its last command, whose flags then differ.
+    const last = [...real.keys()].at(-1) as string;
+    const extra = documentedCommands(`${commands}\n| \`--boo <value>\` | x |\n`);
+    expect(extra.get(last)).toEqual([...(real.get(last) ?? []), { name: "--boo", value: true }]);
+    const table = COMMANDS.find((command) => command.name === last);
+    expect(extra.get(last)).not.toEqual(table?.flags.map(({ name, value }) => ({ name, value })));
   });
 });

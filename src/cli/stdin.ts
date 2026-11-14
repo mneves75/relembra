@@ -7,10 +7,10 @@ import { CliError, usage } from "./errors.js";
  * The most bytes read from stdin: a memory's 280 (MAX_MEMORY_BYTES) and a trailing `\r\n`. One
  * byte more is refused as too long at once, without waiting for the rest or for the end.
  */
-export const MAX_STDIN_BYTES = MAX_MEMORY_BYTES + 2;
+const MAX_STDIN_BYTES = MAX_MEMORY_BYTES + 2;
 
 /** How long stdin may take to end. A writer that never closes it is refused, not waited on. */
-export const STDIN_DEADLINE_MS = 5_000;
+const STDIN_DEADLINE_MS = 5_000;
 
 /**
  * A memory's text from stdin: UTF-8, at most MAX_STDIN_BYTES, with one trailing line break
@@ -56,7 +56,6 @@ export function readStdinText(): Promise<string> {
   });
 }
 
-/** The bytes as UTF-8, a BOM kept, one trailing line break removed. */
 function decode(bytes: Uint8Array): string {
   let text: string;
   try {

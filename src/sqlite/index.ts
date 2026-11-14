@@ -36,7 +36,10 @@ export {
 export { SchemaTooNewError } from "./migrations.js";
 
 export interface SqliteStoreOptions {
-  /** The database file. Missing directories are created with mode 0700, the file with 0600. */
+  /**
+   * The database file. On POSIX, missing directories are created 0700 and the file 0600; on
+   * Windows a new store needs an absent folder, created private (docs/CLI.md, Windows).
+   */
   readonly path: string;
   /** How long a write waits for another writer's lock before it fails. Default 5000. */
   readonly busyTimeoutMs?: number;
@@ -109,7 +112,6 @@ export function openSqliteStore(options: SqliteStoreOptions): SqliteStore {
       AND scope IN (SELECT value FROM json_each(?))
       AND status = 'live'
   `);
-  /** Takes `id`'s current row, if any, out of the term index. */
   const unindex = (id: string) => {
     const row = selectPosition.get(id) as { position: number } | undefined;
     if (row !== undefined) terms.remove(row.position);
@@ -627,7 +629,6 @@ interface MemoryRow {
   readonly origin: string | null;
 }
 
-/** A tombstones row. */
 interface TombstoneRow {
   readonly id: string;
   readonly scope: string;

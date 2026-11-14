@@ -5,6 +5,49 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [1.0.0-beta.8] - 2026-11-14
+
+Fixes from a second full read of the repository, and a pass over its comments: about 100 of
+2,560 comment blocks were wrong, stale or restated the code, and were rewritten or removed. The
+export format, the SQLite schema and the CLI's exit codes are unchanged.
+
+### Fixed
+
+- Windows: a new store under a path with non-ASCII characters (such as `C:\Users\João`) is
+  created. The request to the PowerShell helper is now pure ASCII; before, the console code page
+  garbled the path.
+- `exportJsonl`: a principal whose `owned` lists a scope twice exports a file `importJsonl`
+  accepts. The header used to repeat the scope, and the import refused the file.
+- Postgres: the schema identifier is quoted, so reserved words such as `user` or `select` work as
+  schema names; a name starting with `pg_` is refused with the name check's `RangeError` instead
+  of a Postgres error.
+- Postgres: `recordExposure` throws `StoreRetryError` after `maxAttempts`, as a transaction does,
+  instead of the driver's serialization error.
+- SQLite: a WAL header that names page size 1 is refused as malformed (the WAL header holds 65536
+  literally; only the database header encodes 64 KiB as 1).
+- `relembra/testing`: the in-memory store's `erasures()` returns rows in seq order, as the store
+  port promises.
+- MCP: the server instructions and the `find` tool's description say that reads also cover the
+  global scope when the host sets one.
+- Docs: `docs/FORMAT.md` says where an import checks its file (inside the transaction, before the
+  first write); `docs/CLI.md` lists the `denied:promote`, `malformed:copy-replacement` and
+  `malformed:summary-promote` import rules; the `sweep`, `sweepPreview` and `pending` docs name
+  promoted copies and the trust condition.
+
+### Changed
+
+- A wake renders memories only as far as its byte budget holds, so a large scope costs no more
+  than the budget; the output is byte-identical.
+- `relembra/testing`: the conformance suite runs the `events` and import-checkpoint cases on
+  non-durable adapters too, requires `erasures()` in seq order, requires every scanned surface to
+  hold the text before a promote/redact, and requires a transaction handle to accept writes while
+  its transaction is open. A third-party adapter can newly fail these cases.
+- The latency benchmark's ten queries alternate pt-BR and English (they were all pt-BR); the
+  corpus is unchanged.
+- A sealed eval set kept in `eval/sealed/`, where `eval/README.md` says to keep it, no longer
+  stops the release gate.
+- Hosted Windows CI no longer runs six diagnostic PowerShell probes whose results were ignored.
+
 ## [1.0.0-beta.7] - 2026-11-11
 
 One MCP hardening and four landing-page fixes. The library API, the store schemas, the export
@@ -244,6 +287,7 @@ table of `docs/specs/IMPLEMENTATION-PLAN.md`. Known residuals are documented in 
 (import id existence) and `docs/CLI.md` (same-user trust model). Report vulnerabilities as
 [SECURITY.md](SECURITY.md) describes.
 
+[1.0.0-beta.8]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.8
 [1.0.0-beta.7]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.7
 [1.0.0-beta.6]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.6
 [1.0.0-beta.5]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.5

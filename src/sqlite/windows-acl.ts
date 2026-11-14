@@ -22,7 +22,10 @@ export interface ChainFolder {
   readonly path: string;
   readonly dacl: string;
   readonly ownerSid: string;
-  /** The folder the store folder is made in. */
+  /**
+   * The deepest existing ancestor, where the first missing folder of the store's path is made: the
+   * store folder's parent only when that exists.
+   */
   readonly holdsStoreFolder: boolean;
 }
 
@@ -135,8 +138,6 @@ export function parseDacl(sddl: string): Ace[] | null {
   const aces: Ace[] = [];
   let index = 0;
   while (index < rest.length) {
-    // `icacls /save` writes the SACL, the mandatory label, on the same line: it ends the DACL.
-    if (rest.startsWith("S:", index)) break;
     if (rest[index] !== "(")
       throw new Error(`unexpected text in access list: ${rest.slice(index)}`);
     // A conditional entry holds parentheses of its own, so the entry ends where depth returns to 0,
@@ -200,7 +201,7 @@ function parseRights(rights: string, text: string): number {
   for (const letter of letters) {
     const right = RIGHTS[letter];
     if (right === undefined) throw new Error(`unknown access right ${letter}: (${text})`);
-    // Rights above bit 30 make a JavaScript bitwise result negative, so they are added.
+    // `>>> 0` keeps the mask unsigned: GR (bit 31) would make a bitwise result negative.
     mask = (mask | right) >>> 0;
   }
   return mask;
@@ -224,8 +225,8 @@ export function storeFolderChain(storeFolder: string): string[] {
 }
 
 /**
- * Why another account could change the path to the store folder, or undefined when none could.
- * R1 to R4 are the rules of docs/specs/w-nv1/spec.md; the first folder that breaks one is named.
+ * Why another account could change the path to the store folder, or undefined when none could:
+ * the rule-3 refusals of docs/specs/w-nv1/spec.md; the first folder that breaks one is named.
  */
 export function chainRefusal(
   chain: readonly ChainFolder[],
@@ -253,7 +254,7 @@ export function chainRefusal(
       }
       if (own & DELETE_CHILD) return refuse("rename or delete the folders in it");
       if (!folder.holdsStoreFolder) continue;
-      if (own & (ADD_SUBDIRECTORY | GENERIC_WRITE)) return refuse("create the store folder first");
+      if (own & ADD_SUBDIRECTORY) return refuse("create the store folder first");
       if (ace.containerInherit && (ace.mask & ~READ_EXECUTE) >>> 0 !== 0) {
         return refuse("open the new store folder before its ACL is set");
       }

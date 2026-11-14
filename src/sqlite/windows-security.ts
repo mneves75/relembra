@@ -162,6 +162,18 @@ try {
 }
 `;
 
+/**
+ * The request as pure-ASCII JSON: Windows PowerShell decodes stdin with the console's code page,
+ * not UTF-8, so every non-ASCII code unit travels as a `\uXXXX` escape, which JavaScriptSerializer
+ * decodes. A path such as `C:\Users\João` then arrives intact whatever the code page.
+ */
+export function requestJson(request: unknown): string {
+  return JSON.stringify(request).replace(
+    /[\u0080-\uffff]/g,
+    (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
+}
+
 function run(executable: string, request: unknown): unknown {
   const child = spawnSync(
     executable,
@@ -173,7 +185,7 @@ function run(executable: string, request: unknown): unknown {
       Buffer.from(PROGRAM, "utf16le").toString("base64"),
     ],
     {
-      input: JSON.stringify(request),
+      input: requestJson(request),
       encoding: "utf8",
       shell: false,
       windowsHide: true,

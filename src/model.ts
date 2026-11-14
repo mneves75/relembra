@@ -229,8 +229,8 @@ export interface RetractEvent {
 }
 
 /**
- * A memory was superseded: `by` replaced it (written by the note event just before), and it is no
- * longer served.
+ * A memory was superseded: `by` replaced it (noted earlier: the direct operation writes it by the
+ * note event just before, an import may hold it on any earlier line), and it is no longer served.
  */
 export interface SupersedeEvent {
   readonly format: typeof EVENT_FORMAT;

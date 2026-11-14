@@ -114,10 +114,10 @@ is the library's host: it decides the scope and the principal, never the agent c
     redact erases with it, and the copies promoted from it that the principal may see: a copy's
     trust is never above its origin's); `retract` and `supersede` check the memory and the live summaries in
     it, which they retract; `sweep` checks every memory `Relembra.sweepPreview(now)` returns
-    (superseded and retracted memories, and derived summaries, included), with the same `now`
-    the sweep then uses. Each preview shares its code with the operation it previews. The library
-    never lets a summary outrank its sources, so a derived owner summary under a non-owner memory
-    comes only from data written elsewhere; it is gated all the same.
+    (superseded and retracted memories, and derived summaries and promoted copies, included),
+    with the same `now` the sweep then uses. Each preview shares its code with the operation it
+    previews. The library never lets a summary outrank its sources, so a derived owner summary
+    under a non-owner memory comes only from data written elsewhere; it is gated all the same.
   - The confirmation approves that plan and no other. The CLI hands the preview to the mutation
     (`expect`, an `Approval` in the library), which plans again inside its own write transaction
     and writes nothing when the memories it would change differ from the preview in any field
@@ -205,7 +205,7 @@ is the library's host: it decides the scope and the principal, never the agent c
 | `source-changed` | 1 | A summary source is no longer at the given revision | |
 | `plan-changed` | 1 | What `retract`, `redact`, `supersede` or `sweep` would change kept changing while it previewed and confirmed: three plans in a row (see Trust) | |
 | `redacted` | 1 | A retried write's memory was redacted since | |
-| `import` | 1 | `import` refused the file and wrote nothing ([`import`](#relembra-import)) | `format-too-new`, `malformed`, `malformed:summary-supersede`, `malformed:<field>:<rule>` for an identifier, such as `malformed:memoryId:control-character`, `guard:<rule>`, `provenance:<field>:<rule>`, `future-time`, `redacted-in-target`, `conflict`, `denied:above-ceiling`, `denied:pin`, `truncated`, `modified`, `not-optmem`, `too-large:file`, `too-large:line`, `too-large:events`, `too-large:records` |
+| `import` | 1 | `import` refused the file and wrote nothing ([`import`](#relembra-import)) | `format-too-new`, `malformed`, `malformed:summary-supersede`, `malformed:copy-replacement`, `malformed:summary-promote`, `malformed:<field>:<rule>` for an identifier, such as `malformed:memoryId:control-character`, `guard:<rule>`, `provenance:<field>:<rule>`, `future-time`, `redacted-in-target`, `conflict`, `denied:above-ceiling`, `denied:pin`, `denied:promote`, `truncated`, `modified`, `not-optmem`, `too-large:file`, `too-large:line`, `too-large:events`, `too-large:records` |
 | `no-store` | 3 | The store file does not exist; run `relembra init` | |
 | `schema-too-new` | 3 | A newer relembra wrote the store; it is left untouched | |
 | `store-file` | 3 | The store, a sidecar or its directory is not owner-only, or is not a regular file | `mode`, `type` |
@@ -359,8 +359,8 @@ confirmation (see Trust).
 ### `relembra redact`
 
 `relembra redact <id>`. Replaces the memory's text with a tombstone everywhere, with every summary
-derived from it. When the memory or one of those summaries has owner trust, it needs
-confirmation (see Trust).
+and promoted copy derived from it. When the memory or one of those summaries has owner trust, it
+needs confirmation (see Trust).
 
 `data`: `{ redacted: [id], derived: [id…] }`.
 
@@ -386,8 +386,8 @@ with `--trust owner`, it needs confirmation (see Trust).
 ### `relembra pending`
 
 The session scope's memories due for a summary, oldest first: live, unpinned, not summaries, not
-covered by a live summary at their current revision. Never the global scope's: a summary's
-sources must be in the summary's scope.
+covered by a live summary, at least as trusted as they are, at their current revision. Never the
+global scope's: a summary's sources must be in the summary's scope.
 
 | Flag | Meaning |
 |---|---|
@@ -415,10 +415,11 @@ capped at the least of its sources' (an explicit higher trust is refused). The t
 
 ### `relembra sweep`
 
-Redacts the scope's memories first noted more than n days ago, with their derived summaries. The
-host schedules it (cron, launchd); relembra runs no timer. When anything it would redact has owner
-trust (a superseded or retracted memory, or a derived summary, included), it needs confirmation
-(see Trust), so a scheduled sweep never expires an owner rule unattended.
+Redacts the scope's memories first noted more than n days ago, with their derived summaries and
+promoted copies. The host schedules it (cron, launchd); relembra runs no timer. When anything it
+would redact has owner trust (a superseded or retracted memory, a derived summary or a promoted
+copy included), it needs confirmation (see Trust), so a scheduled sweep never expires an owner
+rule unattended.
 
 | Flag | Meaning |
 |---|---|

@@ -22,13 +22,13 @@ const CHILD = join(fileURLToPath(new URL(".", import.meta.url)), "sqlite-upgrade
  *   switch reads the current version, and right after its COMMIT another process commits a newer
  *   schema and is killed.
  */
-export type Interleaving = "converted-before-the-lock" | "upgraded-after-the-commit";
+type Interleaving = "converted-before-the-lock" | "upgraded-after-the-commit";
 export const INTERLEAVINGS: readonly Interleaving[] = [
   "converted-before-the-lock",
   "upgraded-after-the-commit",
 ];
 
-export interface RaceResult {
+interface RaceResult {
   /** sha256 of the main file, -wal and -shm (null when absent) once the killed commit is there. */
   readonly before: readonly (string | null)[] | undefined;
   readonly after: readonly (string | null)[];
@@ -36,7 +36,7 @@ export interface RaceResult {
   readonly refusal: unknown;
 }
 
-/** Creates a schema-2 store at `path` in rollback-journal mode, then opens it through `interleaving`. */
+/** Creates a store at the current schema at `path` in rollback-journal mode, then opens it through `interleaving`. */
 export async function openDuringUpgrade(
   path: string,
   interleaving: Interleaving,

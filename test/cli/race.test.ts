@@ -82,25 +82,22 @@ const OPS = [
 
 describe("a confirmation approves one plan: a write landing while the prompt waits is shown again", () => {
   for (const op of OPS) {
-    ptyCliTest(
-      `${op.name}: Sol's repro, the unseen summary survives and the new prompt shows it`,
-      async () => {
-        const { box, source } = await seeded(op.ageDays);
-        try {
-          const result = race(box, source, "right,wrong", op.args(source.id));
-          // The right code for the first prompt did not apply it to a plan that had grown.
-          expect(liveSummaries(box)).toBe(1);
-          expect(ok(box, ["zoom", source.id]).memory.status).toBe("live");
-          const [first = "", second = ""] = prompts(result.stdout);
-          expect(first).not.toContain(SUMMARY);
-          expect(second).toContain(SUMMARY);
-          expect(result.status).toBe(1);
-          expect(result.stdout).toContain('"mismatch"');
-        } finally {
-          box.remove();
-        }
-      },
-    );
+    ptyCliTest(`${op.name}: the unseen summary survives and the new prompt shows it`, async () => {
+      const { box, source } = await seeded(op.ageDays);
+      try {
+        const result = race(box, source, "right,wrong", op.args(source.id));
+        // The right code for the first prompt did not apply it to a plan that had grown.
+        expect(liveSummaries(box)).toBe(1);
+        expect(ok(box, ["zoom", source.id]).memory.status).toBe("live");
+        const [first = "", second = ""] = prompts(result.stdout);
+        expect(first).not.toContain(SUMMARY);
+        expect(second).toContain(SUMMARY);
+        expect(result.status).toBe(1);
+        expect(result.stdout).toContain('"mismatch"');
+      } finally {
+        box.remove();
+      }
+    });
 
     ptyCliTest(
       `${op.name}: positive control, the same race confirmed again goes through`,
@@ -139,7 +136,7 @@ describe("a confirmation approves one plan: a write landing while the prompt wai
     const { box, source } = await seeded(0);
     try {
       const result = race(box, source, "right,wrong", ["redact", source.id], { write: "edit" });
-      // Sol's round-4 repro: same id, seq, revision and trust, so the old code erased the new text.
+      // Regression: same id, seq, revision and trust, so the old code erased the new text.
       const zoomed = ok(box, ["zoom", source.id]).memory;
       expect(zoomed.status).toBe("live");
       expect(zoomed.revision.text).toBe("Concurrent in-place text.");

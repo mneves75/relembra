@@ -2,8 +2,7 @@ import { randomInt } from "node:crypto";
 import { closeSync, constants, openSync, readSync, writeSync } from "node:fs";
 import { CliError } from "./errors.js";
 
-/** How long the person at the terminal has to type the code. */
-export const CONFIRM_TIMEOUT_MS = 60_000;
+const CONFIRM_TIMEOUT_MS = 60_000;
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 6;

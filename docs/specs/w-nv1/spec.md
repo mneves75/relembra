@@ -105,7 +105,7 @@ PowerShell absence, policy refusal, timeout or malformed output fails closed.
   preexisting directories with open writable handles remain unchanged and receive no store.
 - A failing mkdtemp positive control with unavailable TEMP/TMP accompanies successful store
   creation. Quoted PowerShell syntax in a directory name remains literal data.
-- Existing R1–R4, junction, existing-store and sidecar scenarios remain covered with the
+- Existing rule-3 refusals, junction, existing-store and sidecar scenarios remain covered with the
   stronger absent-leaf policy. General persistence fixtures use absent per-store directories,
   with raw existing-database fixtures prepared explicitly.
 - Node 24.14/26, Bun and the native AOT executable run the applicable scenarios. Skipped

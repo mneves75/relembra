@@ -1,7 +1,7 @@
 import type { Scope, Store } from "relembra";
 
 /** What an import must reproduce of one memory: its identity, scope, status, text and links. */
-export interface Described {
+interface Described {
   readonly id: string;
   readonly scope: Scope;
   readonly status: string;

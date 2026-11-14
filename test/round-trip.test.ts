@@ -8,6 +8,7 @@ import { join } from "node:path";
 import {
   createRelembra,
   exportJsonl,
+  ImportError,
   importJsonl,
   type Memory,
   type Principal,
@@ -90,8 +91,14 @@ function randomText(random: ReturnType<typeof prng>, serial: number): string {
   return text;
 }
 
-/** Builds a random store through the public API: notes, pins, supersedes, summaries, retractions, redactions. */
-async function randomCorpus(store: Store, seed: number): Promise<void> {
+/** Whether `jsonl` holds `text` as a whole JSON string, escaped as an export writes it. */
+const holds = (jsonl: string, text: string) => jsonl.includes(JSON.stringify(text));
+
+/**
+ * Builds a random store through the public API: notes, pins, supersedes, summaries, retractions,
+ * redactions. Returns the texts of the SCOPE memories it redacted.
+ */
+async function randomCorpus(store: Store, seed: number): Promise<string[]> {
   const random = prng(seed);
   let n = 0;
   const relembra = createRelembra<Principal>({
@@ -102,6 +109,7 @@ async function randomCorpus(store: Store, seed: number): Promise<void> {
   });
   const live: Memory[] = [];
   const all: Memory[] = [];
+  const redactedTexts = new Map<string, string>();
   const operations = 10 + random.int(50);
   for (let i = 0; i < operations; i++) {
     const roll = random.int(10);
@@ -147,10 +155,20 @@ async function randomCorpus(store: Store, seed: number): Promise<void> {
       all.push(summary);
     } else if (roll >= 8) {
       const victim = random.pick(all);
+      const before = await exportJsonl(store, owner, { scope: SCOPE });
       const { redacted, derived } = await relembra.redact(owner, { memoryId: victim.id });
       for (const id of [...redacted, ...derived]) {
         const gone = live.find((m) => m.id === id);
         if (gone !== undefined) drop(gone);
+        const memory = all.find((m) => m.id === id);
+        if (memory === undefined || memory.scope !== SCOPE || redactedTexts.has(id)) continue;
+        // Positive control: the export held this text until the redaction.
+        expect({ seed, id, held: holds(before, memory.revision.text) }).toEqual({
+          seed,
+          id,
+          held: true,
+        });
+        redactedTexts.set(id, memory.revision.text);
       }
     }
     // A retraction or supersession also retracts the summaries derived from the memory: re-read.
@@ -159,11 +177,19 @@ async function randomCorpus(store: Store, seed: number): Promise<void> {
     );
     for (const memory of [...live]) if (!served.has(memory.id)) drop(memory);
   }
+  return [...redactedTexts.values()];
 }
 
 /** Exports SCOPE of `source`, imports it into the empty `target`, and checks the property. */
-async function checkRoundTrip(source: Store, target: Store, seed: number): Promise<void> {
+async function checkRoundTrip(
+  source: Store,
+  target: Store,
+  seed: number,
+  redactedTexts: readonly string[],
+): Promise<void> {
   const jsonl = await exportJsonl(source, owner, { scope: SCOPE });
+  const leaked = (file: string) => redactedTexts.filter((text) => holds(file, text));
+  expect({ seed, leaked: leaked(jsonl) }).toEqual({ seed, leaked: [] });
   const lines = jsonl.split("\n").length - 2;
   const first = await importJsonl(target, importer, jsonl);
   // A replayed retraction or redaction cascades to derived summaries itself, so the file's own
@@ -177,11 +203,8 @@ async function checkRoundTrip(source: Store, target: Store, seed: number): Promi
 
   const before = await describeStore(source, [SCOPE]);
   const after = await describeStore(target, [SCOPE]);
+  // Equal strings, so equal bytes.
   expect({ seed, memories: after }).toEqual({ seed, memories: before });
-  for (const [index, memory] of before.entries()) {
-    if (memory.text === undefined) continue;
-    expect(Buffer.compare(Buffer.from(after[index]?.text ?? ""), Buffer.from(memory.text))).toBe(0);
-  }
   // Nothing of another scope came across.
   expect(await target.events({ scopes: [OTHER_SCOPE] })).toEqual([]);
 
@@ -192,6 +215,7 @@ async function checkRoundTrip(source: Store, target: Store, seed: number): Promi
   });
   // The copy's own export, imported back into the source, is already there.
   const back = await exportJsonl(target, importer, { scope: SCOPE });
+  expect({ seed, leaked: leaked(back) }).toEqual({ seed, leaked: [] });
   expect(await importJsonl(source, owner, back)).toMatchObject({ imported: 0 });
 }
 
@@ -200,8 +224,8 @@ describe("export then import reproduces a random store", () => {
   for (const seed of seeds) {
     test(`memory store, seed ${seed}`, async () => {
       const source = createMemoryStore();
-      await randomCorpus(source, seed);
-      await checkRoundTrip(source, createMemoryStore(), seed);
+      const redacted = await randomCorpus(source, seed);
+      await checkRoundTrip(source, createMemoryStore(), seed, redacted);
     });
   }
 
@@ -211,8 +235,8 @@ describe("export then import reproduces a random store", () => {
       const source = openSqliteStore({ path: join(dir.path, "source", "relembra.db") });
       const target = openSqliteStore({ path: join(dir.path, "target", "relembra.db") });
       try {
-        await randomCorpus(source, seed);
-        await checkRoundTrip(source, target, seed);
+        const redacted = await randomCorpus(source, seed);
+        await checkRoundTrip(source, target, seed, redacted);
       } finally {
         await source.close();
         await target.close();
@@ -224,9 +248,10 @@ describe("export then import reproduces a random store", () => {
 
   test("the corpora exercise every event kind, redacted forms included", async () => {
     const kinds = new Set<string>();
+    let redactedTexts = 0;
     for (const seed of seeds) {
       const store = createMemoryStore();
-      await randomCorpus(store, seed);
+      redactedTexts += (await randomCorpus(store, seed)).length;
       for (const event of await store.events({ scopes: [SCOPE] })) {
         kinds.add("redacted" in event ? `${event.kind}:redacted` : event.kind);
       }
@@ -240,6 +265,8 @@ describe("export then import reproduces a random store", () => {
       "summarize:redacted",
       "supersede",
     ]);
+    // The leak check in checkRoundTrip has texts to look for.
+    expect(redactedTexts).toBeGreaterThan(0);
   });
 
   test("random overlapping imports: every successful import leaves an export that re-imports into an empty store", async () => {
@@ -259,7 +286,12 @@ describe("export then import reproduces a random store", () => {
         const kept = new Set(ids.filter(() => random.chance(round === 5 ? 1 : 0.5)));
         const lines = events.filter((line) => kept.has(JSON.parse(line).memoryId));
         const file = `${[header, ...lines].join("\n")}\n`;
-        const report = await importJsonl(target, importer, file).catch(() => undefined);
+        // A partial file is refused whole when it lacks what a line needs (ImportError): any other
+        // error is a fault.
+        const report = await importJsonl(target, importer, file).catch((error: unknown) => {
+          if (error instanceof ImportError) return undefined;
+          throw error;
+        });
         if (report === undefined) continue;
         if (succeeded > 0 && report.skipped > 0 && report.imported > 0) overlapping++;
         succeeded++;
@@ -275,14 +307,13 @@ describe("export then import reproduces a random store", () => {
         });
         expect(await describeStore(copy, [SCOPE])).toEqual(await describeStore(target, [SCOPE]));
       }
-      // Some rounds import. One may not: once an earlier partial file superseded a replacement,
-      // a later file that supersedes into it is refused, as the direct path would refuse it.
+      // Some rounds import; about half are refused, as the direct path would refuse them. A
+      // supersede or summary whose replacement or sources neither the file nor the store holds is
+      // malformed; one naming a memory an earlier file already changed is a conflict.
       expect({ seed, succeeded: succeeded > 0 }).toEqual({ seed, succeeded: true });
     }
     // Positive control: the generator does produce imports that overlap what the store holds.
     expect(overlapping).toBeGreaterThan(10);
-    // 40 seeds of 6 import and re-import rounds took 2.1 s under heavy load: the 5 s default is
-    // too tight.
   }, 60_000);
 
   test("positive control: a corrupted copy is caught", async () => {

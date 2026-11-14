@@ -3,7 +3,6 @@
  * OptMem's public README and CHANGELOG and from the bytes of a real log, never from its code;
  * FORMAT.md separates what each shows. No I/O: the host reads the file and passes its bytes.
  */
-import { createHash } from "node:crypto";
 import { ImportError, ScopeDeniedError } from "./errors.js";
 import { findGuardViolation, MAX_MEMORY_BYTES } from "./guard.js";
 import {
@@ -13,6 +12,7 @@ import {
   type Revision,
   type Scope,
 } from "./model.js";
+import { sha256 } from "./ops.js";
 import { type Clock, type Store, systemClock } from "./ports.js";
 import {
   acceptanceTime,
@@ -125,7 +125,7 @@ export async function importOptmem(
   if (count > MAX_IMPORT_EVENTS)
     throw new ImportError("too-large", MAX_IMPORT_EVENTS + 1, "records");
   const prefixes = readPrefixes(log, width, count);
-  const source = `optmem:${sha256(utf8(scope)).slice(0, 16)}:${name}`;
+  const source = `optmem:${sha256(scope).slice(0, 16)}:${name}`;
 
   return store.transaction(async (tx) => {
     if (fence !== undefined) await enforceFence(tx, fence);
@@ -304,13 +304,5 @@ function recordText(bytes: Uint8Array): string | undefined {
  * again finds the memory, and minted per scope, so the same record in two scopes never collides.
  */
 function optmemId(scope: Scope, name: string, n: number): string {
-  return `om-${sha256(utf8(`${scope}\0optmem:${name}\0${n}`)).slice(0, 32)}`;
-}
-
-function utf8(text: string): Uint8Array {
-  return new TextEncoder().encode(text);
-}
-
-function sha256(bytes: Uint8Array): string {
-  return createHash("sha256").update(bytes).digest("hex");
+  return `om-${sha256(`${scope}\0optmem:${name}\0${n}`).slice(0, 32)}`;
 }

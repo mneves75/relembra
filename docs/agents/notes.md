@@ -5,6 +5,20 @@ Dated entries, newest first. Keep out secrets, local paths, private names and se
 the repository is public. Code and procedure live in their own files; this file holds only what
 those files cannot say: the mistake, the dead end, the thing that turned out to matter.
 
+## 2026-11-14: 1.0.0-beta.8 (comment pass, second audit)
+
+- About 4% of the 2,560 comment blocks were removable; most explain a platform quirk or a spec
+  rule. Count by mechanical inventory first, then classify in context; a guessed share misleads.
+- A change to `src` that the site bundle includes (the library, the memory store) needs
+  `bun run build:site` in the same branch. Resolve a conflict in `site/assets/relembra.js` by
+  rebuilding, never by hand.
+- `scripts/pack-smoke-consumer.js` pins the Postgres store's statement text. Quoting the schema
+  changed it, and only `test/pack-smoke.test.ts` noticed; run it after any SQL text change.
+- `test/pack-smoke.test.ts` calls the checkout's `node_modules/.bin/tsc`: in a worktree without
+  its own install it fails with `tsc: undefinedundefined`.
+- Windows PowerShell reads a redirected stdin in the console code page, not UTF-8. Send it
+  ASCII-only JSON (`\uXXXX` escapes); setting `[Console]::InputEncoding` depends on host state.
+
 ## 2026-11-11: 1.0.0-beta.7 (H-19, site fixes)
 
 - The strict benchmark failed on a sound candidate at a 1-minute load near 230 on 18 cores, with

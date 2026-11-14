@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { createRelembra, type Memory } from "relembra";
-import { indexEntry, renderMemory } from "../src/render.js";
+import {
+  type Entry,
+  frame,
+  indexEntry,
+  renderMemory,
+  utf8Bytes,
+  wakeEntries,
+} from "../src/render.js";
 import { createMemoryStore } from "../src/testing/memory-store.js";
 import { openRendering, parseRendering, SCOPE, unescapeText } from "./render-support.js";
 
@@ -245,5 +252,112 @@ describe("rendering never emits a raw control, bidi or invisible character, what
     expect(renderMemory(stored({ id: "m-1", text: "Plain é text." }))).toBe(
       '<memory id="m-1" scope="dev/example-repo" rev="1" at="1970-01-01T00:00:00.000Z" trust="agent">Plain é text.</memory>',
     );
+  });
+});
+
+/**
+ * The wake's entries as computed before rendering was made lazy: every memory rendered in full
+ * and every remaining one as an index entry, then the longest prefix of each that fits.
+ */
+function eagerWakeEntries(ordered: readonly Memory[], budgetBytes: number): Entry[] {
+  const fitting = (entries: readonly Entry[], room: number) => {
+    let used = 0;
+    for (let count = 0; count < entries.length; count++) {
+      used += utf8Bytes((entries[count] as Entry).line) + 1;
+      if (used > room) return count;
+    }
+    return entries.length;
+  };
+  const room = budgetBytes - utf8Bytes(frame("wake", []));
+  const full = ordered.map((memory) => ({ line: renderMemory(memory), carries: memory.id }));
+  const shown = full.slice(0, fitting(full, room));
+  const index = ordered.slice(shown.length).map(indexEntry);
+  const used = shown.reduce((sum, entry) => sum + utf8Bytes(entry.line) + 1, 0);
+  return [...shown, ...index.slice(0, fitting(index, room - used))];
+}
+
+describe("a wake renders only what its budget can hold", () => {
+  const ordered = [
+    stored({ id: "m-a", text: "Short." }),
+    stored({ id: "m-b", text: 'Escaped & <marked> "quoted" text.' }),
+    stored({ id: "m-é", text: "Multi-byte é ü 👨‍👩‍👧 text." }),
+    stored({
+      id: "m-d",
+      text: "A longer memory that takes more of the budget than the others do.",
+    }),
+    stored({ id: "m-e", text: "Tiny." }),
+    stored({ id: "m-f", text: "Last." }),
+  ];
+
+  test("at every budget, byte by byte, the entries are the full computation's", () => {
+    const all = utf8Bytes(frame("wake", ordered.map(renderMemory)));
+    let mixed = 0;
+    for (let budget = 0; budget <= all + 8; budget++) {
+      const entries = wakeEntries(ordered, budget);
+      expect(entries).toEqual(eagerWakeEntries(ordered, budget));
+      if (entries.some((entry) => entry.carries === undefined)) mixed++;
+    }
+    // Positive control: the sweep crosses budgets with no entry, with full entries only, and with
+    // both, the first memory that did not fit in full being the first index entry.
+    expect(wakeEntries(ordered, 0)).toEqual([]);
+    expect(wakeEntries(ordered, all).map((entry) => entry.carries)).toEqual(
+      ordered.map((memory) => memory.id),
+    );
+    expect(mixed).toBeGreaterThan(0);
+    const exact = utf8Bytes(frame("wake", ordered.slice(0, 2).map(renderMemory)));
+    expect(wakeEntries(ordered, exact)).toEqual([
+      { line: renderMemory(ordered[0] as Memory), carries: "m-a" },
+      { line: renderMemory(ordered[1] as Memory), carries: "m-b" },
+    ]);
+    expect(wakeEntries(ordered, exact + 40).slice(0, 3)).toEqual([
+      { line: renderMemory(ordered[0] as Memory), carries: "m-a" },
+      { line: renderMemory(ordered[1] as Memory), carries: "m-b" },
+      { line: '<index id="m-é"/>' },
+    ]);
+  });
+
+  test("in a large store, only the memories that could fit are rendered", () => {
+    const read = new Set<string>();
+    const large = Array.from({ length: 20_000 }, (_, n) => {
+      const memory = stored({ id: `m-${n}`, text: `Memory number ${n} of a large store.` });
+      const { revision } = memory;
+      const lazy = Object.defineProperty({ ...revision }, "text", {
+        get() {
+          read.add(memory.id);
+          return revision.text;
+        },
+      });
+      return { ...memory, revision: lazy } as Memory;
+    });
+    const entries = wakeEntries(large, 9_500);
+    const full = entries.filter((entry) => entry.carries !== undefined);
+    expect(full.length).toBeGreaterThan(0);
+    expect(entries.length).toBeGreaterThan(full.length);
+    // The memories shown in full and the first that did not fit; index entries need no text.
+    expect(read.size).toBe(full.length + 1);
+    read.clear();
+    expect(entries).toEqual(eagerWakeEntries(large, 9_500));
+    // Positive control: the full computation reads every memory.
+    expect(read.size).toBe(large.length);
+  });
+
+  test("a memory with metadata out of bounds is refused wherever it falls, past the budget too", () => {
+    const corrupt = (memory: Memory, revision: Partial<Memory["revision"]>): Memory =>
+      ({ ...memory, revision: { ...memory.revision, ...revision } }) as Memory;
+    const long = stored({ id: "m-a", text: "x".repeat(200) });
+    for (const bad of [
+      corrupt(stored({ id: "m-bad", text: "Corrupt rev." }), { number: 0 }),
+      corrupt(stored({ id: "m-bad", text: "Corrupt time." }), { at: Number.NaN }),
+      { ...stored({ id: "m-bad", text: "Corrupt scope." }), scope: "" } as Memory,
+    ]) {
+      // Shown in full, as an index entry, and past the budget: refused each time.
+      for (const budget of [9_500, 300, 0]) {
+        expect(() => wakeEntries([long, bad], budget)).toThrow(TypeError);
+      }
+    }
+    // Positive control: the same order with a sound memory in its place renders.
+    const sound = stored({ id: "m-ok", text: "Sound." });
+    for (const budget of [9_500, 300, 0])
+      expect(() => wakeEntries([long, sound], budget)).not.toThrow();
   });
 });

@@ -447,8 +447,11 @@ export function bulkCorpus(options: {
         pinned: memories.length % 1000 === 0,
       });
     }
-    // Ten queries spread over the corpus, alternating languages and attributes.
-    if (queries.length < 10 && i % Math.max(1, Math.floor(entities.length / 10)) === 0) {
+    // Ten queries spread over the corpus, alternating languages and attributes: query k takes the
+    // first entity from k steps on whose language is k's.
+    const step = Math.max(1, Math.floor(entities.length / 10));
+    const k = queries.length;
+    if (k < 10 && i >= k * step && i % LANGUAGES.length === k % LANGUAGES.length) {
       queries.push(language.attributes[queries.length % 4]?.query(entity) ?? entity);
     }
   }
