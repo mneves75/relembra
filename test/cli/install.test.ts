@@ -123,7 +123,7 @@ describe.skipIf(NO_RELEASE_TOOLING)(
         const other = join(dir, "other");
         mkdirSync(other);
         mkdirSync(dest());
-        // Sol's repro: a symlink to a directory got "installed" inside it as .relembra.XXXXXX.
+        // Regression: a symlink to a directory got "installed" inside it as .relembra.XXXXXX.
         symlinkSync("../other", join(dest(), "relembra"));
         const viaLink = install(binary, sums, dest());
         expect(viaLink.status).toBe(1);

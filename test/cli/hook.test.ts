@@ -35,13 +35,13 @@ function expectSilent(options: RunOptions = {}, args: string[] = []) {
 }
 
 describe("the session-start hook fails open: whatever goes wrong, exit 0 and no context", () => {
-  cliTest("an invalid RELEMBRA_SCOPE (Sol's repro: it exited 2)", () => {
+  cliTest("an invalid RELEMBRA_SCOPE (it once exited 2)", () => {
     box = sandbox();
     ok(box, ["init"]);
     expectSilent({ env: { RELEMBRA_SCOPE: "a\nb" } });
   });
 
-  cliTest("a corrupt store (Sol's repro: it exited 3 with diagnostics)", () => {
+  cliTest("a corrupt store (it once exited 3 with diagnostics)", () => {
     box = sandbox();
     ok(box, ["init"]);
     ok(box, ["note", "a fact"]);
@@ -78,7 +78,7 @@ describe("the session-start hook fails open: whatever goes wrong, exit 0 and no 
           encoding: "utf8",
           timeout: 30_000,
         });
-      // Sol's repro: Bun acts on these before relembra's code, so no in-binary check can refuse them.
+      // Regression: Bun acts on these before relembra's code, so no in-binary check can refuse them.
       const direct = spawnSync(BINARY, ["hook"], {
         cwd: box.repo,
         env: sandboxEnv(box, { BUN_OPTIONS: "--version" }),

@@ -200,7 +200,7 @@ describe("bad input, refused cleanly by the compiled binary", () => {
   cliTest(
     "stdin left open: too much input is refused at once, a stall at the deadline",
     async () => {
-      // Sol's repro: 1,000 bytes with stdin never closed blocked until killed.
+      // Regression: 1,000 bytes with stdin never closed blocked until killed.
       const long = await runStdinOpen(box, ["note", "--json"], "a".repeat(1000));
       expect(long.killed).toBe(false);
       expect(long.elapsedMs).toBeLessThan(3_000);
