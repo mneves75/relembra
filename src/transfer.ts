@@ -520,6 +520,11 @@ class Replay {
    * supersede lines give them, as a stored memory's would change.
    */
   private readonly awaitingTombstone = new Map<MemoryId, Pending>();
+  /**
+   * Memories the store holds with their text that the file gave in redacted form: their redact
+   * event must follow, as for one the store lacks. Mapped to the line that gave the redacted form.
+   */
+  private readonly awaitingRedact = new Map<MemoryId, number>();
 
   private readonly tx: StoreTransaction;
   private readonly principal: Principal;
@@ -532,21 +537,32 @@ class Replay {
   }
 
   async apply({ line, event }: Parsed): Promise<void> {
-    const stored = await this.tx.memory(event.memoryId);
-    // Memory ids are one namespace across scopes, so an id another scope holds cannot be written
-    // here: the refusal tells a caller who already knows that id that it exists (never its text
-    // or state), where an absent id imports. Ids are unguessable to keep that narrow: randomIds
-    // gives random UUIDs, and OptMem ids are minted per scope (docs/FORMAT.md, Identity).
-    if (stored !== undefined && stored.scope !== event.scope)
-      throw new ImportError("conflict", line);
+    let stored = await this.tx.memory(event.memoryId);
+    if (stored !== undefined && stored.scope !== event.scope) {
+      // A retract, supersede or redact of an id only another scope holds is refused as one of an
+      // id no scope holds (`malformed`), so it tells nothing of that scope.
+      if (event.kind === "retract" || event.kind === "supersede" || event.kind === "redact") {
+        stored = undefined;
+      }
+      // Memory ids are one namespace across scopes, so a note, summarize or promote of an id
+      // another scope holds cannot be written here: the refusal tells a caller who already knows
+      // that id that it exists (never its text or state), where an absent id imports. That
+      // difference cannot be hidden, so ids are unguessable to keep it narrow:
+      // randomIds gives random UUIDs, and OptMem ids are minted per scope (docs/FORMAT.md,
+      // Identity).
+      else throw new ImportError("conflict", line);
+    }
     const wrote = await this.write(line, event, stored);
     if (wrote) this.imported++;
     else this.skipped++;
   }
 
   finish(): ImportReport {
-    for (const { line } of this.awaitingTombstone.values())
-      throw new ImportError("malformed", line);
+    const owed = [
+      ...[...this.awaitingTombstone.values()].map(({ line }) => line),
+      ...this.awaitingRedact.values(),
+    ];
+    if (owed.length > 0) throw new ImportError("malformed", Math.min(...owed));
     return Object.freeze({ imported: this.imported, skipped: this.skipped, refused: [] });
   }
 
@@ -578,9 +594,9 @@ class Replay {
         return true;
       case "retract":
         if (stored?.status === "redacted") return false;
-        if (await this.logOnly(line, event, stored)) return true;
-        if (stored?.status === "retracted") return false;
-        if (stored?.status !== "live") throw new ImportError("conflict", line);
+        if (stored === undefined) return this.logOnly(line, event);
+        if (stored.status === "retracted") return false;
+        if (stored.status !== "live") throw new ImportError("conflict", line);
         {
           const summaries = await liveDerived(this.tx, stored.id);
           this.withinCeiling(line, [stored, ...summaries]);
@@ -597,12 +613,12 @@ class Replay {
         return true;
       case "supersede": {
         if (stored?.status === "redacted") return false;
-        if (await this.logOnly(line, event, stored)) return true;
-        if (stored?.status === "superseded") {
+        if (stored === undefined) return this.logOnly(line, event);
+        if (stored.status === "superseded") {
           if (stored.supersededBy !== event.by) throw new ImportError("conflict", line);
           return false;
         }
-        if (stored?.status !== "live") throw new ImportError("conflict", line);
+        if (stored.status !== "live") throw new ImportError("conflict", line);
         // The direct supersede refuses a summary (SummarySupersedeError): format 1 has no such
         // event, so the line is malformed whatever the importer's authority.
         if (isSummary(stored)) throw new ImportError("malformed", line, "summary-supersede");
@@ -629,6 +645,9 @@ class Replay {
         return true;
       }
       case "redact": {
+        // Before any skip: a redact the store already applied, by a cascade from an earlier line
+        // or an earlier import, still answers the redacted form that owed it.
+        this.awaitingRedact.delete(event.memoryId);
         if (stored?.status === "redacted") return false;
         if (stored !== undefined) {
           // The direct path's plan: the memory and its derived closure, read in this transaction.
@@ -663,15 +682,18 @@ class Replay {
 
   /**
    * A note, summarize or promote line in its redacted form. The store's tombstone, or its copy
-   * that the file's redact event will redact, already stands for it; otherwise the redacted event
-   * is written, and the tombstone with the redact event that must follow.
+   * that the file's redact event must then redact, already stands for it; otherwise the redacted
+   * event is written, and the tombstone with the redact event that must follow.
    */
   private async redactedForm(
     line: number,
     event: RedactedNoteEvent | RedactedSummarizeEvent | RedactedPromoteEvent,
     stored: StoredMemory | undefined,
   ): Promise<boolean> {
-    if (stored !== undefined) return false;
+    if (stored !== undefined) {
+      if (stored.status !== "redacted") this.awaitingRedact.set(event.memoryId, line);
+      return false;
+    }
     if (this.awaitingTombstone.has(event.memoryId)) throw new ImportError("malformed", line);
     // History of a memory whose text is gone: a copy's origin is not checked, since the copy
     // carries nothing of it any more.
@@ -696,18 +718,15 @@ class Replay {
   /**
    * A retract or supersede of a memory this file noted only in its redacted form: the event is
    * written as it stands in the log, and changes no memory (the tombstone will stand for it).
-   * False when the store holds the memory; malformed when nothing earlier noted it.
+   * False when an earlier line already retracted it; malformed when nothing earlier noted it.
    */
-  private async logOnly(
-    line: number,
-    event: RetractEvent | SupersedeEvent,
-    stored: StoredMemory | undefined,
-  ): Promise<boolean> {
-    if (stored !== undefined) return false;
+  private async logOnly(line: number, event: RetractEvent | SupersedeEvent): Promise<boolean> {
     const pending = this.awaiting(line, event);
     // The same rules as for a stored memory: a superseded memory is neither retracted nor
-    // superseded again, and a supersede needs a live target and a live replacement.
+    // superseded again, a retracted one is not retracted again, and a supersede needs a live
+    // target and a live replacement.
     if (pending.status === "superseded") throw new ImportError("conflict", line);
+    if (event.kind === "retract" && pending.status === "retracted") return false;
     if (event.kind === "supersede") {
       if (pending.status !== "live") throw new ImportError("conflict", line);
       if (pending.summary) throw new ImportError("malformed", line, "summary-supersede");
