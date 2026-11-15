@@ -537,13 +537,18 @@ class Replay {
   }
 
   async apply({ line, event }: Parsed): Promise<void> {
-    const stored = await this.tx.memory(event.memoryId);
-    // Memory ids are one namespace across scopes, so an id another scope holds cannot be written
-    // here: the refusal tells a caller who already knows that id that it exists (never its text
-    // or state), where an absent id imports. Ids are unguessable to keep that narrow: randomIds
-    // gives random UUIDs, and OptMem ids are minted per scope (docs/FORMAT.md, Identity).
-    if (stored !== undefined && stored.scope !== event.scope)
-      throw new ImportError("conflict", line);
+    let stored = await this.tx.memory(event.memoryId);
+    if (stored !== undefined && stored.scope !== event.scope) {
+      // A retract or supersede of an id only another scope holds is refused as one of an id no
+      // scope holds (`malformed`), so it tells nothing of that scope.
+      if (event.kind === "retract" || event.kind === "supersede") stored = undefined;
+      // Memory ids are one namespace across scopes, so an id another scope holds cannot be
+      // written here: the refusal tells a caller who already knows that id that it exists (never
+      // its text or state), where an absent id imports. Ids are unguessable to keep that narrow:
+      // randomIds gives random UUIDs, and OptMem ids are minted per scope (docs/FORMAT.md,
+      // Identity).
+      else throw new ImportError("conflict", line);
+    }
     const wrote = await this.write(line, event, stored);
     if (wrote) this.imported++;
     else this.skipped++;

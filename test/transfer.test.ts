@@ -1465,3 +1465,55 @@ describe("a redacted-form line needs its redact line, whatever the store holds",
     }
   });
 });
+
+describe("a retract or supersede of another scope's memory answers as an unknown id", () => {
+  const replacement = {
+    kind: "note",
+    memoryId: "r",
+    scope: SCOPE,
+    principalId: "x",
+    pinned: false,
+    revision: revisionLine("A replacement."),
+  };
+  const files = {
+    retract: (memoryId: string) =>
+      crafted([SCOPE], [{ kind: "retract", memoryId, scope: SCOPE, principalId: "x" }]),
+    supersede: (memoryId: string) =>
+      crafted(
+        [SCOPE],
+        [replacement, { kind: "supersede", memoryId, scope: SCOPE, principalId: "x", by: "r" }],
+      ),
+  };
+
+  for (const [kind, file] of Object.entries(files)) {
+    test(`a ${kind} of an id only another scope holds is refused as one no scope holds`, async () => {
+      const { store, note } = open();
+      const foreign = await note("Another scope's fact.", { scope: OTHER_SCOPE });
+      const before = await store.events({ scopes: [SCOPE, OTHER_SCOPE] });
+      const answer = async (memoryId: string) => {
+        const error = await importJsonl(store, scopeOwner, file(memoryId)).catch((e) => e);
+        expect(error).toBeInstanceOf(ImportError);
+        const { reason, line, detail, message } = error as ImportError;
+        return { reason, line, detail, message: message.replaceAll(memoryId, "<id>") };
+      };
+      expect(await answer(foreign.id)).toEqual(await answer("no-such-memory"));
+      expect(await answer(foreign.id)).toMatchObject({ reason: "malformed" });
+      expect(await store.events({ scopes: [SCOPE, OTHER_SCOPE] })).toEqual(before);
+      expect(await store.transaction((tx) => tx.memory(foreign.id))).toMatchObject({
+        scope: OTHER_SCOPE,
+        status: "live",
+      });
+    });
+
+    test(`positive control: a ${kind} of the importer's own scope's memory imports`, async () => {
+      const { store, note } = open();
+      const own = await note("A fact of the importer's scope.");
+      expect(await importJsonl(store, scopeOwner, file(own.id))).toMatchObject({
+        refused: [],
+      });
+      expect(await store.transaction((tx) => tx.memory(own.id))).toMatchObject({
+        status: kind === "retract" ? "retracted" : "superseded",
+      });
+    });
+  }
+});

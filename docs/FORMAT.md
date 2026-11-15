@@ -241,9 +241,11 @@ all of it, or nothing and an error naming the rule and line (`docs/CLI.md`, `imp
   refuses the import (`conflict`). A memory keeps its scope through the file: a line that names
   it in another scope than the line that noted it, or than the store's copy, refuses the import
   (`conflict`), tombstones included, and a replacement must be in its target's scope
-  (`malformed`).
-- **Ids across scopes (residual).** Memory ids are one namespace for the whole store, so a line
-  whose id another scope holds refuses the import (`conflict`) where an absent id imports. An
+  (`malformed`). A `retract` or `supersede` whose memory only another scope holds is refused as
+  one whose memory no scope holds (`malformed`, the same line and message).
+- **Ids across scopes (residual).** Memory ids are one namespace for the whole store, so a
+  `note`, `summarize`, `promote` or `redact` line whose id another scope holds refuses the import
+  (`conflict`) where an absent id imports (or, for a `redact`, is `malformed`). An
   importer who already knows an id from a scope it cannot read learns that the memory exists;
   never its text, state or scope. Ids are kept unguessable so that knowing one takes having seen
   it: the default `Ids` port (`randomIds`) gives random version 4 UUIDs from the platform's
