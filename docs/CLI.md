@@ -723,7 +723,9 @@ The release binaries `relembra-windows-x64.exe` and `relembra-windows-arm64.exe`
 - **Where the store is safe.** Before any directory is created, relembra reads every existing
   ancestor's owner SID and DACL through the system Windows PowerShell 5.1 and .NET Framework.
   It refuses foreign owners and permissions allowing another account to rename, delete,
-  re-permission, change attributes or replace a directory, or create the store folder first.
+  re-permission, change attributes or replace a directory, or create the store folder first;
+  on the folder the store folder is made in, another account may hold only read and execute
+  on that folder itself.
   Reparse points and inherited grants beyond read and execute are also refused. Trusted
   accounts are you, SYSTEM, Administrators and TrustedInstaller.
   Missing components are created with their private descriptor from the first instant and
