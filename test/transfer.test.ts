@@ -1491,7 +1491,7 @@ describe("a redacted-form line needs its redact line, whatever the store holds",
   });
 });
 
-describe("a retract or supersede of another scope's memory answers as an unknown id", () => {
+describe("a retract, supersede or redact of another scope's memory answers as an unknown id", () => {
   const replacement = {
     kind: "note",
     memoryId: "r",
@@ -1508,7 +1508,13 @@ describe("a retract or supersede of another scope's memory answers as an unknown
         [SCOPE],
         [replacement, { kind: "supersede", memoryId, scope: SCOPE, principalId: "x", by: "r" }],
       ),
+    redact: (memoryId: string) =>
+      crafted(
+        [SCOPE],
+        [{ kind: "redact", memoryId, scope: SCOPE, cause: "request", principalId: "x" }],
+      ),
   };
+  const statusAfter = { retract: "retracted", supersede: "superseded", redact: "redacted" };
 
   for (const [kind, file] of Object.entries(files)) {
     test(`a ${kind} of an id only another scope holds is refused as one no scope holds`, async () => {
@@ -1537,7 +1543,7 @@ describe("a retract or supersede of another scope's memory answers as an unknown
         refused: [],
       });
       expect(await store.transaction((tx) => tx.memory(own.id))).toMatchObject({
-        status: kind === "retract" ? "retracted" : "superseded",
+        status: statusAfter[kind as keyof typeof statusAfter],
       });
     });
   }
