@@ -134,3 +134,8 @@ PowerShell absence, policy refusal, timeout or malformed output fails closed.
   attribute access is unaffected by sharing flags; restricting sharing does not revoke it.
 - [Reparse points](https://learn.microsoft.com/en-us/windows/win32/fileio/reparse-points):
   a directory must be empty to acquire a reparse point.
+- [MS-FSA FSCTL_SET_REPARSE_POINT](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-fsa/4aeefef8-92c3-4abc-af7a-a610caf8a165):
+  refused only when the open holds neither FILE_WRITE_DATA nor FILE_WRITE_ATTRIBUTES, and on a
+  directory that is not empty.
+- [ACE strings](https://learn.microsoft.com/en-us/windows/win32/secauthz/ace-strings): `DC` is
+  ADS_RIGHT_DS_DELETE_CHILD, the 0x2 bit, which on a folder is FILE_ADD_FILE.

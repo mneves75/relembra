@@ -227,7 +227,8 @@ export function storeFolderChain(storeFolder: string): string[] {
 /**
  * Why another account could change the path to the store folder, or undefined when none could:
  * the rule-3 refusals of docs/specs/w-nv1/spec.md; the first folder that breaks one is named. On
- * the deepest existing ancestor another account may hold read and execute only.
+ * the deepest existing ancestor another account may hold only read and execute on that folder
+ * itself.
  */
 export function chainRefusal(
   chain: readonly ChainFolder[],
