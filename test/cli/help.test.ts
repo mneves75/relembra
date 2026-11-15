@@ -113,6 +113,14 @@ describe("help and --version", () => {
     const text = run(box, ["help", "nope"]);
     expect({ status: text.status, stdout: text.stdout }).toEqual({ status: 2, stdout: "" });
     expect(text.stderr).toContain("unknown command: nope");
+    // Blank and very long topics: unknown-command, the name capped at 40 characters.
+    expect(rule(["help", ""])).toBe("unknown-command");
+    const long = run(box, ["help", "x".repeat(5000)]);
+    expect(long.status).toBe(2);
+    expect(long.stderr).toBe(`relembra: unknown command: ${"x".repeat(40)} (unknown-command)\n`);
+    // -h where a flag value goes is still the help flag; --flag=-h passes it as the value.
+    expect(printed(["note", "x", "--agent", "-h"])).toBe(printed(["note", "--help"]));
+    expect(printed(["find", "x", "--limit", "-h"])).toBe(printed(["find", "--help"]));
   });
 
   cliTest("help is a word only in command position, and -h only before --", () => {

@@ -238,6 +238,8 @@ A token starting with `-` before `--` is a flag. Put text that starts with `-` a
 - `--help` or `-h` anywhere before `--` wins over the rest of the line, extra arguments and unknown
   flags included: `relembra note --help extra` prints `note`'s help and exits 0. When the first word
   is not a command, it prints the global help (`relembra nope --help`, `relembra --help note`).
+  That holds where a value goes too: `relembra note x --agent -h` prints help; write
+  `--agent=-h` to pass `-h` as the value.
 - `help` is a word only in command position: `relembra find help` searches for "help". After
   `help`, an unknown command is `unknown-command` and a second word is `extra-argument`, both exit 2.
 - The footer links this reference at the binary's own release tag,
