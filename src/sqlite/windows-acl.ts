@@ -226,7 +226,8 @@ export function storeFolderChain(storeFolder: string): string[] {
 
 /**
  * Why another account could change the path to the store folder, or undefined when none could:
- * the rule-3 refusals of docs/specs/w-nv1/spec.md; the first folder that breaks one is named.
+ * the rule-3 refusals of docs/specs/w-nv1/spec.md; the first folder that breaks one is named. On
+ * the deepest existing ancestor another account may hold read and execute only.
  */
 export function chainRefusal(
   chain: readonly ChainFolder[],
@@ -257,6 +258,12 @@ export function chainRefusal(
       if (own & ADD_SUBDIRECTORY) return refuse("create the store folder first");
       if (ace.containerInherit && (ace.mask & ~READ_EXECUTE) >>> 0 !== 0) {
         return refuse("open the new store folder before its ACL is set");
+      }
+      // Until the store folder is made in it this folder may be empty, and FSCTL_SET_REPARSE_POINT
+      // makes it a junction with FILE_WRITE_DATA (on a folder FILE_ADD_FILE, 0x2) as well as with
+      // attribute writes (MS-FSA). Anything beyond read and execute is refused here.
+      if ((own & ~READ_EXECUTE) >>> 0 !== 0) {
+        return refuse("write to it, and so turn it into a reparse point");
       }
     }
   }

@@ -7,6 +7,7 @@ import {
   openSync,
   readFileSync,
   readSync,
+  unlinkSync,
 } from "node:fs";
 import { dirname, win32 } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -85,17 +86,31 @@ export const OWNER_MODES = process.platform !== "win32";
  * directory, created with a private descriptor, and the empty store file is made in it under the
  * same lock. Existing files keep their existing checks.
  */
-export function createOwnerOnly(path: string): void {
-  if (OWNER_MODES) mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+export function createOwnerOnly(
+  path: string,
+  // Tests stand in for the Windows creation step; the store always uses its own.
+  windowsStep: ((path: string) => void) | undefined = OWNER_MODES ? undefined : createWindowsStore,
+): void {
+  if (windowsStep === undefined) mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   if (isSymbolicLink(path)) throw new StoreFileTypeError(path);
   // Windows ignores the modes: the directory must be private from creation, before any file.
-  if (!OWNER_MODES && !existsSync(path)) createWindowsStore(path);
+  const stepRan = windowsStep !== undefined && !existsSync(path);
+  if (stepRan) windowsStep(path);
+  let made = false;
   try {
-    // O_EXCL never follows a link, so a link made since the check fails here with EEXIST. On
-    // Windows the file exists by now, made under the store's lock, and this is a no-op.
+    // O_EXCL never follows a link, so a link made since the check fails here with EEXIST.
     closeSync(openSync(path, "wx", 0o600));
+    made = true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
+  // After the Windows step the file exists, made under the store's lock with the folder's grants;
+  // one made here instead carries whatever the folder gives.
+  if (made && stepRan) {
+    unlinkSync(path);
+    throw new Error(
+      `the Windows store security step left no store file at ${path}; no store is created`,
+    );
   }
   checkOwnerOnly(path);
 }
