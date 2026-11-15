@@ -226,7 +226,7 @@ On Windows, check the hash with `Get-FileHash` and copy the binary onto `PATH` a
 
 Before replacing an installed executable, retain a backup and its hash. Verify installed bytes
 against the release checksum and export metadata from a disposable store
-(`relembra: "1.0.0-beta.8"`); there is no `--version` flag. The [release procedure](docs/RELEASE.md) covers isolated checks and
+(`relembra: "1.0.0-beta.8"`); `relembra --version` prints the version the binary was built as. The [release procedure](docs/RELEASE.md) covers isolated checks and
 rollback without opening a live memory store. After verification, `relembra init` prints the
 session hook for your agent.
 
