@@ -122,9 +122,10 @@ operator's to erase. TLS on the connection, encryption of the database and its b
 auditing who reads or exports what are the host's and the operator's too: relembra's event log
 records changes, not reads.
 
-The role relembra connects as needs `CREATE` on the database to create its schema, and
-`SELECT` on `pg_catalog.pg_namespace`, which every role has unless an operator revoked it: an
-open that creates or migrates the schema locks that catalog in `ACCESS SHARE` mode.
+An open that creates or migrates the schema needs, for the role relembra connects as, `CREATE`
+on the database (Postgres checks it even for a schema that exists) and `SELECT` on
+`pg_catalog.pg_namespace`, which every role has unless an operator revoked it: that open locks
+the catalog in `ACCESS SHARE` mode.
 
 ### Sharing across machines
 
