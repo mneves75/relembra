@@ -555,9 +555,11 @@ class Replay {
   }
 
   finish(): ImportReport {
-    for (const { line } of this.awaitingTombstone.values())
-      throw new ImportError("malformed", line);
-    for (const line of this.awaitingRedact.values()) throw new ImportError("malformed", line);
+    const owed = [
+      ...[...this.awaitingTombstone.values()].map(({ line }) => line),
+      ...this.awaitingRedact.values(),
+    ];
+    if (owed.length > 0) throw new ImportError("malformed", Math.min(...owed));
     return Object.freeze({ imported: this.imported, skipped: this.skipped, refused: [] });
   }
 

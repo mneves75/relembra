@@ -1457,6 +1457,31 @@ describe("a redacted-form line needs its redact line, whatever the store holds",
     });
   });
 
+  test("cut after A's redacted note, it is refused over A's retracted copy too", async () => {
+    const { target, a, noteLine, cutAfter } = await redactedAtSource();
+    await open(target, "t").relembra.retract(owner, { memoryId: a.id });
+    expect(await refusal(target, cutAfter(noteLine))).toMatchObject({
+      reason: "malformed",
+      line: noteLine,
+    });
+  });
+
+  test("the refusal names the first line whose redact is missing, stored or not", async () => {
+    const { target, a } = await redactedAtSource();
+    const gone = (memoryId: string) => ({
+      kind: "note",
+      memoryId,
+      scope: SCOPE,
+      principalId: "x",
+      pinned: false,
+      redacted: true,
+    });
+    expect(await refusal(target, crafted([SCOPE], [gone(a.id), gone("absent")]))).toMatchObject({
+      reason: "malformed",
+      line: 2,
+    });
+  });
+
   test("positive control: the whole file imports over the live copies, redacting both", async () => {
     const { target, a, summary, later } = await redactedAtSource();
     await importJsonl(target, scopeOwner, later);
