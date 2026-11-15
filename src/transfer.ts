@@ -578,9 +578,9 @@ class Replay {
         return true;
       case "retract":
         if (stored?.status === "redacted") return false;
-        if (await this.logOnly(line, event, stored)) return true;
-        if (stored?.status === "retracted") return false;
-        if (stored?.status !== "live") throw new ImportError("conflict", line);
+        if (stored === undefined) return this.logOnly(line, event);
+        if (stored.status === "retracted") return false;
+        if (stored.status !== "live") throw new ImportError("conflict", line);
         {
           const summaries = await liveDerived(this.tx, stored.id);
           this.withinCeiling(line, [stored, ...summaries]);
@@ -597,12 +597,12 @@ class Replay {
         return true;
       case "supersede": {
         if (stored?.status === "redacted") return false;
-        if (await this.logOnly(line, event, stored)) return true;
-        if (stored?.status === "superseded") {
+        if (stored === undefined) return this.logOnly(line, event);
+        if (stored.status === "superseded") {
           if (stored.supersededBy !== event.by) throw new ImportError("conflict", line);
           return false;
         }
-        if (stored?.status !== "live") throw new ImportError("conflict", line);
+        if (stored.status !== "live") throw new ImportError("conflict", line);
         // The direct supersede refuses a summary (SummarySupersedeError): format 1 has no such
         // event, so the line is malformed whatever the importer's authority.
         if (isSummary(stored)) throw new ImportError("malformed", line, "summary-supersede");
@@ -696,18 +696,15 @@ class Replay {
   /**
    * A retract or supersede of a memory this file noted only in its redacted form: the event is
    * written as it stands in the log, and changes no memory (the tombstone will stand for it).
-   * False when the store holds the memory; malformed when nothing earlier noted it.
+   * False when an earlier line already retracted it; malformed when nothing earlier noted it.
    */
-  private async logOnly(
-    line: number,
-    event: RetractEvent | SupersedeEvent,
-    stored: StoredMemory | undefined,
-  ): Promise<boolean> {
-    if (stored !== undefined) return false;
+  private async logOnly(line: number, event: RetractEvent | SupersedeEvent): Promise<boolean> {
     const pending = this.awaiting(line, event);
     // The same rules as for a stored memory: a superseded memory is neither retracted nor
-    // superseded again, and a supersede needs a live target and a live replacement.
+    // superseded again, a retracted one is not retracted again, and a supersede needs a live
+    // target and a live replacement.
     if (pending.status === "superseded") throw new ImportError("conflict", line);
+    if (event.kind === "retract" && pending.status === "retracted") return false;
     if (event.kind === "supersede") {
       if (pending.status !== "live") throw new ImportError("conflict", line);
       if (pending.summary) throw new ImportError("malformed", line, "summary-supersede");

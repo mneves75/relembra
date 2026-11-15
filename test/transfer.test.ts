@@ -1368,3 +1368,44 @@ describe("replayed summaries follow the direct path's summary rules", () => {
     expect(direct.revision.provenance.trust).toBe("untrusted");
   });
 });
+
+describe("a retract replayed twice is skipped, wherever the memory is", () => {
+  const retract = { kind: "retract", memoryId: "m", scope: SCOPE, principalId: "x" };
+  const retracts = async (store: Store) =>
+    (await store.events({ scopes: [SCOPE] })).filter((event) => event.kind === "retract").length;
+
+  test("control: a stored memory's second retract is skipped", async () => {
+    const note = {
+      kind: "note",
+      memoryId: "m",
+      scope: SCOPE,
+      principalId: "x",
+      pinned: false,
+      revision: revisionLine("A retracted fact."),
+    };
+    const store = createMemoryStore();
+    expect(await importJsonl(store, owner, crafted([SCOPE], [note, retract, retract]))).toEqual({
+      imported: 2,
+      skipped: 1,
+      refused: [],
+    });
+    expect(await retracts(store)).toBe(1);
+  });
+
+  test("a memory known only by its tombstone: the second retract is skipped too", async () => {
+    const gone = { kind: "note", memoryId: "m", scope: SCOPE, principalId: "x", pinned: false };
+    const redact = {
+      kind: "redact",
+      memoryId: "m",
+      scope: SCOPE,
+      cause: "request",
+      principalId: "x",
+    };
+    const store = createMemoryStore();
+    const file = crafted([SCOPE], [{ ...gone, redacted: true }, retract, retract, redact]);
+    expect(await importJsonl(store, owner, file)).toEqual({ imported: 3, skipped: 1, refused: [] });
+    expect(await retracts(store)).toBe(1);
+    const again = await exportJsonl(store, owner, { scope: SCOPE });
+    expect(lines(again).filter((line) => line.kind === "retract")).toHaveLength(1);
+  });
+});
