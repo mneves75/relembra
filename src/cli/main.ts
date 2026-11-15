@@ -47,6 +47,7 @@ import { identityEgress, renderMemory } from "../render.js";
 import { OWNER_MODES } from "../sqlite/database.js";
 import { openSqliteStore, type SqliteStore } from "../sqlite/index.js";
 import { exportJsonl, type ImportReport, importJsonl, MAX_IMPORT_BYTES } from "../transfer.js";
+import { RELEMBRA_VERSION } from "../version.js";
 import { flagValue, hasFlag, intFlag, type Parsed, parseArgs, wantsJson } from "./args.js";
 import { ENV_VARS, usageText } from "./commands.js";
 import { confirmOwner } from "./confirm.js";
@@ -789,7 +790,13 @@ export async function main(
       );
     }
     const result = parseArgs(argv);
-    if (result.kind === "help") return succeed({ data: { usage: usageText() }, text: usageText() });
+    if (result.kind === "help") {
+      const text = usageText(result.command);
+      return succeed({ data: { usage: text }, text });
+    }
+    if (result.kind === "version") {
+      return succeed({ data: { version: RELEMBRA_VERSION }, text: `relembra ${RELEMBRA_VERSION}` });
+    }
     const { parsed } = result;
     const context: Context = { parsed, env, cwd };
     const name = parsed.command.name;
