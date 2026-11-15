@@ -520,6 +520,11 @@ class Replay {
    * supersede lines give them, as a stored memory's would change.
    */
   private readonly awaitingTombstone = new Map<MemoryId, Pending>();
+  /**
+   * Memories the store holds with their text that the file gave in redacted form: their redact
+   * event must follow, as for one the store lacks. Mapped to the line that gave the redacted form.
+   */
+  private readonly awaitingRedact = new Map<MemoryId, number>();
 
   private readonly tx: StoreTransaction;
   private readonly principal: Principal;
@@ -547,6 +552,7 @@ class Replay {
   finish(): ImportReport {
     for (const { line } of this.awaitingTombstone.values())
       throw new ImportError("malformed", line);
+    for (const line of this.awaitingRedact.values()) throw new ImportError("malformed", line);
     return Object.freeze({ imported: this.imported, skipped: this.skipped, refused: [] });
   }
 
@@ -629,6 +635,9 @@ class Replay {
         return true;
       }
       case "redact": {
+        // Before any skip: a redact the store already applied, by a cascade from an earlier line
+        // or an earlier import, still answers the redacted form that owed it.
+        this.awaitingRedact.delete(event.memoryId);
         if (stored?.status === "redacted") return false;
         if (stored !== undefined) {
           // The direct path's plan: the memory and its derived closure, read in this transaction.
@@ -663,15 +672,18 @@ class Replay {
 
   /**
    * A note, summarize or promote line in its redacted form. The store's tombstone, or its copy
-   * that the file's redact event will redact, already stands for it; otherwise the redacted event
-   * is written, and the tombstone with the redact event that must follow.
+   * that the file's redact event must then redact, already stands for it; otherwise the redacted
+   * event is written, and the tombstone with the redact event that must follow.
    */
   private async redactedForm(
     line: number,
     event: RedactedNoteEvent | RedactedSummarizeEvent | RedactedPromoteEvent,
     stored: StoredMemory | undefined,
   ): Promise<boolean> {
-    if (stored !== undefined) return false;
+    if (stored !== undefined) {
+      if (stored.status !== "redacted") this.awaitingRedact.set(event.memoryId, line);
+      return false;
+    }
     if (this.awaitingTombstone.has(event.memoryId)) throw new ImportError("malformed", line);
     // History of a memory whose text is gone: a copy's origin is not checked, since the copy
     // carries nothing of it any more.

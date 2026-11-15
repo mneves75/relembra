@@ -1409,3 +1409,59 @@ describe("a retract replayed twice is skipped, wherever the memory is", () => {
     expect(lines(again).filter((line) => line.kind === "retract")).toHaveLength(1);
   });
 });
+
+describe("a redacted-form line needs its redact line, whatever the store holds", () => {
+  /**
+   * A target that imported a fact A and a summary S of A while they were live, and the source's
+   * export after A was redacted (redacting S with it): both in redacted form, then their redacts.
+   */
+  async function redactedAtSource() {
+    const source = open();
+    const a = await source.note("Erased at the source later.");
+    const summary = await source.relembra.submitSummary(owner, {
+      scope: SCOPE,
+      sources: [{ memoryId: a.id, revision: 1 }],
+      text: "A summary of the erased fact.",
+      provenance,
+    });
+    const target = createMemoryStore();
+    await importJsonl(target, scopeOwner, await exportJsonl(source.store, owner, { scope: SCOPE }));
+    await source.relembra.redact(owner, { memoryId: a.id });
+    const later = (await exportJsonl(source.store, owner, { scope: SCOPE })).split("\n");
+    const noteLine = later.findIndex((text) => text.includes(`"memoryId":"${a.id}"`)) + 1;
+    /** The later export cut after its line `n` (1-based, header included). */
+    const cutAfter = (n: number) => `${later.slice(0, n).join("\n")}\n`;
+    return { target, a, summary, later: later.join("\n"), noteLine, cutAfter };
+  }
+
+  async function refusal(store: Store, jsonl: string) {
+    const before = await store.events({ scopes: [SCOPE] });
+    const error = await importJsonl(store, scopeOwner, jsonl).catch((e: unknown) => e);
+    expect(await store.events({ scopes: [SCOPE] })).toEqual(before);
+    return error;
+  }
+
+  test("control: cut after A's redacted note, the file is refused by an empty store", async () => {
+    const { noteLine, cutAfter } = await redactedAtSource();
+    expect(await refusal(createMemoryStore(), cutAfter(noteLine))).toMatchObject({
+      reason: "malformed",
+      line: noteLine,
+    });
+  });
+
+  test("cut after A's redacted note, it is refused over A's live copy too", async () => {
+    const { target, noteLine, cutAfter } = await redactedAtSource();
+    expect(await refusal(target, cutAfter(noteLine))).toMatchObject({
+      reason: "malformed",
+      line: noteLine,
+    });
+  });
+
+  test("positive control: the whole file imports over the live copies, redacting both", async () => {
+    const { target, a, summary, later } = await redactedAtSource();
+    await importJsonl(target, scopeOwner, later);
+    for (const id of [a.id, summary.id]) {
+      expect(await target.transaction((tx) => tx.memory(id))).toMatchObject({ status: "redacted" });
+    }
+  });
+});
