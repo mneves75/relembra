@@ -15,7 +15,7 @@
 #
 # Needs Docker (scripts/with-postgres.sh), gitleaks, and zizmor or uvx. It covers one platform and
 # one Node: the workflow's other cells (the CLI built and tested on Linux x64 and arm64, macOS arm64
-# and Windows x64 and arm64, Node 24.14 and 26 on Linux and Windows) and its informational
+# and Windows x64 and arm64, Node 24.16 and 26 on Linux and Windows) and its informational
 # pi-durable@latest probe run on every push to main and pull request, or when it is dispatched.
 set -u
 

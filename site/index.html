@@ -141,14 +141,14 @@ relembra init</code></pre>
           </div>
         </li>
         <li class="step">
-          <p class="step__say"><span lang="pt-BR">A biblioteca, para Node 24.14+ ou Bun 1.4+.</span><span lang="en">The library, for Node 24.14+ or Bun 1.4+.</span></p>
+          <p class="step__say"><span lang="pt-BR">A biblioteca, para Node 24.16+ ou Bun 1.4+.</span><span lang="en">The library, for Node 24.16+ or Bun 1.4+.</span></p>
           <div class="cmd">
             <pre class="cmd__code" tabindex="0" role="group" aria-label="Comando de instalação da biblioteca" data-label-pt="Comando de instalação da biblioteca" data-label-en="Library install command"><code data-copy-source>npm i relembra@beta</code></pre>
             <button class="btn cmd__copy" type="button" data-copy><span lang="pt-BR">Copiar</span><span lang="en">Copy</span></button>
           </div>
         </li>
       </ol>
-      <p class="version"><span lang="pt-BR">Versão 1.0.0-beta.9. CLI para macOS arm64, Linux e Windows em x64 e arm64.</span><span lang="en">Version 1.0.0-beta.9. CLI for macOS arm64, Linux and Windows on x64 and arm64.</span></p>
+      <p class="version"><span lang="pt-BR">Versão 1.0.0-beta.10. CLI para macOS arm64, Linux e Windows em x64 e arm64.</span><span lang="en">Version 1.0.0-beta.10. CLI for macOS arm64, Linux and Windows on x64 and arm64.</span></p>
     </div>
 
     <div class="split__side">
@@ -227,7 +227,7 @@ relembra init</code></pre>
         <div class="facts__row"><dt><span lang="pt-BR">Memória</span><span lang="en">Memory</span></dt><dd><span lang="pt-BR">Uma linha de até 280 bytes UTF-8 com proveniência: agente, harness, modelo, host, fonte, confiança e op id. A guarda tem 10 regras e nunca repete o texto recusado.</span><span lang="en">One line, at most 280 UTF-8 bytes, with provenance: agent, harness, model, host, source, trust and op id. The guard has 10 rules and never echoes refused text.</span></dd></div>
         <div class="facts__row"><dt><span lang="pt-BR">Biblioteca</span><span lang="en">Library</span></dt><dd><span lang="pt-BR"><code>note</code>, <code>find</code>, <code>wake</code>, <code>brief</code>, <code>recall</code>, <code>zoom</code> em TypeScript; retirar, tarjar, superar e promover com prévia; retenção por escopo, que o host agenda; <code>deliverErasures</code> para os portadores.</span><span lang="en"><code>note</code>, <code>find</code>, <code>wake</code>, <code>brief</code>, <code>recall</code>, <code>zoom</code> in TypeScript; retract, redact, supersede and promote with preview; per-scope retention your host schedules; <code>deliverErasures</code> for carriers.</span></dd></div>
         <div class="facts__row"><dt><span lang="pt-BR">Repetição</span><span lang="en">Retries</span></dt><dd><span lang="pt-BR">Repetir uma escrita com o mesmo op id devolve o resultado gravado; o mesmo op id com outro texto é recusado (<code>OpConflictError</code>).</span><span lang="en">Retrying a write with the same op id returns the recorded result; the same op id with other text is refused (<code>OpConflictError</code>).</span></dd></div>
-        <div class="facts__row"><dt><span lang="pt-BR">Dependências</span><span lang="en">Dependencies</span></dt><dd><span lang="pt-BR">Zero em runtime além do Node 24.14+ ou do Bun 1.4+; a loja padrão usa o <code>node:sqlite</code> que já vem no runtime; integração opcional com pi-durable 1.4.0.</span><span lang="en">None at runtime beyond Node 24.14+ or Bun 1.4+; the default store uses the <code>node:sqlite</code> your runtime ships; optional integration with pi-durable 1.4.0.</span></dd></div>
+        <div class="facts__row"><dt><span lang="pt-BR">Dependências</span><span lang="en">Dependencies</span></dt><dd><span lang="pt-BR">Zero em runtime além do Node 24.16+ ou do Bun 1.4+; a loja padrão usa o <code>node:sqlite</code> que já vem no runtime; integração opcional com pi-durable 1.4.0.</span><span lang="en">None at runtime beyond Node 24.16+ or Bun 1.4+; the default store uses the <code>node:sqlite</code> your runtime ships; optional integration with pi-durable 1.4.0.</span></dd></div>
         <div class="facts__row"><dt><span lang="pt-BR">Lojas</span><span lang="en">Stores</span></dt><dd><span lang="pt-BR">SQLite em WAL com <code>synchronous=FULL</code> numa máquina; o seu cliente Postgres em várias, sem driver instalado; em memória, com a suíte de conformidade que as duas passam.</span><span lang="en">SQLite in WAL with <code>synchronous=FULL</code> on one machine; your own Postgres client across many, no driver installed; in-memory, with the conformance suite both pass.</span></dd></div>
         <div class="facts__row"><dt>CLI</dt><dd><span lang="pt-BR">Um binário só, feito com Bun; o gancho de início de sessão serve ao Claude Code e ao Codex.</span><span lang="en">One binary, built with Bun; the session-start hook serves Claude Code and Codex.</span></dd></div>
         <div class="facts__row"><dt>MCP</dt><dd><span lang="pt-BR"><code>relembra mcp</code> em stdio, revisão 2026-07-28, com <code>note</code>, <code>find</code>, <code>brief</code>, <code>wake</code> e <code>retract</code>. Escopo e principal vêm do ambiente, nunca de um argumento do modelo.</span><span lang="en"><code>relembra mcp</code> over stdio, revision 2026-07-28: <code>note</code>, <code>find</code>, <code>brief</code>, <code>wake</code>, <code>retract</code>. Scope and principal come from the environment, never from a model's argument.</span></dd></div>
@@ -276,7 +276,7 @@ relembra init</code></pre>
       </details>
       <details class="qa">
         <summary><span lang="pt-BR">Dá pra usar hoje?</span><span lang="en">Can I use it today?</span></summary>
-        <p><span lang="pt-BR">Dá. É a versão 1.0.0-beta.9, pública, licença MIT. A biblioteca tá no npm (<code>npm i relembra@beta</code>) e o CLI vem na release do GitHub: macOS arm64, Linux e Windows, em x64 e arm64. Beta quer dizer o seguinte: a API ainda pode mudar antes da 1.0. Se mudar, tá no CHANGELOG, com o caminho da migração. <a href="#instalar">Instalar</a>.</span><span lang="en">Yes. Version 1.0.0-beta.9, public, MIT. The library is on npm (<code>npm i relembra@beta</code>). The CLI ships on the GitHub release: macOS arm64, plus Linux and Windows on x64 and arm64. Beta means the API can still change before 1.0. If it does, the changelog tells you how to migrate. <a href="#instalar">Install</a>.</span></p>
+        <p><span lang="pt-BR">Dá. É a versão 1.0.0-beta.10, pública, licença MIT. A biblioteca tá no npm (<code>npm i relembra@beta</code>) e o CLI vem na release do GitHub: macOS arm64, Linux e Windows, em x64 e arm64. Beta quer dizer o seguinte: a API ainda pode mudar antes da 1.0. Se mudar, tá no CHANGELOG, com o caminho da migração. <a href="#instalar">Instalar</a>.</span><span lang="en">Yes. Version 1.0.0-beta.10, public, MIT. The library is on npm (<code>npm i relembra@beta</code>). The CLI ships on the GitHub release: macOS arm64, plus Linux and Windows on x64 and arm64. Beta means the API can still change before 1.0. If it does, the changelog tells you how to migrate. <a href="#instalar">Install</a>.</span></p>
       </details>
     </div>
   </div>
@@ -294,7 +294,7 @@ relembra init</code></pre>
       <li><a href=".well-known/security.txt">security.txt</a></li>
       <li><a href="https://github.com/mneves75/relembra/blob/main/LICENSE" rel="noopener"><span lang="pt-BR">Licença MIT</span><span lang="en">MIT licence</span></a></li>
     </ul>
-    <p class="foot__legal"><span lang="pt-BR">Versão 1.0.0-beta.9, beta pública. Fontes Instrument Sans e Martian Mono sob a SIL Open Font License.</span><span lang="en">Version 1.0.0-beta.9, public beta. Instrument Sans and Martian Mono fonts under the SIL Open Font License.</span></p>
+    <p class="foot__legal"><span lang="pt-BR">Versão 1.0.0-beta.10, beta pública. Fontes Instrument Sans e Martian Mono sob a SIL Open Font License.</span><span lang="en">Version 1.0.0-beta.10, public beta. Instrument Sans and Martian Mono fonts under the SIL Open Font License.</span></p>
   </div>
 </footer>
 </body>

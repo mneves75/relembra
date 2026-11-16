@@ -5,7 +5,7 @@
 #   scripts/init.sh           # check, install, build
 #   scripts/init.sh --check   # only report the tools
 #
-# Required: git, bun >= 1.4, node >= 24.14, gitleaks, and zizmor or uvx (scripts/ci.sh runs the
+# Required: git, bun >= 1.4, node 24.16+ or 26.1+, gitleaks, and zizmor or uvx (scripts/ci.sh runs the
 # scanners). Optional, reported when absent: docker (the Postgres tests), gh (scripts/deploy.sh)
 # and shellcheck (lints these scripts). Exit codes: 0 ready, 1 a required tool is missing or old
 # (every problem is listed), 2 usage.
@@ -67,13 +67,14 @@ fi
 
 if command -v node >/dev/null 2>&1; then
   node_version=$(node --version)
-  if at_least "$node_version" 24.14; then
-    echo "node: $node_version (>= 24.14)"
+  # node:sqlite has DatabaseSync#deserialize from 24.16 in 24 and from 26.1; 25 and 26.0 lack it.
+  if { at_least "$node_version" 24.16 && ! at_least "$node_version" 25.0; } || at_least "$node_version" 26.1; then
+    echo "node: $node_version (24.16+ or 26.1+)"
   else
-    problem "node $node_version is older than 24.14 (AGENTS.md)"
+    problem "node $node_version is not supported: 24.16 or later in 24, or 26.1 or later (AGENTS.md)"
   fi
 else
-  problem "node is not installed (>= 24.14, AGENTS.md)"
+  problem "node is not installed (24.16+ or 26.1+, AGENTS.md)"
 fi
 
 if command -v gitleaks >/dev/null 2>&1; then

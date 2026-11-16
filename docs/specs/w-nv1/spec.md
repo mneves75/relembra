@@ -55,7 +55,7 @@ relembra writes nothing under TEMP or TMP. Windows PowerShell's own startup may 
 missing TEMP for its script-policy probe; the Windows test measures that with no store involved
 and checks that relembra added nothing to it.
 
-Compared with a native Node-API addon, this preserves zero runtime dependencies and Node 24.14,
+Compared with a native Node-API addon, this preserves zero runtime dependencies and Node 24,
 Bun and AOT compatibility without another platform artifact. Direct node:ffi is unavailable
 on Node 24. An emitted P/Invoke helper adds complexity without solving historical ancestry.
 PowerShell absence, policy refusal, timeout or malformed output fails closed.
@@ -116,7 +116,7 @@ PowerShell absence, policy refusal, timeout or malformed output fails closed.
 - Existing rule-3 refusals, junction, existing-store and sidecar scenarios remain covered with the
   stronger absent-leaf policy. General persistence fixtures use absent per-store directories,
   with raw existing-database fixtures prepared explicitly.
-- Node 24.14/26, Bun and the native AOT executable run the applicable scenarios. Skipped
+- Node 24.16/26, Bun and the native AOT executable run the applicable scenarios. Skipped
   Windows tests on a Mac are not Windows proof.
 - Full local release gate, strict benchmark, independent adversarial review and security
   deploy gate bind the final candidate before any release. Failed attempts remain evidence.

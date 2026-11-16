@@ -67,7 +67,7 @@ describe.skipIf(NO_RELEASE_TOOLING)("scripts/init.sh --check", () => {
     expect(run.status).toBe(0);
     expect(run.stdout).toContain("git: git version 2.53.0");
     expect(run.stdout).toContain("bun: 1.4.4 (>= 1.4)");
-    expect(run.stdout).toContain("node: v26.12.1 (>= 24.14)");
+    expect(run.stdout).toContain("node: v26.12.1 (24.16+ or 26.1+)");
     expect(run.stdout).toContain("gh: gh version 2.103.3");
     expect(run.stdout).toContain("gitleaks: 8.30.0");
     expect(run.stdout).toContain("zizmor: zizmor 1.31.1");
@@ -79,14 +79,19 @@ describe.skipIf(NO_RELEASE_TOOLING)("scripts/init.sh --check", () => {
   test("an old Node is refused by name and version", () => {
     const run = check(tools({ node: "v22.14.0" }));
     expect(run.status).toBe(1);
-    expect(run.stderr).toContain("node v22.14.0 is older than 24.14 (AGENTS.md)");
+    expect(run.stderr).toContain(
+      "node v22.14.0 is not supported: 24.16 or later in 24, or 26.1 or later (AGENTS.md)",
+    );
   });
 
-  test("Node 24.14 itself is recent enough; 24.13 is not", () => {
-    expect(check(tools({ node: "v24.14.0" })).status).toBe(0);
-    const old = check(tools({ node: "v24.13.9" }));
-    expect(old.status).toBe(1);
-    expect(old.stderr).toContain("node v24.13.9 is older than 24.14");
+  test("Node 24.16 and 26.1 are recent enough; 24.15, 25 and 26.0 lack DatabaseSync#deserialize", () => {
+    expect(check(tools({ node: "v24.16.0" })).status).toBe(0);
+    expect(check(tools({ node: "v26.1.0" })).status).toBe(0);
+    for (const node of ["v24.15.9", "v25.9.0", "v26.0.0"]) {
+      const old = check(tools({ node }));
+      expect(old.status).toBe(1);
+      expect(old.stderr).toContain(`node ${node} is not supported: 24.16 or later in 24`);
+    }
   });
 
   test("an old Bun is refused", () => {
@@ -102,7 +107,7 @@ describe.skipIf(NO_RELEASE_TOOLING)("scripts/init.sh --check", () => {
     expect(run.stderr).toContain(
       "gitleaks is not installed (the pre-push hook and scripts/ci.sh run it)",
     );
-    expect(run.stderr).toContain("node v20.0.0 is older than 24.14");
+    expect(run.stderr).toContain("node v20.0.0 is not supported");
   });
 
   test("zizmor may be replaced by uvx, as scripts/ci.sh allows", () => {

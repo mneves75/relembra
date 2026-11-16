@@ -66,9 +66,9 @@ SQLite integrity and stable available clean input/runtime identity must pass too
 and contended baseline runs are diagnostic. Standalone exploratory runs omit `--check` and do
 not enforce the latency budget; `--out` and `--work` choose output/work parents.
 
-Compatibility remains Node >=24.14 and Bun >=1.4. Report only the actual local OS/architecture,
+Compatibility remains Node >=24.16 <25 || >=26.1 and Bun >=1.4. Report only the actual local OS/architecture,
 Bun version/revision, Node version, resolved executable hashes and SQLite versions measured.
-Hosted CI adds Linux x64/arm64, macOS arm64, Windows x64/arm64 and Node 24.14/26 coverage on every
+Hosted CI adds Linux x64/arm64, macOS arm64, Windows x64/arm64 and Node 24.16/26 coverage on every
 push and pull request; local evidence does not attest those cells. Local release acceptance
 additionally binds provenance and latency. Report performance only from the candidate's
 recorded measurements.

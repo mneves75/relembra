@@ -331,8 +331,7 @@ function readOnlySchemaVersion(path: string, busyTimeoutMs: number): number {
 
 /**
  * The schema version of the store as its committed WAL frames leave it, read from an in-memory
- * image. Refuses with StoreUnverifiedError when the image cannot be built or read: the WAL is
- * malformed, or the runtime's node:sqlite has no `deserialize` (Node before 24.22 and 26.1).
+ * image. Refuses with StoreUnverifiedError when the image cannot be built or read.
  */
 function imageSchemaVersion(path: string): number {
   const wal = existsSync(`${path}-wal`) ? readFileSync(`${path}-wal`) : new Uint8Array();
@@ -340,7 +339,6 @@ function imageSchemaVersion(path: string): number {
   if (image === undefined) throw new StoreUnverifiedError(path);
   const memory = new DatabaseSync(":memory:");
   try {
-    if (typeof memory.deserialize !== "function") throw new StoreUnverifiedError(path);
     const copy = new Uint8Array(image);
     // Header bytes 18 and 19 say WAL (2); the in-memory image has no WAL, so it reads as rollback.
     if (copy.length >= 20) copy.fill(1, 18, 20);
