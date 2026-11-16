@@ -5,6 +5,13 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+### Changed
+
+- The library now requires Node 24.16 or later in 24, or 26.1 or later (`engines`:
+  `>=24.16 <25 || >=26.1`; it was `>=24.14`). Those are the first releases whose `node:sqlite` has
+  `DatabaseSync#deserialize`, which reading a store left with a WAL and no `-shm` needs; Node
+  24.14–24.15, 25 and 26.0 lack it. Bun 1.4 and the CLI binary are unaffected.
+
 ## [1.0.0-beta.9] - 2026-11-15
 
 Closes the items 1.0.0-beta.8 left open. The export format, the SQLite and Postgres schemas and

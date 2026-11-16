@@ -33,7 +33,7 @@ Vocabulary: [GLOSSARY.md](GLOSSARY.md).
 
 ## Library
 
-Requires Node 24.14 or later, or Bun 1.4 or later. The beta is on npm under the `beta` tag:
+Requires Node 24.16 or later in 24 (or 26.1 or later), or Bun 1.4 or later. The beta is on npm under the `beta` tag:
 
 ```sh
 npm install relembra@beta    # or: bun add relembra@beta

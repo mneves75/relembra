@@ -221,8 +221,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 24.14 is the floor in package.json engines; 26 is the newest major.
-        node: ["24.14", "26"]
+        # 24.16 is the floor in package.json engines (the first 24 with DatabaseSync#deserialize);
+        # 26 is the newest major.
+        node: ["24.16", "26"]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -256,7 +257,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, windows-11-arm]
-        node: ["24.14", "26"]
+        node: ["24.16", "26"]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     defaults:

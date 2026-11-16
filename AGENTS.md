@@ -13,7 +13,7 @@ TypeScript memory core for AI agents. Design: `docs/ARCHITECTURE.md`. Vocabulary
 - The implementation plan is `docs/specs/IMPLEMENTATION-PLAN.md`. Where a ticket and the plan
   disagree, the plan wins until the ticket is updated.
 - Zero runtime dependencies in the library. Optional peer dependencies only (pi-durable).
-- The library runs on Node (≥ 24.14) and Bun (≥ 1.4). The CLI is a Bun AOT binary. Use only APIs both
+- The library runs on Node (24.16 or later in 24, or 26.1 or later) and Bun (≥ 1.4). The CLI is a Bun AOT binary. Use only APIs both
   runtimes provide (for example `node:sqlite`).
 - Test-first. Every negative result needs a positive control.
 - Work on a branch, never commit to `main`; merging is the owner's.
@@ -48,7 +48,7 @@ Run it as a script (or `npm run check:release`), not through `bun run`: Bun acts
 before any script starts.
 
 Local evidence covers only this machine's platform and the actual Bun/Node executables recorded.
-Hosted CI adds Linux x64/arm64, macOS arm64 and Windows x64/arm64 jobs, Node 24.14/26 jobs on Linux
+Hosted CI adds Linux x64/arm64, macOS arm64 and Windows x64/arm64 jobs, Node 24.16/26 jobs on Linux
 and Windows, and an informational pi-durable@latest probe; local runs do not attest those cells.
 Keep the shared checks aligned; local release acceptance additionally requires candidate/artifact
 provenance and strict latency acceptance. The main steps, one by one:

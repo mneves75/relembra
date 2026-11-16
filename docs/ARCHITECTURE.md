@@ -241,7 +241,7 @@ store adapters    memory (tests) · sqlite (node:sqlite, works in Node and Bun) 
   macOS one is a second build: the release ships the locally gated binary); every Bun test
   against that binary, on stable Bun 1.4.4 on Linux x64 with a Postgres 17 service and on macOS,
   and with the pinned Bun on Linux arm64 and Windows x64 and arm64 (those skip the Postgres
-  tests, having no service containers); the Node tests on Node 24.14 and 26, on Linux and
+  tests, having no service containers); the Node tests on Node 24.16 and 26, on Linux and
   Windows, and the packed tarball; the eval's release gates on the synthetic set (ticket 18); SBOM, gitleaks, zizmor,
   and an informational probe of the latest pi-durable.
 - The local merge gate, `scripts/ci.sh`, records every required step's exit and the committed

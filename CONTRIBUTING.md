@@ -5,7 +5,7 @@ Bug reports, questions and pull requests are welcome. For a vulnerability, follo
 
 ## Set up
 
-You need Bun 1.4 or later, Node 24.14 or later, and Docker for the Postgres tests. Building the
+You need Bun 1.4 or later, Node 24.16 or later in 24 (or 26.1 or later), and Docker for the Postgres tests. Building the
 CLI needs a Bun with `--aot` (canary today).
 
 ```sh

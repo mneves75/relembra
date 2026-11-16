@@ -217,7 +217,7 @@ Rules:
 
 ### 4.6 Runtime, ids and packaging
 
-- **Runtimes.** Node ≥ 24.14 (defensive default, `node:sqlite` available) and Bun ≥ 1.4, the same
+- **Runtimes.** Node 24.16 or later in 24, or 26.1 or later (defensive default from 24.14; `DatabaseSync#deserialize` from 24.16 and 26.1) and Bun ≥ 1.4, the same
   in `AGENTS.md`, `package.json` `engines`, the README and CI. SQLite conformance runs on Node 24,
   Node 26 and Bun.
 - **Ids.** Memory ids stay opaque strings from the `Ids` port (`crypto.randomUUID()` by default).
