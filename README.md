@@ -25,7 +25,7 @@ and storage (an adapter). relembra enforces the rules:
 - **Measured.** An evaluation harness with leak, scope, retrieval and wake-coverage gates, plus
   controls that must fail. Results: [docs/eval/](docs/eval/).
 
-Version: 1.0.0-beta.8, a beta ([changelog](CHANGELOG.md),
+Version: 1.0.0-beta.9, a beta ([changelog](CHANGELOG.md),
 [releases](https://github.com/mneves75/relembra/releases)). Release procedure:
 [docs/RELEASE.md](docs/RELEASE.md).
 Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -121,6 +121,11 @@ versions in its files until VACUUM, and the WAL and backups keep theirs, which a
 operator's to erase. TLS on the connection, encryption of the database and its backups, and
 auditing who reads or exports what are the host's and the operator's too: relembra's event log
 records changes, not reads.
+
+An open that creates or migrates the schema needs, for the role relembra connects as, `CREATE`
+on the database (Postgres checks it even for a schema that exists) and `SELECT` on
+`pg_catalog.pg_namespace`, which every role has unless an operator revoked it: that open locks
+the catalog in `ACCESS SHARE` mode.
 
 ### Sharing across machines
 
@@ -226,7 +231,7 @@ On Windows, check the hash with `Get-FileHash` and copy the binary onto `PATH` a
 
 Before replacing an installed executable, retain a backup and its hash. Verify installed bytes
 against the release checksum and export metadata from a disposable store
-(`relembra: "1.0.0-beta.8"`); there is no `--version` flag. The [release procedure](docs/RELEASE.md) covers isolated checks and
+(`relembra: "1.0.0-beta.9"`); `relembra --version` prints the version the binary was built as. The [release procedure](docs/RELEASE.md) covers isolated checks and
 rollback without opening a live memory store. After verification, `relembra init` prints the
 session hook for your agent.
 

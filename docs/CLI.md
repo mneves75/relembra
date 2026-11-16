@@ -221,11 +221,33 @@ is the library's host: it decides the scope and the principal, never the agent c
 | Flag | Meaning |
 |---|---|
 | `--json` | Print one JSON document (see [Output](#output)) |
-| `--help` | Print a Commands table (each command with a one-line summary), the usage lines and exit 0; with `--json`, `{ "ok": true, "data": { "usage": … } }` |
+| `--help` | Print help and exit 0 (see [Help](#help)); `-h` is the same flag; with `--json`, `{ "ok": true, "data": { "usage": … } }` |
+| `--version` | Print `relembra <version>` and exit 0; with `--json`, `{ "ok": true, "data": { "version": … } }` |
 
 A token starting with `-` before `--` is a flag. Put text that starts with `-` after `--`:
 `relembra note -- "-5 °C is the freezer's setting"`. A value flag takes `--flag value` or
 `--flag=value`.
+
+### Help
+
+- `relembra --help`, `relembra -h` and `relembra help` print the same text: a Commands table
+  (each command with its one-line summary), every command's usage line, and a footer.
+- `relembra <command> --help`, `relembra <command> -h` and `relembra help <command>` print only
+  that command: its summary, its usage line, its flags (a value flag as `--flag <value>`) and the
+  footer.
+- `--help` or `-h` anywhere before `--` wins over the rest of the line, extra arguments and unknown
+  flags included: `relembra note --help extra` prints `note`'s help and exits 0. When the first word
+  is not a command, it prints the global help (`relembra nope --help`, `relembra --help note`).
+  That holds where a value goes too: `relembra note x --agent -h` prints help; write
+  `--agent=-h` to pass `-h` as the value.
+- `help` is a word only in command position: `relembra find help` searches for "help". After
+  `help`, an unknown command is `unknown-command` and a second word is `extra-argument`, both exit 2.
+- The footer links this reference at the binary's own release tag,
+  `https://github.com/mneves75/relembra/blob/v<version>/docs/CLI.md`, so an installed binary does
+  not point at a repository path.
+- `--version` stands alone (`--json` aside): `relembra --version extra` is `extra-argument`, and
+  `--version` after a command is `unknown-flag`, both exit 2.
+- Help and `--version` open no store, read no stdin and need no scope.
 
 ## Environment
 
@@ -701,7 +723,9 @@ The release binaries `relembra-windows-x64.exe` and `relembra-windows-arm64.exe`
 - **Where the store is safe.** Before any directory is created, relembra reads every existing
   ancestor's owner SID and DACL through the system Windows PowerShell 5.1 and .NET Framework.
   It refuses foreign owners and permissions allowing another account to rename, delete,
-  re-permission, change attributes or replace a directory, or create the store folder first.
+  re-permission, change attributes or replace a directory, or create the store folder first;
+  on the folder the store folder is made in, another account may hold only read and execute
+  on that folder itself.
   Reparse points and inherited grants beyond read and execute are also refused. Trusted
   accounts are you, SYSTEM, Administrators and TrustedInstaller.
   Missing components are created with their private descriptor from the first instant and

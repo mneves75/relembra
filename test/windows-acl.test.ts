@@ -198,6 +198,39 @@ describe("chainRefusal applies the four rules", () => {
     expect(chainRefusal(chain(PROFILE, "D:(A;;LC;;;BU)"), TRUSTED)).toBeUndefined();
   });
 
+  test("R3: on the store folder's parent, a foreign right beyond read and execute", () => {
+    // 0x2 (DC) is FILE_ADD_FILE on a folder, which FSCTL_SET_REPARSE_POINT accepts as write
+    // access: another account could make the empty parent a junction before the store folder.
+    for (const entry of ["(A;;DC;;;BU)", "(A;;0x2;;;BU)", "(A;OI;0x2;;;BU)", "(A;OI;DC;;;BU)"]) {
+      expect({ entry, refusal: chainRefusal(chain(`${PROFILE}${entry}`), TRUSTED) }).toEqual({
+        entry,
+        refusal: expect.stringMatching(/AppData .*S-1-5-32-545\) write to it/),
+      });
+      // Positive control: higher up, a folder is not empty, and the same entry refuses nothing.
+      expect(chainRefusal(chain(PROFILE, `D:${entry}`), TRUSTED)).toBeUndefined();
+    }
+    // Refused before this rule too, as R3's add-folder right; higher up it still refuses nothing.
+    expect(chainRefusal(chain(`${PROFILE}(A;;0x4;;;BU)`), TRUSTED)).toMatch(
+      /AppData .*S-1-5-32-545\) create the store folder/,
+    );
+    expect(chainRefusal(chain(PROFILE, "D:(A;;0x4;;;BU)"), TRUSTED)).toBeUndefined();
+    // Positive control: read and execute alone, in hex or as letters, refuse nothing there.
+    for (const entry of ["(A;;0x1200a9;;;BU)", "(A;;FR;;;WD)", "(A;;FX;;;BU)", "(A;;GRGX;;;BU)"]) {
+      expect({ entry, refusal: chainRefusal(chain(`${PROFILE}${entry}`), TRUSTED) }).toEqual({
+        entry,
+        refusal: undefined,
+      });
+    }
+  });
+
+  test("stock folders as the store folder's parent keep their verdicts", () => {
+    expect(chainRefusal(chain(PROFILE), TRUSTED)).toBeUndefined();
+    expect(chainRefusal(chain(USERS), TRUSTED)).toBeUndefined();
+    // Authenticated Users may add folders to a drive root, refused there before this rule too.
+    expect(chainRefusal(chain(ROOT), TRUSTED)).toMatch(/\(S-1-5-11\) /);
+    expect(chainRefusal(chain(RUNNER_ROOT), TRUSTED)).toMatch(/\(S-1-5-11\) /);
+  });
+
   test("R4: a foreign right beyond read, inherited by a new store folder", () => {
     expect(chainRefusal(chain(`${PROFILE}(A;OICIIO;SDGXGWGR;;;AU)`), TRUSTED)).toMatch(
       /AppData .*S-1-5-11\) .*open the new store folder/,

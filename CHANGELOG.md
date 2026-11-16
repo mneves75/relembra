@@ -5,6 +5,41 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [1.0.0-beta.9] - 2026-11-15
+
+Closes the items 1.0.0-beta.8 left open. The export format, the SQLite and Postgres schemas and
+the CLI's exit codes are unchanged.
+
+### Fixed
+
+- Postgres: hosts sharing one connection pool can open a new schema at the same moment. A pooled
+  connection that had already looked the schema up could still see it as absent after waiting
+  for the migration lock, and failed with a duplicate-key error (`23505`).
+- Import: a second retract of a memory the file holds only in redacted form is skipped, as it is
+  for a stored memory; before, it wrote a second retract event.
+- Import: a redacted-form note, summarize or promote line over a stored memory that still has its
+  text must be followed by its redact line, as it must when the store lacks the memory. A file
+  cut between the two is refused `malformed` instead of importing with the text kept.
+- Import: a retract, supersede or redact naming an id that only another scope holds is refused
+  as an unknown id (`malformed`), not `conflict`, so it no longer tells that the id exists.
+
+### Added
+
+- CLI: `relembra <command> --help`, `-h` and `relembra help [command]` print one command's help
+  or the full help; `relembra --version` prints the version. The help ends with the link to this
+  version's `docs/CLI.md` on GitHub instead of a repository path.
+
+### Changed
+
+- Windows: a new store is refused when another account holds more than read and execute on the
+  deepest existing folder above it (docs/specs/w-nv1/spec.md, rule 3). Write access there is
+  enough to turn that empty folder into a junction. After creating the folders, the helper also
+  checks again that this folder is not a reparse point.
+- Windows: if the security step reports a store created but left no store file, the store is
+  refused, instead of a file being created with the folder's own permissions.
+- CLI: `-h` anywhere before `--` now prints help, as `--help` already did. So
+  `relembra note x --agent -h` prints help; `--agent=-h` still passes the value.
+
 ## [1.0.0-beta.8] - 2026-11-14
 
 Fixes from a second full read of the repository, and a pass over its comments: about 100 of

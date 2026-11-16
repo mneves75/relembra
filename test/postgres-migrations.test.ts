@@ -94,6 +94,27 @@ describePostgres("postgres migrations (IMPLEMENTATION-PLAN §4.5)", () => {
     expect(await versions()).toEqual(ALL);
   });
 
+  test("hosts sharing one pool open new schemas at once, round after round", async () => {
+    // The pool's connections have already looked each schema up when they wait for the lock, so
+    // this is the case a pool per opener never reaches.
+    const shared = client();
+    const made: string[] = [];
+    try {
+      for (let round = 0; round < 8; round++) {
+        const name = freshSchema();
+        made.push(name);
+        const opened = await Promise.allSettled(
+          Array.from({ length: 4 }, () => openPostgresStore({ client: shared, schema: name })),
+        );
+        expect(opened.map((o) => (o.status === "rejected" ? String(o.reason) : o.status))).toEqual(
+          Array(4).fill("fulfilled"),
+        );
+      }
+    } finally {
+      for (const name of made) await dropSchema(admin, name);
+    }
+  });
+
   for (const level of ["read committed", "repeatable read", "serializable"]) {
     test(`a host that waited for the migration lock sees the migration it waited for (client default ${level})`, async () => {
       // The first opener holds the lock until the second has asked for it, so the second's

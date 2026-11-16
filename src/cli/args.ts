@@ -9,7 +9,9 @@ export interface Parsed {
 }
 
 export type ParseResult =
-  | { readonly kind: "help" }
+  /** One command's help, or the global help when `command` is absent. */
+  | { readonly kind: "help"; readonly command?: CommandSpec | undefined }
+  | { readonly kind: "version" }
   | { readonly kind: "command"; readonly parsed: Parsed };
 
 /** Whether `--json` appears before any `--`, so even a usage error can answer in JSON. */
@@ -27,12 +29,27 @@ export function wantsJson(argv: readonly string[]): boolean {
  * ignored, so no spelling of an undeclared option can change what a command does.
  */
 export function parseArgs(argv: readonly string[]): ParseResult {
-  if (argv.includes("--help") && !argv.slice(0, argv.indexOf("--help")).includes("--")) {
-    return { kind: "help" };
+  const end = argv.indexOf("--");
+  const beforeEnd = (index: number) => end < 0 || index < end;
+  const [name, ...rest] = argv.filter((arg, index) => !(arg === "--json" && beforeEnd(index)));
+  // --help or -h before any `--` wins over the rest of the line; a command as the first word
+  // narrows it to that command's help.
+  if (argv.some((arg, index) => (arg === "--help" || arg === "-h") && beforeEnd(index))) {
+    return { kind: "help", command: COMMANDS.find((spec) => spec.name === name) };
   }
-  const [name, ...rest] = argv.filter(
-    (arg, index) => !(arg === "--json" && !argv.slice(0, index).includes("--")),
-  );
+  if (name === "help") {
+    if (rest.length > 1) throw usage("extra-argument", "help takes at most 1 argument");
+    const [topic] = rest;
+    if (topic === undefined) return { kind: "help" };
+    const command = COMMANDS.find((spec) => spec.name === topic);
+    if (command === undefined)
+      throw usage("unknown-command", `unknown command: ${topic.slice(0, 40)}`);
+    return { kind: "help", command };
+  }
+  if (name === "--version") {
+    if (rest.length > 0) throw usage("extra-argument", "--version takes no argument");
+    return { kind: "version" };
+  }
   if (name === undefined) throw usage("missing-command", "no command given; see relembra --help");
   const command = COMMANDS.find((spec) => spec.name === name);
   if (command === undefined)

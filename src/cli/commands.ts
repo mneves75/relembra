@@ -1,3 +1,5 @@
+import { RELEMBRA_VERSION } from "../version.js";
+
 /**
  * The CLI's command table: every command, its arguments and its flags. docs/CLI.md documents
  * exactly this table, and test/cli/contract.test.ts checks the two against each other.
@@ -177,7 +179,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
 ];
 
-export const GLOBAL_FLAGS = ["--json", "--help"] as const;
+export const GLOBAL_FLAGS = ["--json", "--help", "--version"] as const;
 
 /** The environment the CLI reads, in the order docs/CLI.md lists it. */
 export const ENV_VARS = [
@@ -195,19 +197,38 @@ export const ENV_VARS = [
   "SystemRoot",
 ] as const;
 
-export function usageText(): string {
-  const width = Math.max(...COMMANDS.map((command) => command.name.length));
+/** The closing lines of every help text: the published reference for this binary's version. */
+const FOOTER = [
+  "Every command takes --json. Scope comes from the git project and the OS user, or",
+  "RELEMBRA_SCOPE; reads also cover RELEMBRA_GLOBAL_SCOPE when it is set. The store lives",
+  "in RELEMBRA_HOME (default ~/.relembra).",
+  `See https://github.com/mneves75/relembra/blob/v${RELEMBRA_VERSION}/docs/CLI.md`,
+];
+
+/** `relembra --help`; with a command, `relembra <command> --help`. */
+export function usageText(command?: CommandSpec): string {
+  if (command !== undefined) {
+    const flags = command.flags.map((flag) => (flag.value ? `${flag.name} <value>` : flag.name));
+    return [
+      `relembra ${command.name}: ${command.summary}`,
+      "",
+      "Usage:",
+      `  ${command.usage}`,
+      ...(flags.length === 0 ? [] : ["", "Flags:", `  ${flags.join(", ")}`]),
+      "",
+      ...FOOTER,
+    ].join("\n");
+  }
+  const width = Math.max(...COMMANDS.map((spec) => spec.name.length));
   return [
     "relembra: a curated, scoped memory for AI agents",
     "",
     "Commands:",
-    ...COMMANDS.map((command) => `  ${command.name.padEnd(width)}  ${command.summary}`),
+    ...COMMANDS.map((spec) => `  ${spec.name.padEnd(width)}  ${spec.summary}`),
     "",
     "Usage:",
-    ...COMMANDS.map((command) => `  ${command.usage}`),
+    ...COMMANDS.map((spec) => `  ${spec.usage}`),
     "",
-    "Every command takes --json. Scope comes from the git project and the OS user, or",
-    "RELEMBRA_SCOPE; reads also cover RELEMBRA_GLOBAL_SCOPE when it is set. The store lives",
-    "in RELEMBRA_HOME (default ~/.relembra). See docs/CLI.md.",
+    ...FOOTER,
   ].join("\n");
 }

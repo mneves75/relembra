@@ -230,8 +230,8 @@ sh install.sh relembra-darwin-arm64 SHA256SUMS
 ```
 
 The installer verifies the copied bytes before replacing the destination. Compare the installed
-binary's sha256 with both the release checksum and recorded tested binary hash. There is no
-`--version` flag: check the version through an export's `relembra: "<version>"` header instead.
+binary's sha256 with both the release checksum and recorded tested binary hash. Check the version with
+`relembra --version`, and through an export's `relembra: "<version>"` header.
 
 In a disposable directory, set explicit disposable `RELEMBRA_HOME` and `RELEMBRA_SCOPE` and
 clear inherited `RELEMBRA_GLOBAL_SCOPE`. Run `relembra init` there first to create the test store,

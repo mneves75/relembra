@@ -1368,3 +1368,183 @@ describe("replayed summaries follow the direct path's summary rules", () => {
     expect(direct.revision.provenance.trust).toBe("untrusted");
   });
 });
+
+describe("a retract replayed twice is skipped, wherever the memory is", () => {
+  const retract = { kind: "retract", memoryId: "m", scope: SCOPE, principalId: "x" };
+  const retracts = async (store: Store) =>
+    (await store.events({ scopes: [SCOPE] })).filter((event) => event.kind === "retract").length;
+
+  test("control: a stored memory's second retract is skipped", async () => {
+    const note = {
+      kind: "note",
+      memoryId: "m",
+      scope: SCOPE,
+      principalId: "x",
+      pinned: false,
+      revision: revisionLine("A retracted fact."),
+    };
+    const store = createMemoryStore();
+    expect(await importJsonl(store, owner, crafted([SCOPE], [note, retract, retract]))).toEqual({
+      imported: 2,
+      skipped: 1,
+      refused: [],
+    });
+    expect(await retracts(store)).toBe(1);
+  });
+
+  test("a memory known only by its tombstone: the second retract is skipped too", async () => {
+    const gone = { kind: "note", memoryId: "m", scope: SCOPE, principalId: "x", pinned: false };
+    const redact = {
+      kind: "redact",
+      memoryId: "m",
+      scope: SCOPE,
+      cause: "request",
+      principalId: "x",
+    };
+    const store = createMemoryStore();
+    const file = crafted([SCOPE], [{ ...gone, redacted: true }, retract, retract, redact]);
+    expect(await importJsonl(store, owner, file)).toEqual({ imported: 3, skipped: 1, refused: [] });
+    expect(await retracts(store)).toBe(1);
+    const again = await exportJsonl(store, owner, { scope: SCOPE });
+    expect(lines(again).filter((line) => line.kind === "retract")).toHaveLength(1);
+  });
+});
+
+describe("a redacted-form line needs its redact line, whatever the store holds", () => {
+  /**
+   * A target that imported a fact A and a summary S of A while they were live, and the source's
+   * export after A was redacted (redacting S with it): both in redacted form, then their redacts.
+   */
+  async function redactedAtSource() {
+    const source = open();
+    const a = await source.note("Erased at the source later.");
+    const summary = await source.relembra.submitSummary(owner, {
+      scope: SCOPE,
+      sources: [{ memoryId: a.id, revision: 1 }],
+      text: "A summary of the erased fact.",
+      provenance,
+    });
+    const target = createMemoryStore();
+    await importJsonl(target, scopeOwner, await exportJsonl(source.store, owner, { scope: SCOPE }));
+    await source.relembra.redact(owner, { memoryId: a.id });
+    const later = (await exportJsonl(source.store, owner, { scope: SCOPE })).split("\n");
+    const noteLine = later.findIndex((text) => text.includes(`"memoryId":"${a.id}"`)) + 1;
+    /** The later export cut after its line `n` (1-based, header included). */
+    const cutAfter = (n: number) => `${later.slice(0, n).join("\n")}\n`;
+    return { target, a, summary, later: later.join("\n"), noteLine, cutAfter };
+  }
+
+  async function refusal(store: Store, jsonl: string) {
+    const before = await store.events({ scopes: [SCOPE] });
+    const error = await importJsonl(store, scopeOwner, jsonl).catch((e: unknown) => e);
+    expect(await store.events({ scopes: [SCOPE] })).toEqual(before);
+    return error;
+  }
+
+  test("control: cut after A's redacted note, the file is refused by an empty store", async () => {
+    const { noteLine, cutAfter } = await redactedAtSource();
+    expect(await refusal(createMemoryStore(), cutAfter(noteLine))).toMatchObject({
+      reason: "malformed",
+      line: noteLine,
+    });
+  });
+
+  test("cut after A's redacted note, it is refused over A's live copy too", async () => {
+    const { target, noteLine, cutAfter } = await redactedAtSource();
+    expect(await refusal(target, cutAfter(noteLine))).toMatchObject({
+      reason: "malformed",
+      line: noteLine,
+    });
+  });
+
+  test("cut after A's redacted note, it is refused over A's retracted copy too", async () => {
+    const { target, a, noteLine, cutAfter } = await redactedAtSource();
+    await open(target, "t").relembra.retract(owner, { memoryId: a.id });
+    expect(await refusal(target, cutAfter(noteLine))).toMatchObject({
+      reason: "malformed",
+      line: noteLine,
+    });
+  });
+
+  test("the refusal names the first line whose redact is missing, stored or not", async () => {
+    const { target, a } = await redactedAtSource();
+    const gone = (memoryId: string) => ({
+      kind: "note",
+      memoryId,
+      scope: SCOPE,
+      principalId: "x",
+      pinned: false,
+      redacted: true,
+    });
+    expect(await refusal(target, crafted([SCOPE], [gone(a.id), gone("absent")]))).toMatchObject({
+      reason: "malformed",
+      line: 2,
+    });
+  });
+
+  test("positive control: the whole file imports over the live copies, redacting both", async () => {
+    const { target, a, summary, later } = await redactedAtSource();
+    await importJsonl(target, scopeOwner, later);
+    for (const id of [a.id, summary.id]) {
+      expect(await target.transaction((tx) => tx.memory(id))).toMatchObject({ status: "redacted" });
+    }
+  });
+});
+
+describe("a retract, supersede or redact of another scope's memory answers as an unknown id", () => {
+  const replacement = {
+    kind: "note",
+    memoryId: "r",
+    scope: SCOPE,
+    principalId: "x",
+    pinned: false,
+    revision: revisionLine("A replacement."),
+  };
+  const files = {
+    retract: (memoryId: string) =>
+      crafted([SCOPE], [{ kind: "retract", memoryId, scope: SCOPE, principalId: "x" }]),
+    supersede: (memoryId: string) =>
+      crafted(
+        [SCOPE],
+        [replacement, { kind: "supersede", memoryId, scope: SCOPE, principalId: "x", by: "r" }],
+      ),
+    redact: (memoryId: string) =>
+      crafted(
+        [SCOPE],
+        [{ kind: "redact", memoryId, scope: SCOPE, cause: "request", principalId: "x" }],
+      ),
+  };
+  const statusAfter = { retract: "retracted", supersede: "superseded", redact: "redacted" };
+
+  for (const [kind, file] of Object.entries(files)) {
+    test(`a ${kind} of an id only another scope holds is refused as one no scope holds`, async () => {
+      const { store, note } = open();
+      const foreign = await note("Another scope's fact.", { scope: OTHER_SCOPE });
+      const before = await store.events({ scopes: [SCOPE, OTHER_SCOPE] });
+      const answer = async (memoryId: string) => {
+        const error = await importJsonl(store, scopeOwner, file(memoryId)).catch((e) => e);
+        expect(error).toBeInstanceOf(ImportError);
+        const { reason, line, detail, message } = error as ImportError;
+        return { reason, line, detail, message: message.replaceAll(memoryId, "<id>") };
+      };
+      expect(await answer(foreign.id)).toEqual(await answer("no-such-memory"));
+      expect(await answer(foreign.id)).toMatchObject({ reason: "malformed" });
+      expect(await store.events({ scopes: [SCOPE, OTHER_SCOPE] })).toEqual(before);
+      expect(await store.transaction((tx) => tx.memory(foreign.id))).toMatchObject({
+        scope: OTHER_SCOPE,
+        status: "live",
+      });
+    });
+
+    test(`positive control: a ${kind} of the importer's own scope's memory imports`, async () => {
+      const { store, note } = open();
+      const own = await note("A fact of the importer's scope.");
+      expect(await importJsonl(store, scopeOwner, file(own.id))).toMatchObject({
+        refused: [],
+      });
+      expect(await store.transaction((tx) => tx.memory(own.id))).toMatchObject({
+        status: statusAfter[kind as keyof typeof statusAfter],
+      });
+    });
+  }
+});

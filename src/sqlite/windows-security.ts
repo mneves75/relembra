@@ -136,6 +136,10 @@ try {
             }
             Confirm-Folder $path $true
           }
+          # The deepest existing ancestor was empty until the first folder was made in it: had it
+          # become a junction after the re-read above, the folders now lie elsewhere. Read-Folder
+          # refuses a reparse point; once it holds a folder it can no longer become one.
+          [void](Read-Folder ([IO.Path]::GetDirectoryName($request.paths[0])))
           foreach ($sidecar in $request.sidecars) {
             if (Test-Entry $sidecar) { throw "$sidecar exists without its store; no store is created beside it" }
           }

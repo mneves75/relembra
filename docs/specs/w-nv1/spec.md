@@ -72,8 +72,13 @@ PowerShell absence, policy refusal, timeout or malformed output fails closed.
 3. Reject foreign or unverifiable owners even when their SID appears in no access entry.
    Check every existing ancestor for foreign allow entries granting DELETE, WRITE_DAC,
    WRITE_OWNER, generic all, DELETE_CHILD, FILE_WRITE_ATTRIBUTES or generic write.
-   Attribute writes matter because the deepest existing ancestor may be empty and convertible
-   into a junction. Check that deepest ancestor for foreign add-subdirectory access as well.
+   On the deepest existing ancestor, refuse any foreign allow entry that gives the folder itself
+   a right beyond read and execute (list, read attributes and extended attributes, traverse,
+   read control, synchronize, generic read and execute). That folder may be empty until the
+   store folder is made in it, and FSCTL_SET_REPARSE_POINT turns an empty folder into a junction
+   with FILE_WRITE_DATA (FILE_ADD_FILE, 0x2, on a folder) as well as FILE_WRITE_ATTRIBUTES
+   (MS-FSA); add-subdirectory access would let another account make the store folder first.
+   Higher ancestors already hold a folder, so they cannot become one; they keep the list above.
    Keep beta.3's conservative refusal of inherited permissions beyond read and execute.
    Denials never cancel these conservative refusals. Unknown SDDL fails closed.
 4. Re-read the existing ancestry immediately before creation; reject a changed descriptor.
@@ -88,13 +93,16 @@ PowerShell absence, policy refusal, timeout or malformed output fails closed.
    exists, including the leaf an abandoned creator left behind. Verify every created
    component's owner, reparse status, inheritance protection, auto-inherit model and exact
    access rules.
-7. Only after successful verification, and still under the mutex, refuse orphan sidecars and
+7. Only after successful verification, and still under the mutex, read the deepest existing
+   ancestor once more and refuse it if it has become a reparse point, refuse orphan sidecars and
    create the empty database with FileMode.CreateNew through .NET, so it inherits the verified
    grants; verify its entries. Preserve the caller's file-type refusals. Never take ownership
    of, harden, remove or silently adopt a preexisting uninitialized directory.
 8. When a step fails after this run made a component, remove what this run made (the file, then
    its folders in reverse, each empty) before reporting the failure, so a retry finds the leaf
-   absent. Nothing that existed before the run is removed.
+   absent. Nothing that existed before the run is removed. When the step answers but the
+   store file is still absent, the caller removes the file its own exclusive open made and
+   refuses the store.
 
 ## Acceptance
 
@@ -126,3 +134,8 @@ PowerShell absence, policy refusal, timeout or malformed output fails closed.
   attribute access is unaffected by sharing flags; restricting sharing does not revoke it.
 - [Reparse points](https://learn.microsoft.com/en-us/windows/win32/fileio/reparse-points):
   a directory must be empty to acquire a reparse point.
+- [MS-FSA FSCTL_SET_REPARSE_POINT](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-fsa/4aeefef8-92c3-4abc-af7a-a610caf8a165):
+  refused only when the open holds neither FILE_WRITE_DATA nor FILE_WRITE_ATTRIBUTES, and on a
+  directory that is not empty.
+- [ACE strings](https://learn.microsoft.com/en-us/windows/win32/secauthz/ace-strings): `DC` is
+  ADS_RIGHT_DS_DELETE_CHILD, the 0x2 bit, which on a folder is FILE_ADD_FILE.

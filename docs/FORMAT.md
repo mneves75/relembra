@@ -1,6 +1,6 @@
 # relembra storage format
 
-Status: event formats 1 and 2, SQLite schema version 6, Postgres schema version 3. Release 1.0.0-beta.8.
+Status: event formats 1 and 2, SQLite schema version 6, Postgres schema version 3. Release 1.0.0-beta.9.
 
 This document is the contract for what relembra stores. A reader that follows it needs no
 relembra code.
@@ -175,7 +175,7 @@ the events above, so a reader needs only this document.
 |---|---|---|
 | `export` | string | Always `relembra`. What makes the file an export. |
 | `format` | integer | The newest event format of the lines after it: `1` when none is a `promote` line, so a format 1 reader still reads the file, and `2` when one is. |
-| `relembra` | string | The relembra version that wrote the file, such as `1.0.0-beta.8`. Informational: a reader decides by `format` alone. |
+| `relembra` | string | The relembra version that wrote the file, such as `1.0.0-beta.9`. Informational: a reader decides by `format` alone. |
 | `scopes` | array of strings | The scopes exported. Every event's `scope` is one of them. |
 
 ### Events (lines 2 onward)
@@ -241,9 +241,12 @@ all of it, or nothing and an error naming the rule and line (`docs/CLI.md`, `imp
   refuses the import (`conflict`). A memory keeps its scope through the file: a line that names
   it in another scope than the line that noted it, or than the store's copy, refuses the import
   (`conflict`), tombstones included, and a replacement must be in its target's scope
-  (`malformed`).
-- **Ids across scopes (residual).** Memory ids are one namespace for the whole store, so a line
-  whose id another scope holds refuses the import (`conflict`) where an absent id imports. An
+  (`malformed`). A `retract`, `supersede` or `redact` whose memory only another scope holds is
+  refused as one whose memory no scope holds (`malformed`, the same line and message).
+- **Ids across scopes (residual).** Memory ids are one namespace for the whole store, so a
+  `note`, `summarize` or `promote` line whose id another scope holds refuses the import
+  (`conflict`) where an absent id imports. That difference cannot be hidden: the line must be
+  refused, since the id is taken, and the same line with an absent id must import. An
   importer who already knows an id from a scope it cannot read learns that the memory exists;
   never its text, state or scope. Ids are kept unguessable so that knowing one takes having seen
   it: the default `Ids` port (`randomIds`) gives random version 4 UUIDs from the platform's

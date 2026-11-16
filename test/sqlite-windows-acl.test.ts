@@ -114,6 +114,26 @@ describe("the accounts a store folder grants", () => {
   });
 });
 
+describe("the store file after the Windows creation step", () => {
+  const home = () => {
+    const dir = mkdtempSync(join(tmpdir(), "relembra-step-"));
+    dirs.push(dir);
+    return dir;
+  };
+
+  test("a step that answers without making the file is refused, and no file is left", () => {
+    const store = join(home(), "relembra.db");
+    expect(() => createOwnerOnly(store, () => {})).toThrow(/no store is created/);
+    expect(existsSync(store)).toBe(false);
+  });
+
+  test("positive control: the file the step made opens", () => {
+    const store = join(home(), "relembra.db");
+    createOwnerOnly(store, (path) => writeFileSync(path, "", { flag: "wx", mode: 0o600 }));
+    expect(lstatSync(store).isFile()).toBe(true);
+  });
+});
+
 describe.skipIf(!WINDOWS)("Windows store ACL", () => {
   test("positive control: a folder made in the leaky parent inherits Everyone's read", () => {
     const home = plainFolder(join(leakyParent(), "home"));
@@ -419,6 +439,32 @@ describe.skipIf(!WINDOWS)("the Windows creation step under its lock", () => {
     expect(() => create(join(stale, "relembra.db"), stale)).toThrow(/auto-inherit model/);
     expect(acl(stale)).toBe(before);
     expect(existsSync(join(stale, "relembra.db"))).toBe(true);
+  });
+
+  test("a store folder made through a junction is refused after creation, and removed", () => {
+    const parent = leakyParent();
+    const target = plainFolder(join(parent, "target"));
+    const link = join(parent, "link");
+    windowsTool("cmd.exe", ["/d", "/c", "mklink", "/J", link, target]);
+    expect(lstatSync(link).isSymbolicLink()).toBe(true);
+    // The chain read before creation stops at the junction's parent, as if the junction had been
+    // made after it: only the re-read after creation can see it.
+    const home = join(link, "home");
+    const chain = readWindowsChain(powershell(), storeFolderChain(link).reverse());
+    const step = (folder: string) =>
+      createStoreUnderLock(
+        powershell(),
+        join(folder, "relembra.db"),
+        folder,
+        [folder],
+        chain,
+        windowsSid(),
+        storeFolderAccounts(windowsSid()),
+      );
+    expect(() => step(home)).toThrow(/link is a link or reparse point/);
+    expect(existsSync(join(target, "home"))).toBe(false);
+    // Positive control: the same chain, under a plain folder beside the junction, is created.
+    expect(step(join(parent, "home"))).toBe("created");
   });
 
   test("a failure after the folder is made removes what this run made, so a retry can succeed", () => {

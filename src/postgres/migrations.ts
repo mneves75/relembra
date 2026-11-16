@@ -178,6 +178,10 @@ export async function migrate(
     await q.query("SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))", [
       `relembra migrate ${schema}`,
     ]);
+    // Taking an advisory lock does not make the backend read catalog invalidations, so a pooled
+    // connection that had already looked the schema up still holds it as absent, and its CREATE
+    // SCHEMA IF NOT EXISTS collides with the one it waited for (23505). A relation lock does read them.
+    await q.query("LOCK TABLE pg_catalog.pg_namespace IN ACCESS SHARE MODE");
     await q.query(`CREATE SCHEMA IF NOT EXISTS ${s}`);
     await q.query(
       `CREATE TABLE IF NOT EXISTS ${s}.schema_version (version integer PRIMARY KEY, applied_at bigint NOT NULL)`,
