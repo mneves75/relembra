@@ -122,10 +122,8 @@ to the checkout that ran the release check.
 - Waived:
   - to 2027-01-31: SEC-18 (gate plan item P-18);
   - to 2027-02-28: SEC-20 (P-3) and C9.3-K2.
-- K-2's residual (Low, documented in `docs/FORMAT.md`):
-  - A note, summarize or promote line whose id another scope holds answers `conflict`, so an
-    importer who already knows that id learns that it exists, never its text, state or scope.
-  - Retract, supersede and redact no longer disclose it.
+- K-2's residual (Low): described in `docs/FORMAT.md`, "Ids across scopes (residual)", and
+  waived as C9.3-K2.
 - The reviewer's Low finding, pre-existing: a replayed second supersede of a memory the file holds
   only in redacted form answers `conflict`, where a stored one is skipped.
 - Not installed by this release run: the Mac and the maintainer's Linux hosts are still on the
