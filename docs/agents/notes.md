@@ -5,6 +5,19 @@ Dated entries, newest first. Keep out secrets, local paths, private names and se
 the repository is public. Code and procedure live in their own files; this file holds only what
 those files cannot say: the mistake, the dead end, the thing that turned out to matter.
 
+## 2026-11-16: 1.0.0-beta.10 (Node floor)
+
+- **Node version claims:** check the version an API arrived in by probing the official build
+  (`typeof new DatabaseSync(":memory:").deserialize`), not a code comment. The comment said 24.22;
+  the method is in 24.16.
+- **Required checks:** renaming a CI matrix value renames required checks in the
+  `main protection` ruleset. Update the ruleset in the same release, with the owner's approval, or
+  the PR cannot merge.
+- **During a running release check:** do not edit or commit. It checks the candidate's identity
+  before and after, and `autoreview` aborts too. Use `git stash`, since dcg blocks `git checkout --`.
+- **Acceptance briefs:** inherited criteria go stale. A briefed waiver count (C9.1) and a literal
+  "only X changes" (C11.3) each cost a round. Restate counts and scopes for the candidate.
+
 ## 2026-11-15: 1.0.0-beta.9 (open items of beta.8)
 
 - **Postgres:** `pg_advisory_xact_lock` does not make a backend read catalog invalidations. A
