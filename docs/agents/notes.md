@@ -5,6 +5,27 @@ Dated entries, newest first. Keep out secrets, local paths, private names and se
 the repository is public. Code and procedure live in their own files; this file holds only what
 those files cannot say: the mistake, the dead end, the thing that turned out to matter.
 
+## 2026-11-15: 1.0.0-beta.9 (open items of beta.8)
+
+- **Postgres:** `pg_advisory_xact_lock` does not make a backend read catalog invalidations. A
+  pooled connection that had already resolved a schema name keeps seeing it as absent after the
+  wait, so its `CREATE SCHEMA IF NOT EXISTS` collides (`23505`). Taking a relation lock does read
+  them: `LOCK TABLE pg_catalog.pg_namespace IN ACCESS SHARE MODE`.
+- **Postgres privileges:** `CREATE SCHEMA IF NOT EXISTS` checks `CREATE` on the database even when
+  the schema exists.
+- **Strict benchmark under load:**
+  - It is the step that fails when other work loads the machine: warm find p95 went over 50 ms
+    at load 66 to 100.
+  - It passed at load 28 to 45.
+  - There is no bench-only mode, so each retry reruns the whole gate.
+  - Wait for quieter load; never stop other projects' processes.
+- **Codex acceptance:**
+  - Its sandbox's `gh` has no login, so job logs answer 403. Download the full logs with an
+    authenticated `gh run view <run> --job <id> --log` and hand them over with their checksums.
+  - A waiver for a disclosure criterion must name every tracked place that states the detail,
+    comments and their compiled copies included. A paragraph-only waiver cost a round.
+  - Tell it not to run repository test files, whose fixtures write under the OS temporary folder.
+
 ## 2026-11-14: 1.0.0-beta.8 (comment pass, second audit)
 
 - About 4% of the 2,560 comment blocks were removable; most explain a platform quirk or a spec
