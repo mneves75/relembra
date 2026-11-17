@@ -22,7 +22,8 @@ and Postgres schemas are unchanged from 1.0.0-beta.10.
 ### Added
 
 - `docs/eval/bench-2026-11-17-v1.0.0-beta.10.md`: the strict latency benchmark on 1.0.0-beta.10's
-  inputs, passed (warm find p95 Bun 5.04 ms, Node 20.59 ms); the site quotes it.
+  inputs, passed (warm find p95 Bun 5.04 ms, Node 20.59 ms). The site quotes this release's own
+  strict run instead (Bun 5.92 ms, Node 11.35 ms; `docs/eval/release-1.0.0-beta.11.md`).
 
 ## [1.0.0-beta.10] - 2026-11-16
 
