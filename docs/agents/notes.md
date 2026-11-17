@@ -15,6 +15,17 @@ those files cannot say: the mistake, the dead end, the thing that turned out to 
 - **Site proof table:** its caption and `.source` line cover every row, so a new latency number
   needs both re-dated, not only the two cells.
 
+## 2026-11-17: 1.0.0-beta.11 (docs)
+
+- **Two gates, one word:** "gate pass" in a session's notes can mean `scripts/ci.sh` (the gate
+  manifest) or the `mneves-security` deploy gate. `hmo` needs the second, found by `tree` in a
+  `production.json`; check for it before planning a publication, not when `hmo` refuses.
+- **A docs-only delta still needs its own gate record:** the tree changed, so the earlier record
+  does not bind. A reuse record over the delta, with independent acceptance, took one verifier
+  pass when the brief named the exact changed files and how to show the rest is byte-identical.
+- **GitHub 5xx:** `hmo` stopped on an HTTP 502 from the run's jobs API. It writes only under
+  `.scratch/deploy/`, so a plain retry is safe; `prd` is not retried blindly.
+
 ## 2026-11-16: 1.0.0-beta.10 (Node floor)
 
 - **Node version claims:** check the version an API arrived in by probing the official build
