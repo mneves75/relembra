@@ -5,6 +5,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [1.0.0-beta.11] - 2026-11-17
+
+Documentation and a new latency record. The library, the CLI, the export format and the SQLite
+and Postgres schemas are unchanged from 1.0.0-beta.10.
+
 ### Fixed
 
 - Docs: `docs/CLI.md` gives `invalid-argument`'s rule as `<field>:<rule>` for every identifier
@@ -347,6 +352,7 @@ table of `docs/specs/IMPLEMENTATION-PLAN.md`. Known residuals are documented in 
 (import id existence) and `docs/CLI.md` (same-user trust model). Report vulnerabilities as
 [SECURITY.md](SECURITY.md) describes.
 
+[1.0.0-beta.11]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.11
 [1.0.0-beta.10]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.10
 [1.0.0-beta.9]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.9
 [1.0.0-beta.8]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.8
