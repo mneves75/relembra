@@ -5,6 +5,18 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+### Fixed
+
+- Docs: `docs/CLI.md` gives `invalid-argument`'s rule as `<field>:<rule>` for every identifier
+  (`memory-id:ill-formed` included), not for memory ids only; `docs/ARCHITECTURE.md` lists every
+  CLI command, the MCP server's five protocol revisions and the Windows binaries; the site and
+  `PRODUCT.md` state the Node floor as `package.json` does.
+
+### Added
+
+- `docs/eval/bench-2026-11-17-v1.0.0-beta.10.md`: the strict latency benchmark on 1.0.0-beta.10's
+  inputs, passed (warm find p95 Bun 5.04 ms, Node 20.59 ms); the site quotes it.
+
 ## [1.0.0-beta.10] - 2026-11-16
 
 Raises the Node floor. The export format, the SQLite and Postgres schemas and the CLI are unchanged.

@@ -213,7 +213,7 @@ store adapters    memory (tests) · sqlite (node:sqlite, works in Node and Bun) 
   the carrier `mcp:<random UUID>`, one per server process; the CLI has no hook, so they stay
   pending until a library host delivers them, and nothing claims a client deleted anything.
 - **The CLI** (`init, note, find, recall, wake, brief, zoom, retract, redact, supersede,
-  pending, sweep, summarize, check, import, export, hook, mcp`), whose `hook` command is the
+  pending, sweep, summarize, check, import, export, hook, mcp, help`), whose `hook` command is the
   session-start hook (`docs/CLI.md`).
 - **Import:** OptMem's `LOG.txt`, read from its public documentation only (reading a data format
   copies no code), and relembra's own JSONL export; both idempotent, neither grants `owner`
