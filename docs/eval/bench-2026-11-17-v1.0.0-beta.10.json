@@ -346,7 +346,7 @@
       "runtimes": {
         "available": true,
         "bun": {
-          "path": "/opt/homebrew/Cellar/bun/1.4.4_1/bin/bun",
+          "path": "bun",
           "version": "1.4.5 (237bba51e98a8b3d5b62d2d6c33853c2e83820a7)",
           "sqlite": "3.54.0",
           "sha256": "c89d66427134e4faa8a71b69360c2064df83ffc93fce29adeb72a622f5800e78"
@@ -621,7 +621,7 @@
       "runtimes": {
         "available": true,
         "bun": {
-          "path": "/opt/homebrew/Cellar/bun/1.4.4_1/bin/bun",
+          "path": "bun",
           "version": "1.4.5 (237bba51e98a8b3d5b62d2d6c33853c2e83820a7)",
           "sqlite": "3.54.0",
           "sha256": "c89d66427134e4faa8a71b69360c2064df83ffc93fce29adeb72a622f5800e78"
