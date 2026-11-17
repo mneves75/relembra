@@ -11,7 +11,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
   (`memory-id:ill-formed` included), not for memory ids only; `docs/ARCHITECTURE.md` lists every
   CLI command, the MCP server's five protocol revisions and the Windows binaries; the site and
   `PRODUCT.md` state the Node floor as `package.json` does; `GLOSSARY.md`, `docs/FORMAT.md` and
-  `docs/ARCHITECTURE.md` drop stale v0.1/v0.3 qualifiers (there is no un-retract and no pruning).
+  `docs/ARCHITECTURE.md` drop stale v0.1/v0.3 qualifiers (there is no un-retract and no pruning); the site's MCP row lists the
+  revisions served through `initialize` (2025-11-25 back to 2024-11-05).
 
 ### Added
 

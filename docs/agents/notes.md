@@ -11,7 +11,7 @@ those files cannot say: the mistake, the dead end, the thing that turned out to 
   gate on a clean checkout (about four minutes) and passed at load 24 to 48. Its JSON holds the
   Bun and Node executables' absolute paths: replace both before committing a record.
 - **gitleaks:** `gitleaks dir a b c` scans the working directory, `node_modules` included, and
-  reports hundreds of third-party hits. Scan one path per call.
+  reports over a hundred third-party hits. Scan one path per call.
 - **Site proof table:** its caption and `.source` line cover every row, so a new latency number
   needs both re-dated, not only the two cells.
 
