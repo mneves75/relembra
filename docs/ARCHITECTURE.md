@@ -107,7 +107,7 @@ store adapters    memory (tests) · sqlite (node:sqlite, works in Node and Bun) 
     lists every row with each carrier's status, for the host only (a carrier id says what a
     conversation saw). relembra never claims an external copy is gone;
   - exposures grow with carriers times memories (ids only, no text). Nothing prunes them, nor
-    settled outcomes, in v0.3: pruning is later work, and until then a host that needs it deletes
+    settled outcomes: pruning is later work, and until then a host that needs it deletes
     rows itself;
   - `retract` hides a memory from agents, and an owner view still shows it, marked. Retracting
     or superseding a memory retracts the live summaries derived from it, but not its promoted
@@ -207,12 +207,14 @@ store adapters    memory (tests) · sqlite (node:sqlite, works in Node and Bun) 
   - Tested: a process killed after the memory commit and before pi-durable's journal ack leaves
     one memory with the same id and timestamp after reopen (two without the op id), and the
     takeover with and without an epoch.
-- **MCP server over stdio:** the plug for agents whose MCP client speaks revision 2026-07-28.
+- **MCP server over stdio:** the plug for MCP clients. It serves revision 2026-07-28 statelessly,
+  and 2025-11-25, 2025-06-18, 2025-03-26 and 2024-11-05 through `initialize`.
   It is the CLI's `relembra mcp` subcommand (`docs/CLI.md`), not a library export. Its renderings are recorded for
   the carrier `mcp:<random UUID>`, one per server process; the CLI has no hook, so they stay
   pending until a library host delivers them, and nothing claims a client deleted anything.
-- **Session-start hook scripts** and the **CLI** (`init, note, find, recall, wake, brief, zoom,
-  retract, redact, pending, summarize, check, import, export`).
+- **The CLI** (`init, note, find, recall, wake, brief, zoom, retract, redact, supersede,
+  pending, sweep, summarize, check, import, export, hook, mcp`), whose `hook` command is the
+  session-start hook (`docs/CLI.md`).
 - **Import:** OptMem's `LOG.txt`, read from its public documentation only (reading a data format
   copies no code), and relembra's own JSONL export; both idempotent, neither grants `owner`
   trust or pins (`FORMAT.md`).
@@ -224,7 +226,7 @@ store adapters    memory (tests) · sqlite (node:sqlite, works in Node and Bun) 
   `/postgres`, `/pi-durable` and `/testing`. pi-durable is an optional peer dependency. The MCP
   server ships in the CLI binary only, as `relembra mcp`.
 - The library is built for Node (ESM with `.d.ts`). The CLI is a Bun AOT binary (`bun build
-  --compile --aot --trim`) for macOS and Linux. A 2026-10-30 prototype measured 18 ms against
+  --compile --aot --trim`) for macOS arm64, Linux x64 and arm64, and Windows x64 and arm64. A 2026-10-30 prototype measured 18 ms against
   57 ms on Node 26 on the hook path; the first measured numbers for the built binary are in
   `docs/bench/`.
 - Install: `install.sh` installs a binary already downloaded from a GitHub release only if its

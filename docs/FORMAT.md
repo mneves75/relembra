@@ -495,7 +495,7 @@ Which carriers received which memories, ids only: a rendering given a carrier (`
 `findRendering` with `carrier`) writes one row per memory it carries before it is returned, in
 an autocommit statement of its own, never in a store transaction. A redaction reads the rows of
 each memory it erases into its outbox rows. No text, no scope: an exposure names no memory's
-content. Rows are never deleted in v0.3; the table grows with carriers times memories.
+content. Rows are never deleted; the table grows with carriers times memories.
 
 | Column | Meaning |
 |---|---|
@@ -509,7 +509,7 @@ content. Rows are never deleted in v0.3; the table grows with carriers times mem
 
 The outcome the host's hook gave each carrier of an outbox row. A carrier listed in
 `erasure_outbox.carriers` with no row here is pending, and has a row in `erasure_pending`. A row
-is never changed or deleted in v0.3: the first outcome stays.
+is never changed or deleted: the first outcome stays.
 
 | Column | Meaning |
 |---|---|

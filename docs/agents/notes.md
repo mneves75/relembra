@@ -5,6 +5,16 @@ Dated entries, newest first. Keep out secrets, local paths, private names and se
 the repository is public. Code and procedure live in their own files; this file holds only what
 those files cannot say: the mistake, the dead end, the thing that turned out to matter.
 
+## 2026-11-17: docs refresh and a latency record
+
+- **Strict benchmark alone:** `bun bench/eval-latency.ts --check --out <dir>` runs without the
+  gate on a clean checkout (about four minutes) and passed at load 24 to 48. Its JSON holds the
+  Node executable's absolute path: replace it before committing a record.
+- **gitleaks:** `gitleaks dir a b c` scans the working directory, `node_modules` included, and
+  reports hundreds of third-party hits. Scan one path per call.
+- **Site proof table:** its caption and `.source` line cover every row, so a new latency number
+  needs both re-dated, not only the two cells.
+
 ## 2026-11-16: 1.0.0-beta.10 (Node floor)
 
 - **Node version claims:** check the version an API arrived in by probing the official build
