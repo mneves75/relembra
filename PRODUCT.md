@@ -31,7 +31,7 @@ summaries and reports which carriers still hold a copy. Results are measured, no
 
 ## Capabilities and Constraints
 
-A TypeScript library with zero runtime dependencies (Node 24.16+ or Bun 1.4+), a single-binary CLI
+A TypeScript library with zero runtime dependencies (Node 24.16 or later in 24, or 26.1 or later; or Bun 1.4+), a single-binary CLI
 with a session-start hook, a stdio MCP server, SQLite and Postgres stores. Public beta under the
 MIT licence; the version on the page always equals `package.json`'s.
 

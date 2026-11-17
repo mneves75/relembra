@@ -5,6 +5,27 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [1.0.0-beta.11] - 2026-11-17
+
+Documentation and a new latency record. The library, the CLI, the export format and the SQLite
+and Postgres schemas are unchanged from 1.0.0-beta.10.
+
+### Fixed
+
+- Docs: `docs/CLI.md` gives `invalid-argument`'s rule as `<field>:<rule>` for every identifier
+  (`memory-id:ill-formed` included), not for memory ids only; `docs/ARCHITECTURE.md` lists every
+  CLI command, the MCP server's five protocol revisions and the Windows binaries; the site and
+  `PRODUCT.md` state the Node floor as `package.json` does; `GLOSSARY.md`, `docs/FORMAT.md` and
+  `docs/ARCHITECTURE.md` drop stale v0.1/v0.3 qualifiers (there is no un-retract and no
+  pruning); the site's MCP row lists the revisions served through `initialize` (2025-11-25 back
+  to 2024-11-05).
+
+### Added
+
+- `docs/eval/bench-2026-11-17-v1.0.0-beta.10.md`: the strict latency benchmark on 1.0.0-beta.10's
+  inputs, passed (warm find p95 Bun 5.04 ms, Node 20.59 ms). The site quotes this release's own
+  strict run instead (Bun 5.92 ms, Node 11.35 ms; `docs/eval/release-1.0.0-beta.11.md`).
+
 ## [1.0.0-beta.10] - 2026-11-16
 
 Raises the Node floor. The export format, the SQLite and Postgres schemas and the CLI are unchanged.
@@ -333,6 +354,7 @@ table of `docs/specs/IMPLEMENTATION-PLAN.md`. Known residuals are documented in 
 (import id existence) and `docs/CLI.md` (same-user trust model). Report vulnerabilities as
 [SECURITY.md](SECURITY.md) describes.
 
+[1.0.0-beta.11]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.11
 [1.0.0-beta.10]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.10
 [1.0.0-beta.9]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.9
 [1.0.0-beta.8]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.8

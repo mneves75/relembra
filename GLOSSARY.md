@@ -30,7 +30,7 @@ _Avoid_: Log line, operation (when meaning the stored change)
 
 **Retract**:
 Hide a memory from agents while its owner can still see it. The summaries derived from it are
-retracted with it. One-way in v0.1.
+retracted with it. One-way: there is no un-retract.
 _Avoid_: Delete, forget, hide
 
 **Redact**:

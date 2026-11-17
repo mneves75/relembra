@@ -1,6 +1,6 @@
 # relembra storage format
 
-Status: event formats 1 and 2, SQLite schema version 6, Postgres schema version 3. Release 1.0.0-beta.10.
+Status: event formats 1 and 2, SQLite schema version 6, Postgres schema version 3. Release 1.0.0-beta.11.
 
 This document is the contract for what relembra stores. A reader that follows it needs no
 relembra code.
@@ -175,7 +175,7 @@ the events above, so a reader needs only this document.
 |---|---|---|
 | `export` | string | Always `relembra`. What makes the file an export. |
 | `format` | integer | The newest event format of the lines after it: `1` when none is a `promote` line, so a format 1 reader still reads the file, and `2` when one is. |
-| `relembra` | string | The relembra version that wrote the file, such as `1.0.0-beta.10`. Informational: a reader decides by `format` alone. |
+| `relembra` | string | The relembra version that wrote the file, such as `1.0.0-beta.11`. Informational: a reader decides by `format` alone. |
 | `scopes` | array of strings | The scopes exported. Every event's `scope` is one of them. |
 
 ### Events (lines 2 onward)
@@ -495,7 +495,7 @@ Which carriers received which memories, ids only: a rendering given a carrier (`
 `findRendering` with `carrier`) writes one row per memory it carries before it is returned, in
 an autocommit statement of its own, never in a store transaction. A redaction reads the rows of
 each memory it erases into its outbox rows. No text, no scope: an exposure names no memory's
-content. Rows are never deleted in v0.3; the table grows with carriers times memories.
+content. Rows are never deleted; the table grows with carriers times memories.
 
 | Column | Meaning |
 |---|---|
@@ -509,7 +509,7 @@ content. Rows are never deleted in v0.3; the table grows with carriers times mem
 
 The outcome the host's hook gave each carrier of an outbox row. A carrier listed in
 `erasure_outbox.carriers` with no row here is pending, and has a row in `erasure_pending`. A row
-is never changed or deleted in v0.3: the first outcome stays.
+is never changed or deleted: the first outcome stays.
 
 | Column | Meaning |
 |---|---|
