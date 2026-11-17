@@ -13,7 +13,7 @@ to the checkout that ran the release check.
 |---|---|
 | Gated candidate | `ce98fc8afa280b2193e9dbf77d2393f44155a2b5` (PR #34) |
 | Input digest (`scripts/evidence.ts`) | `148a781233457d4cbea089e942b08cabcdae5e2b2709482b93b43d437b2bd6e6` |
-| Report-only commits after it | change only `site/index.html`, `CHANGELOG.md`, `docs/eval/` and `docs/agents/notes.md`; AGENTS.md's `git diff --quiet ce98fc8 <ref> -- <inputs>` exits 0 |
+| Report-only commits after it | change only `CHANGELOG.md`, `docs/eval/release-1.0.0-beta.11.md` and `site/index.html`; AGENTS.md's `git diff --quiet ce98fc8 <ref> -- <inputs>` exits 0 |
 | Runtimes | Bun 1.4.5 (`237bba51e`), Node v26.13.0, SQLite 3.54.0 |
 | Machine | Apple M5 Pro, 18 cores, macOS 27.3 arm64 |
 
