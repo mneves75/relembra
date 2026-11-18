@@ -204,6 +204,23 @@ describe("pending", () => {
     // Positive control: the agent fact, covered at its own trust, is no longer due.
     expect((await opened.relembra.pending("reader")).map((m) => m.id)).toEqual([rule.id, other.id]);
   });
+
+  test("redacting one source redacts the whole summary and puts its other sources back in pending", async () => {
+    const { relembra, note, summarize } = open();
+    const kept = await note("Deploys use tags.");
+    const erased = await note("Deploys pause on Fridays.");
+    const summary = await summarize("writer", [kept, erased], { text: "Tags; no Friday deploys." });
+    // Positive control: the summary covers both sources.
+    expect(await relembra.pending("reader")).toEqual([]);
+
+    const result = await relembra.redact("owner", { memoryId: erased.id });
+
+    // The summary may repeat the erased text, so it goes too, though another source still backs it.
+    expect(result).toEqual({ redacted: [erased.id], derived: [summary.id] });
+    expect((await relembra.zoom("owner", { memoryId: summary.id })).status).toBe("redacted");
+    // The surviving source is live and due again, to be summarized from what remains.
+    expect((await relembra.pending("reader")).map((m) => m.id)).toEqual([kept.id]);
+  });
 });
 
 describe("summaries in wake and brief", () => {
