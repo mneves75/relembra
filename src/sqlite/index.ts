@@ -77,150 +77,66 @@ const MEMORY_COLUMNS =
 /** Opens (and creates or migrates) a relembra store in one SQLite file, through node:sqlite. */
 export function openSqliteStore(options: SqliteStoreOptions): SqliteStore {
   const busyTimeoutMs = checkBusyTimeout(options.busyTimeoutMs ?? DEFAULT_BUSY_TIMEOUT_MS);
-  createOwnerOnly(options.path);
+  const path = createOwnerOnly(options.path);
 
-  const db = openDatabase(options.path, busyTimeoutMs);
+  const db = openDatabase(path, busyTimeoutMs, { keepBusyTimeout: true });
 
-  const insertEvent = db.prepare(
-    "INSERT INTO events (kind, memory_id, scope, body) VALUES (?, ?, ?, ?)",
-  );
-  const upsertMemory = db.prepare(`
-    INSERT INTO memories (${MEMORY_COLUMNS})
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT (id) DO UPDATE SET
-      scope = excluded.scope,
-      seq = excluded.seq,
-      pinned = excluded.pinned,
-      noted_at = excluded.noted_at,
-      revision_number = excluded.revision_number,
-      text = excluded.text,
-      revised_at = excluded.revised_at,
-      provenance = excluded.provenance,
-      status = excluded.status,
-      superseded_by = excluded.superseded_by,
-      sources = excluded.sources,
-      origin = excluded.origin
-    RETURNING position
-  `);
-  const selectMemory = db.prepare(`SELECT ${MEMORY_COLUMNS} FROM memories WHERE id = ?`);
-  const selectPosition = db.prepare("SELECT position FROM memories WHERE id = ?");
-  const terms = termIndex(db);
-  const selectLiveByIds = db.prepare(`
-    SELECT ${MEMORY_COLUMNS}
-    FROM memories
-    WHERE id IN (SELECT value FROM json_each(?))
-      AND scope IN (SELECT value FROM json_each(?))
-      AND status = 'live'
-  `);
-  const unindex = (id: string) => {
-    const row = selectPosition.get(id) as { position: number } | undefined;
-    if (row !== undefined) terms.remove(row.position);
-  };
-  const selectTombstone = db.prepare("SELECT id, scope, seq FROM tombstones WHERE id = ?");
-  const selectDerived = db.prepare(`
-    SELECT id FROM memories
-    WHERE (sources IS NOT NULL
-        AND EXISTS (SELECT 1 FROM json_each(memories.sources) WHERE json_extract(value, '$.memoryId') = ?1))
-      OR (origin IS NOT NULL AND json_extract(origin, '$.memoryId') = ?1)
-    ORDER BY position
-  `);
-  const selectExpiring = db.prepare(
-    `SELECT ${MEMORY_COLUMNS} FROM memories WHERE scope = ? AND noted_at < ? ORDER BY position`,
-  );
-  const deleteMemory = db.prepare("DELETE FROM memories WHERE id = ?");
-  const insertTombstone = db.prepare("INSERT INTO tombstones (id, scope, seq) VALUES (?, ?, ?)");
-  const selectMemoryEvents = db.prepare("SELECT seq, body FROM events WHERE memory_id = ?");
-  const updateEventBody = db.prepare("UPDATE events SET body = ? WHERE seq = ?");
-  const scrubOps = db.prepare("UPDATE ops SET fingerprint = NULL WHERE memory_id = ?");
-  const insertErasure = db.prepare(
-    "INSERT INTO erasure_outbox (seq, memory_id, carriers) VALUES (?, ?, ?)",
-  );
-  const selectErasures = db.prepare(
-    "SELECT seq, memory_id, carriers FROM erasure_outbox ORDER BY seq",
-  );
-  const selectExposures = db.prepare(
-    "SELECT carrier_id, carrier_kind FROM exposures WHERE memory_id = ?",
-  );
-  const countExposed = db.prepare(
-    "SELECT count(*) AS n FROM exposures WHERE carrier_id = ? AND memory_id IN (SELECT value FROM json_each(?))",
-  );
-  // WHERE true: SQLite's parser needs it between a SELECT and ON CONFLICT.
-  const insertExposures = db.prepare(`
-    INSERT INTO exposures (carrier_id, memory_id, carrier_kind, first_seen)
-    SELECT ?1, value, ?2, ?3 FROM json_each(?4) WHERE true
-    ON CONFLICT (carrier_id, memory_id) DO NOTHING
-  `);
-  const selectTombstoned = db.prepare(
-    "SELECT id FROM tombstones WHERE id IN (SELECT value FROM json_each(?))",
-  );
-  const insertPending = db.prepare(
-    "INSERT INTO erasure_pending (seq, carrier_id, carrier_kind) VALUES (?, ?, ?)",
-  );
-  const deletePending = db.prepare("DELETE FROM erasure_pending WHERE seq = ? AND carrier_id = ?");
-  // The page's seqs come from the primary key; only pending rows are read.
-  const selectPending = db.prepare(`
-    SELECT p.seq, o.memory_id, p.carrier_id, p.carrier_kind
-    FROM erasure_pending AS p JOIN erasure_outbox AS o ON o.seq = p.seq
-    WHERE p.seq IN (
-      SELECT DISTINCT seq FROM erasure_pending WHERE seq > ? ORDER BY seq LIMIT ?)
-    ORDER BY p.seq, p.carrier_id
-  `);
-  const countPending = db.prepare(
-    "SELECT count(DISTINCT seq) AS work, count(*) AS carriers FROM erasure_pending",
-  );
-  const insertSettlement = db.prepare(`
-    INSERT INTO erasure_deliveries (seq, carrier_id, status, settled_at) VALUES (?, ?, ?, ?)
-    ON CONFLICT (seq, carrier_id) DO NOTHING
-  `);
-  const selectSettlements = db.prepare(
-    "SELECT seq, carrier_id, status, settled_at FROM erasure_deliveries",
-  );
-  const checkpoint = db.prepare("PRAGMA wal_checkpoint(TRUNCATE)");
-  const markScrub = db.prepare("UPDATE wal_scrub SET redacted = redacted + 1 WHERE id = 1");
-  const selectScrub = db.prepare("SELECT redacted, scrubbed FROM wal_scrub WHERE id = 1");
-  const clearScrub = db.prepare("UPDATE wal_scrub SET scrubbed = max(scrubbed, ?) WHERE id = 1");
-  const selectOp = db.prepare(
-    "SELECT principal_id, op_id, fingerprint, memory_id, at, seq FROM ops WHERE principal_id = ? AND op_id = ?",
-  );
-  const insertOp = db.prepare(
-    "INSERT INTO ops (principal_id, op_id, fingerprint, memory_id, at, seq) VALUES (?, ?, ?, ?, ?, ?)",
-  );
-  const selectFence = db.prepare("SELECT epoch FROM fences WHERE key = ?");
-  const upsertFence = db.prepare(
-    "INSERT INTO fences (key, epoch) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET epoch = excluded.epoch",
-  );
-  const selectRecall = db.prepare(`
-    SELECT ${MEMORY_COLUMNS}
-    FROM memories
-    WHERE scope IN (SELECT value FROM json_each(?))
-      AND (status = 'live' OR (status = 'retracted' AND scope IN (SELECT value FROM json_each(?))))
-    ORDER BY position DESC
-    LIMIT ?
-  `);
-
-  const selectEvents = db.prepare(`
-    SELECT seq, body FROM events
-    WHERE scope IN (SELECT value FROM json_each(?))
-    ORDER BY seq
-  `);
-  const selectCheckpoint = db.prepare(
-    "SELECT source, bytes, width FROM import_checkpoints WHERE source = ?",
-  );
-  const upsertCheckpoint = db.prepare(`
-    INSERT INTO import_checkpoints (source, bytes, width) VALUES (?, ?, ?)
-    ON CONFLICT (source) DO UPDATE SET bytes = excluded.bytes, width = excluded.width
-  `);
-
-  const selectLive = db.prepare(`
-    SELECT ${MEMORY_COLUMNS}
-    FROM memories
-    WHERE scope IN (SELECT value FROM json_each(?)) AND status = 'live'
-  `);
+  let prepared: ReturnType<typeof prepareStatements>;
+  try {
+    prepared = prepareStatements(db);
+    db.exec("PRAGMA busy_timeout = 0");
+  } catch (error) {
+    db.close();
+    if (isBusy(error)) throw new StoreBusyError(busyTimeoutMs, { cause: error });
+    throw error;
+  }
+  const {
+    insertEvent,
+    upsertMemory,
+    selectMemory,
+    terms,
+    selectLiveByIds,
+    unindex,
+    selectTombstone,
+    selectDerived,
+    selectExpiring,
+    deleteMemory,
+    insertTombstone,
+    selectMemoryEvents,
+    updateEventBody,
+    scrubOps,
+    insertErasure,
+    selectErasures,
+    selectExposures,
+    countExposed,
+    insertExposures,
+    selectTombstoned,
+    insertPending,
+    deletePending,
+    selectPending,
+    countPending,
+    insertSettlement,
+    selectSettlements,
+    checkpoint,
+    markScrub,
+    selectScrub,
+    clearScrub,
+    selectOp,
+    insertOp,
+    selectFence,
+    upsertFence,
+    selectRecall,
+    selectEvents,
+    selectCheckpoint,
+    upsertCheckpoint,
+    selectLive,
+  } = prepared;
 
   // One handle runs one thing at a time: a transaction's work can await, and anything else on
   // this connection meanwhile would join its transaction or read its uncommitted writes.
   let queue: Promise<unknown> = Promise.resolve();
   let closed = false;
+  let closing: Promise<void> | undefined;
   // A committed redaction's old page images may still sit in the WAL. The wal_scrub row counts
   // redactions (`redacted`, raised by each redaction's own transaction) and the count the WAL was
   // last truncated after (`scrubbed`); a scrub is pending while redacted > scrubbed. Every handle
@@ -249,8 +165,10 @@ export function openSqliteStore(options: SqliteStoreOptions): SqliteStore {
     }
     return maybeMarked();
   };
-  // Before any read: a store that closed with a scrub pending finishes it first.
-  if (pendingIn(selectScrub.get() as ScrubRow | undefined)) queue = scrubWal();
+  // Before any read: a store that closed with a scrub pending finishes it first, using async busy retry.
+  queue = maybeMarked()
+    .then((pending) => (pending ? scrubWal() : undefined))
+    .catch(() => undefined);
   const enqueue = <T>(run: () => Promise<T>): Promise<T> => {
     if (closed) return Promise.reject(new Error("the store is closed"));
     const next = queue.then(run);
@@ -522,18 +440,196 @@ export function openSqliteStore(options: SqliteStoreOptions): SqliteStore {
       );
     },
 
-    async close() {
-      if (closed) return;
+    close() {
+      if (closing !== undefined) return closing;
       closed = true;
-      await queue;
-      const pending = (await maybeMarked()) && (await scrubWal());
-      db.close();
-      if (pending) throw new WalScrubError(options.path);
+      closing = (async () => {
+        await queue;
+        const pending = (await maybeMarked()) && (await scrubWal());
+        db.close();
+        if (pending) throw new WalScrubError(options.path);
+      })();
+      return closing;
     },
 
     walScrubPending() {
       return enqueue(marked);
     },
+  };
+}
+
+function prepareStatements(db: ReturnType<typeof openDatabase>) {
+  const insertEvent = db.prepare(
+    "INSERT INTO events (kind, memory_id, scope, body) VALUES (?, ?, ?, ?)",
+  );
+  const upsertMemory = db.prepare(`
+    INSERT INTO memories (${MEMORY_COLUMNS})
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (id) DO UPDATE SET
+      scope = excluded.scope,
+      seq = excluded.seq,
+      pinned = excluded.pinned,
+      noted_at = excluded.noted_at,
+      revision_number = excluded.revision_number,
+      text = excluded.text,
+      revised_at = excluded.revised_at,
+      provenance = excluded.provenance,
+      status = excluded.status,
+      superseded_by = excluded.superseded_by,
+      sources = excluded.sources,
+      origin = excluded.origin
+    RETURNING position
+  `);
+  const selectMemory = db.prepare(`SELECT ${MEMORY_COLUMNS} FROM memories WHERE id = ?`);
+  const selectPosition = db.prepare("SELECT position FROM memories WHERE id = ?");
+  const terms = termIndex(db);
+  const selectLiveByIds = db.prepare(`
+    SELECT ${MEMORY_COLUMNS}
+    FROM memories
+    WHERE id IN (SELECT value FROM json_each(?))
+      AND scope IN (SELECT value FROM json_each(?))
+      AND status = 'live'
+  `);
+  const unindex = (id: string) => {
+    const row = selectPosition.get(id) as { position: number } | undefined;
+    if (row !== undefined) terms.remove(row.position);
+  };
+  const selectTombstone = db.prepare("SELECT id, scope, seq FROM tombstones WHERE id = ?");
+  const selectDerived = db.prepare(`
+    SELECT id FROM memories
+    WHERE (sources IS NOT NULL
+        AND EXISTS (SELECT 1 FROM json_each(memories.sources) WHERE json_extract(value, '$.memoryId') = ?1))
+      OR (origin IS NOT NULL AND json_extract(origin, '$.memoryId') = ?1)
+    ORDER BY position
+  `);
+  const selectExpiring = db.prepare(
+    `SELECT ${MEMORY_COLUMNS} FROM memories WHERE scope = ? AND noted_at < ? ORDER BY position`,
+  );
+  const deleteMemory = db.prepare("DELETE FROM memories WHERE id = ?");
+  const insertTombstone = db.prepare("INSERT INTO tombstones (id, scope, seq) VALUES (?, ?, ?)");
+  const selectMemoryEvents = db.prepare("SELECT seq, body FROM events WHERE memory_id = ?");
+  const updateEventBody = db.prepare("UPDATE events SET body = ? WHERE seq = ?");
+  const scrubOps = db.prepare("UPDATE ops SET fingerprint = NULL WHERE memory_id = ?");
+  const insertErasure = db.prepare(
+    "INSERT INTO erasure_outbox (seq, memory_id, carriers) VALUES (?, ?, ?)",
+  );
+  const selectErasures = db.prepare(
+    "SELECT seq, memory_id, carriers FROM erasure_outbox ORDER BY seq",
+  );
+  const selectExposures = db.prepare(
+    "SELECT carrier_id, carrier_kind FROM exposures WHERE memory_id = ?",
+  );
+  const countExposed = db.prepare(
+    "SELECT count(*) AS n FROM exposures WHERE carrier_id = ? AND memory_id IN (SELECT value FROM json_each(?))",
+  );
+  const insertExposures = db.prepare(`
+    INSERT INTO exposures (carrier_id, memory_id, carrier_kind, first_seen)
+    SELECT ?1, value, ?2, ?3 FROM json_each(?4) WHERE true
+    ON CONFLICT (carrier_id, memory_id) DO NOTHING
+  `);
+  const selectTombstoned = db.prepare(
+    "SELECT id FROM tombstones WHERE id IN (SELECT value FROM json_each(?))",
+  );
+  const insertPending = db.prepare(
+    "INSERT INTO erasure_pending (seq, carrier_id, carrier_kind) VALUES (?, ?, ?)",
+  );
+  const deletePending = db.prepare("DELETE FROM erasure_pending WHERE seq = ? AND carrier_id = ?");
+  const selectPending = db.prepare(`
+    SELECT p.seq, o.memory_id, p.carrier_id, p.carrier_kind
+    FROM erasure_pending AS p JOIN erasure_outbox AS o ON o.seq = p.seq
+    WHERE p.seq IN (
+      SELECT DISTINCT seq FROM erasure_pending WHERE seq > ? ORDER BY seq LIMIT ?)
+    ORDER BY p.seq, p.carrier_id
+  `);
+  const countPending = db.prepare(
+    "SELECT count(DISTINCT seq) AS work, count(*) AS carriers FROM erasure_pending",
+  );
+  const insertSettlement = db.prepare(`
+    INSERT INTO erasure_deliveries (seq, carrier_id, status, settled_at) VALUES (?, ?, ?, ?)
+    ON CONFLICT (seq, carrier_id) DO NOTHING
+  `);
+  const selectSettlements = db.prepare(
+    "SELECT seq, carrier_id, status, settled_at FROM erasure_deliveries",
+  );
+  const checkpoint = db.prepare("PRAGMA wal_checkpoint(TRUNCATE)");
+  const markScrub = db.prepare("UPDATE wal_scrub SET redacted = redacted + 1 WHERE id = 1");
+  const selectScrub = db.prepare("SELECT redacted, scrubbed FROM wal_scrub WHERE id = 1");
+  const clearScrub = db.prepare("UPDATE wal_scrub SET scrubbed = max(scrubbed, ?) WHERE id = 1");
+  const selectOp = db.prepare(
+    "SELECT principal_id, op_id, fingerprint, memory_id, at, seq FROM ops WHERE principal_id = ? AND op_id = ?",
+  );
+  const insertOp = db.prepare(
+    "INSERT INTO ops (principal_id, op_id, fingerprint, memory_id, at, seq) VALUES (?, ?, ?, ?, ?, ?)",
+  );
+  const selectFence = db.prepare("SELECT epoch FROM fences WHERE key = ?");
+  const upsertFence = db.prepare(
+    "INSERT INTO fences (key, epoch) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET epoch = excluded.epoch",
+  );
+  const selectRecall = db.prepare(`
+    SELECT ${MEMORY_COLUMNS}
+    FROM memories
+    WHERE scope IN (SELECT value FROM json_each(?))
+      AND (status = 'live' OR (status = 'retracted' AND scope IN (SELECT value FROM json_each(?))))
+    ORDER BY position DESC
+    LIMIT ?
+  `);
+  const selectEvents = db.prepare(`
+    SELECT seq, body FROM events
+    WHERE scope IN (SELECT value FROM json_each(?))
+    ORDER BY seq
+  `);
+  const selectCheckpoint = db.prepare(
+    "SELECT source, bytes, width FROM import_checkpoints WHERE source = ?",
+  );
+  const upsertCheckpoint = db.prepare(`
+    INSERT INTO import_checkpoints (source, bytes, width) VALUES (?, ?, ?)
+    ON CONFLICT (source) DO UPDATE SET bytes = excluded.bytes, width = excluded.width
+  `);
+  const selectLive = db.prepare(`
+    SELECT ${MEMORY_COLUMNS}
+    FROM memories
+    WHERE scope IN (SELECT value FROM json_each(?)) AND status = 'live'
+  `);
+  return {
+    insertEvent,
+    upsertMemory,
+    selectMemory,
+    terms,
+    selectLiveByIds,
+    unindex,
+    selectTombstone,
+    selectDerived,
+    selectExpiring,
+    deleteMemory,
+    insertTombstone,
+    selectMemoryEvents,
+    updateEventBody,
+    scrubOps,
+    insertErasure,
+    selectErasures,
+    selectExposures,
+    countExposed,
+    insertExposures,
+    selectTombstoned,
+    insertPending,
+    deletePending,
+    selectPending,
+    countPending,
+    insertSettlement,
+    selectSettlements,
+    checkpoint,
+    markScrub,
+    selectScrub,
+    clearScrub,
+    selectOp,
+    insertOp,
+    selectFence,
+    upsertFence,
+    selectRecall,
+    selectEvents,
+    selectCheckpoint,
+    upsertCheckpoint,
+    selectLive,
   };
 }
 
@@ -568,8 +664,12 @@ async function truncateWal(checkpoint: StatementSync, timeoutMs: number): Promis
   const deadline = Date.now() + timeoutMs;
   for (let delay = 1; ; delay = Math.min(delay * 2, 32)) {
     try {
-      const { busy } = checkpoint.get() as { busy: number };
-      if (busy === 0) return true;
+      const { busy, log, checkpointed } = checkpoint.get() as {
+        busy: number;
+        log: number;
+        checkpointed: number;
+      };
+      if (busy === 0 && log === 0 && checkpointed === 0) return true;
     } catch (error) {
       if (!isBusy(error)) return false;
     }

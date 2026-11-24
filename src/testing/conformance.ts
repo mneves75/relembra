@@ -402,6 +402,27 @@ export function storeConformanceCases(target: ConformanceTarget): readonly Confo
     assert.equal((await store.recall({ scopes: [SCOPE_A], limit: count * 2 })).length, count);
   });
 
+  define("concurrent transactions across two handles lose no write", async (opened) => {
+    if (!opened.reopen) return;
+    const second = await opened.reopen();
+    const perHandle = 10;
+    const run = (handle: Store, prefix: string) =>
+      Array.from({ length: perHandle }, (_, i) =>
+        handle.transaction(async (tx) => {
+          const noted = memory(`${prefix}-${i}`, SCOPE_A, i + 1);
+          const event = await tx.append(noteEvent(noted));
+          await tx.putMemory({ ...noted, seq: event.seq });
+          return event.seq;
+        }),
+      );
+    const seqs = await Promise.all([...run(opened.store, "h1"), ...run(second, "h2")]);
+    assert.equal(new Set(seqs).size, perHandle * 2, "every write got its own seq across handles");
+    assert.equal(
+      (await opened.store.recall({ scopes: [SCOPE_A], limit: perHandle * 4 })).length,
+      perHandle * 2,
+    );
+  });
+
   define("a transaction handle refuses writes after its transaction ends", async ({ store }) => {
     let leaked: Parameters<Parameters<Store["transaction"]>[0]>[0] | undefined;
     const inTime = memory("m-in-time", SCOPE_A, 1);
@@ -1576,13 +1597,17 @@ export function storeConformanceCases(target: ConformanceTarget): readonly Confo
       const retracted = memory("m-retracted", SCOPE_A, boundary - 2 * DAY, {
         status: "retracted",
       });
+      const superseded = memory("m-superseded", SCOPE_A, boundary - 3 * DAY, {
+        status: "superseded",
+        supersededBy: kept.id,
+      });
       // Young itself, but it carries the expired memory's fact.
       const summary = memory("m-summary", SCOPE_A, boundary + DAY, {
         sources: [{ memoryId: expired.id, revision: 1 }],
       });
       // Ancient, in a scope with no rule.
       const elsewhere = memory("m-elsewhere", SCOPE_B, 1);
-      const all = [kept, expired, pinned, retracted, summary, elsewhere];
+      const all = [kept, expired, pinned, retracted, superseded, summary, elsewhere];
       for (const m of all) await commit(store, m);
       const relembra = createRelembra<string>({
         store,
@@ -1594,7 +1619,10 @@ export function storeConformanceCases(target: ConformanceTarget): readonly Confo
 
       assert.deepStrictEqual(
         { redacted: [...report.redacted].sort(), derived: report.derived },
-        { redacted: [expired.id, pinned.id, retracted.id].sort(), derived: [summary.id] },
+        {
+          redacted: [expired.id, pinned.id, retracted.id, superseded.id].sort(),
+          derived: [summary.id],
+        },
       );
       const statuses = await store.transaction(async (tx) => {
         const found: [string, string | undefined][] = [];
@@ -1606,6 +1634,7 @@ export function storeConformanceCases(target: ConformanceTarget): readonly Confo
         [expired.id, "redacted"],
         [pinned.id, "redacted"],
         [retracted.id, "redacted"],
+        [superseded.id, "redacted"],
         [summary.id, "redacted"],
         [elsewhere.id, "live"],
       ]);
@@ -1619,11 +1648,12 @@ export function storeConformanceCases(target: ConformanceTarget): readonly Confo
             [expired.id, "retention", null],
             [pinned.id, "retention", null],
             [retracted.id, "retention", null],
+            [superseded.id, "retention", null],
             [summary.id, "source", null],
           ].sort(),
         );
       }
-      assert.equal((await store.erasures()).length, 4);
+      assert.equal((await store.erasures()).length, 5);
       // A second sweep at the same time finds nothing; a millisecond later, the boundary expires.
       assert.deepStrictEqual(await relembra.sweep(now), { redacted: [], derived: [] });
       if (timed === undefined) {

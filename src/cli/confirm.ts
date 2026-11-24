@@ -40,18 +40,53 @@ export function confirmOwner(lines: readonly string[]): void {
       ...lines.map((line) => `  ${line}`),
       `Type ${code} to confirm (${CONFIRM_TIMEOUT_MS / 1000} s): `,
     ].join("\n");
-    writeSync(fd, prompt);
-    const answer = readLine(fd, Date.now() + CONFIRM_TIMEOUT_MS);
+    const deadline = Date.now() + CONFIRM_TIMEOUT_MS;
+    writeAll(fd, prompt, deadline);
+    const answer = readLine(fd, deadline);
     if (answer === undefined) {
-      writeSync(fd, "\nrelembra: not confirmed (timed out)\n");
+      tryWriteAll(fd, "\nrelembra: not confirmed (timed out)\n", Date.now() + 1_000);
       throw refuse("timeout", "owner trust was not confirmed in time");
     }
     if (answer.trim().toUpperCase() !== code) {
-      writeSync(fd, "relembra: not confirmed (wrong code)\n");
+      tryWriteAll(fd, "relembra: not confirmed (wrong code)\n", Date.now() + 1_000);
       throw refuse("mismatch", "owner trust was not confirmed: the code did not match");
     }
   } finally {
     closeSync(fd);
+  }
+}
+
+/** Writes all UTF-8 bytes of `text` to a non-blocking terminal fd, retrying EAGAIN and short writes. */
+function writeAll(fd: number, text: string, deadline: number): void {
+  const bytes = Buffer.from(text, "utf8");
+  let offset = 0;
+  while (offset < bytes.length) {
+    if (Date.now() >= deadline) {
+      throw refuse("timeout", "owner trust was not confirmed in time");
+    }
+    try {
+      const written = writeSync(fd, bytes, offset, bytes.length - offset);
+      if (written <= 0) {
+        throw refuse("no-tty", "owner trust could not be confirmed: the terminal closed");
+      }
+      offset += written;
+    } catch (error) {
+      if (error instanceof CliError) throw error;
+      if ((error as NodeJS.ErrnoException).code === "EAGAIN") {
+        Atomics.wait(PAUSE, 0, 0, 20);
+        continue;
+      }
+      throw refuse("no-tty", "owner trust could not be confirmed: the terminal closed");
+    }
+  }
+}
+
+/** Best-effort feedback write before refusing: a hung-up terminal must still yield owner-confirmation-required. */
+function tryWriteAll(fd: number, text: string, deadline: number): void {
+  try {
+    writeAll(fd, text, deadline);
+  } catch {
+    // Feedback is advisory; the refusal error takes precedence.
   }
 }
 

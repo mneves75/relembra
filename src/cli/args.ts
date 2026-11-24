@@ -31,15 +31,25 @@ export function wantsJson(argv: readonly string[]): boolean {
 export function parseArgs(argv: readonly string[]): ParseResult {
   const end = argv.indexOf("--");
   const beforeEnd = (index: number) => end < 0 || index < end;
-  const [name, ...rest] = argv.filter((arg, index) => !(arg === "--json" && beforeEnd(index)));
-  // --help or -h before any `--` wins over the rest of the line; a command as the first word
-  // narrows it to that command's help.
+  // --help or -h before any `--` wins over the rest of the line; a command as the first non---json
+  // word narrows it to that command's help.
+  const firstWord = argv.find((arg, index) => !(arg === "--json" && beforeEnd(index)));
   if (argv.some((arg, index) => (arg === "--help" || arg === "-h") && beforeEnd(index))) {
-    return { kind: "help", command: COMMANDS.find((spec) => spec.name === name) };
+    return { kind: "help", command: COMMANDS.find((spec) => spec.name === firstWord) };
   }
+  // Strip leading `--json` only before the command name so value-taking flags never lose a value
+  // slot to `--json` and `--` cannot be consumed as a flag value.
+  let start = 0;
+  while (start < argv.length && argv[start] === "--json") start++;
+  const name = argv[start];
+  const rest = argv.slice(start + 1);
   if (name === "help") {
-    if (rest.length > 1) throw usage("extra-argument", "help takes at most 1 argument");
-    const [topic] = rest;
+    const helpRest = rest.filter((arg, index) => {
+      const sep = rest.indexOf("--");
+      return !(arg === "--json" && (sep < 0 || index < sep));
+    });
+    if (helpRest.length > 1) throw usage("extra-argument", "help takes at most 1 argument");
+    const [topic] = helpRest;
     if (topic === undefined) return { kind: "help" };
     const command = COMMANDS.find((spec) => spec.name === topic);
     if (command === undefined)
@@ -47,7 +57,11 @@ export function parseArgs(argv: readonly string[]): ParseResult {
     return { kind: "help", command };
   }
   if (name === "--version") {
-    if (rest.length > 0) throw usage("extra-argument", "--version takes no argument");
+    const versionRest = rest.filter((arg, index) => {
+      const sep = rest.indexOf("--");
+      return !(arg === "--json" && (sep < 0 || index < sep));
+    });
+    if (versionRest.length > 0) throw usage("extra-argument", "--version takes no argument");
     return { kind: "version" };
   }
   if (name === undefined) throw usage("missing-command", "no command given; see relembra --help");
@@ -63,6 +77,7 @@ export function parseArgs(argv: readonly string[]): ParseResult {
       positionals.push(...rest.slice(index + 1));
       break;
     }
+    if (arg === "--json") continue;
     if (!arg.startsWith("-") || arg === "-") {
       positionals.push(arg);
       continue;
@@ -78,7 +93,9 @@ export function parseArgs(argv: readonly string[]): ParseResult {
       if (equals >= 0) value = arg.slice(equals + 1);
       else {
         const next = rest[index + 1];
-        if (next === undefined) throw usage("missing-value", `${flagName} needs a value`);
+        if (next === undefined || next === "--" || next === "--json") {
+          throw usage("missing-value", `${flagName} needs a value`);
+        }
         value = next;
         index++;
       }

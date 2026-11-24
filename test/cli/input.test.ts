@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, describe, expect } from "bun:test";
+import { hostname } from "node:os";
+import { createRelembra, type Principal } from "relembra";
+import { openSqliteStore } from "relembra/sqlite";
 import { COMMANDS } from "../../src/cli/commands.js";
-import { BINARY, cliTest, ok, refused, run, runStdinOpen, sandbox } from "./support.js";
+import { BINARY, cliTest, ok, refused, run, runStdinOpen, sandbox, USER } from "./support.js";
 
 const box = sandbox();
 beforeAll(() => {
@@ -226,4 +229,76 @@ describe("bad input, refused cleanly by the compiled binary", () => {
     // Positive control: in its own scope it is found.
     expect(ok(box, ["zoom", id]).memory.id).toBe(id);
   });
+
+  cliTest(
+    "--json inside a value-flag slot is refused as missing-value, and -- is never consumed as a flag value",
+    () => {
+      const misbound = run(box, ["note", "--agent", "--json", "deploy freeze"]);
+      expect(misbound.status).toBe(2);
+      expect(misbound.json).toEqual({
+        ok: false,
+        error: { code: "usage", rule: "missing-value" },
+      });
+
+      const explicit = ok(box, ["note", "--agent=--json", "deploy freeze"]);
+      expect(explicit.memory.revision.text).toBe("deploy freeze");
+      expect(explicit.memory.revision.provenance.agent).toBe("--json");
+
+      const missing = refused(box, ["note", "--agent", "--", "deploy freeze"], 2, "usage");
+      expect(missing.json?.ok === false && missing.json.error.rule).toBe("missing-value");
+    },
+  );
+
+  cliTest(
+    "retract on retracted owner memory and idempotent supersede retry on owner memory need no TTY",
+    async () => {
+      const store = openSqliteStore({ path: box.store });
+      const ownerPrincipal: Principal = {
+        id: USER,
+        readable: [box.scope],
+        writable: [box.scope],
+        promotable: [],
+        owned: [box.scope],
+        pinnable: [box.scope],
+        trustCeiling: "owner",
+      };
+      const core = createRelembra<null>({ store, policy: () => ownerPrincipal });
+      const prov = { agent: "a", harness: "h", model: "m", host: "h", trust: "owner" as const };
+      const retractedOwner = await core.note(null, {
+        scope: box.scope,
+        text: "Already retracted owner fact.",
+        provenance: prov,
+      });
+      await core.retract(null, { memoryId: retractedOwner.id });
+
+      const supersededOwner = await core.note(null, {
+        scope: box.scope,
+        text: "Already superseded owner fact.",
+        provenance: prov,
+      });
+      const replacement = await core.supersede(null, {
+        memoryId: supersededOwner.id,
+        text: "New agent replacement.",
+        provenance: {
+          agent: "unknown",
+          harness: "cli",
+          model: "unknown",
+          host: hostname() || "unknown",
+          trust: "agent",
+        },
+        opId: "op-owner-sup",
+      });
+      await store.close();
+
+      expect(ok(box, ["retract", retractedOwner.id]).memoryId).toBe(retractedOwner.id);
+      const retried = ok(box, [
+        "supersede",
+        supersededOwner.id,
+        "New agent replacement.",
+        "--op-id",
+        "op-owner-sup",
+      ]);
+      expect(retried.memory.id).toBe(replacement.id);
+    },
+  );
 });

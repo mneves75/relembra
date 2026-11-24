@@ -571,10 +571,13 @@ interface Attempt<T> {
 
 /**
  * Whether an error is a lost answer rather than the server's refusal: no SQLSTATE at all, a
- * connection exception (class 08), or the server shutting the connection (57P01 to 57P03).
+ * connection exception (class 08), statement completion unknown (40003), or the server shutting
+ * the connection (57P01 to 57P03).
  */
 function noAnswer(state: string | undefined): boolean {
-  return state === undefined || state.startsWith("08") || /^57P0[1-3]$/.test(state);
+  return (
+    state === undefined || state === "40003" || state.startsWith("08") || /^57P0[1-3]$/.test(state)
+  );
 }
 
 /** A lock timeout (55P03) as StoreBusyError; any other error as it is. */

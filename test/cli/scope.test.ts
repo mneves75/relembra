@@ -4,6 +4,7 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   realpathSync,
   renameSync,
@@ -11,6 +12,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { COMMANDS } from "../../src/cli/commands.js";
@@ -568,4 +570,48 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
     expect(existsSync(marker)).toBe(false);
     expect(existsSync(join(box.home, "elsewhere"))).toBe(false);
   });
+
+  cliTest(
+    "git rev-parse error inside a repo fails closed instead of falling back to RELEMBRA_GLOBAL_SCOPE",
+    () => {
+      const broken = mkdtempSync(join(tmpdir(), "relembra-broken-git-"));
+      try {
+        gitInit(broken);
+        writeFileSync(join(broken, ".git", "config"), "[core\n  broken = \n");
+        const result = refused(box, ["note", "should not land in global"], 2, "no-scope", {
+          cwd: broken,
+          env: { RELEMBRA_SCOPE: undefined, RELEMBRA_GLOBAL_SCOPE: OTHER },
+        });
+        expect(result.json?.ok === false && result.json.error.rule).toBe("git-failed");
+        // A broken worktree (.git pointing to a missing gitdir) must also fail closed.
+        const brokenWorktree = mkdtempSync(join(tmpdir(), "relembra-broken-wt-"));
+        try {
+          writeFileSync(
+            join(brokenWorktree, ".git"),
+            `gitdir: ${join(brokenWorktree, "missing-gitdir")}\n`,
+          );
+          const wtResult = refused(box, ["note", "should not land in global"], 2, "no-scope", {
+            cwd: brokenWorktree,
+            env: { RELEMBRA_SCOPE: undefined, RELEMBRA_GLOBAL_SCOPE: OTHER },
+          });
+          expect(wtResult.json?.ok === false && wtResult.json.error.rule).toBe("git-failed");
+        } finally {
+          rmSync(brokenWorktree, { recursive: true, force: true });
+        }
+        // Positive control: outside any git repository, RELEMBRA_GLOBAL_SCOPE still resolves.
+        const outside = mkdtempSync(join(tmpdir(), "relembra-outside-git-"));
+        try {
+          const checked = ok(box, ["check"], {
+            cwd: outside,
+            env: { RELEMBRA_SCOPE: undefined, RELEMBRA_GLOBAL_SCOPE: OTHER },
+          });
+          expect(checked.scope).toBe(OTHER);
+        } finally {
+          rmSync(outside, { recursive: true, force: true });
+        }
+      } finally {
+        rmSync(broken, { recursive: true, force: true });
+      }
+    },
+  );
 });

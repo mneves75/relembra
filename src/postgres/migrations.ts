@@ -188,6 +188,11 @@ export async function migrate(
     );
     // Another opener may have migrated between the first read and the lock.
     const current = checked(await schemaVersion(q, schema), latest);
+    // Serialize upgrade backfills (such as v2->v3 erasure_pending) against any in-flight store
+    // transaction; rolling upgrades from already-open older handles remain out of scope.
+    if (current >= 1 && current < latest) {
+      await q.query(`SELECT id FROM ${s}.store_lock WHERE id = 1 FOR UPDATE`);
+    }
     for (const migration of migrations.slice(current)) {
       for (const statement of migration.statements(s)) await q.query(statement);
       await q.query(
