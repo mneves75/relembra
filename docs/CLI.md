@@ -259,6 +259,7 @@ A token starting with `-` before `--` is a flag. Put text that starts with `-` a
 | `RELEMBRA_AGENT` | Provenance `agent` when `--agent` is absent |
 | `RELEMBRA_HARNESS` | Provenance `harness` when `--harness` is absent |
 | `RELEMBRA_MODEL` | Provenance `model` when `--model` is absent |
+| `RELEMBRA_WAKE_BUDGET` | Default wake byte budget for `wake` and `hook` when `--budget` is absent, 1 to 1,000,000 |
 | `BUN_OPTIONS` | Read only to refuse: set, the binary exits 2 (`unsafe-runtime-env`) |
 | `BUN_BYTECODE_ORDER_OUT` | Read only to refuse, as `BUN_OPTIONS` |
 | `PATH` | Passed to git, to find it |
@@ -476,8 +477,12 @@ Prints the wake for a session-start hook, in the output format both harnesses do
 { "hookSpecificOutput": { "hookEventName": "SessionStart", "additionalContext": "<wake>…</wake>" } }
 ```
 
+| Flag | Meaning |
+|---|---|
+| `--budget <bytes>` | The most UTF-8 bytes, frame included, 1 to 1,000,000; overrides `RELEMBRA_WAKE_BUDGET`; default 9,500 |
+
 - With a global scope, `additionalContext` holds the two `<wake>` frames described under
-  [`wake`](#relembra-wake), within the same 9,500 bytes.
+  [`wake`](#relembra-wake), within the same byte budget (default 9,500 bytes).
 - Claude Code adds `hookSpecificOutput.additionalContext` to the context at the start of the
   conversation and caps it at 10,000 characters; the default wake budget, 9,500 bytes, fits
   (<https://code.claude.com/docs/en/hooks#sessionstart>, read 2026-10-31).
@@ -503,7 +508,7 @@ Register it in `.claude/settings.json` or `~/.claude/settings.json` for Claude C
         "hooks": [
           {
             "type": "command",
-            "command": "/usr/bin/env -i RELEMBRA_HOME=\"$RELEMBRA_HOME\" RELEMBRA_SCOPE=\"$RELEMBRA_SCOPE\" RELEMBRA_GLOBAL_SCOPE=\"$RELEMBRA_GLOBAL_SCOPE\" RELEMBRA_AGENT=\"$RELEMBRA_AGENT\" RELEMBRA_HARNESS=\"$RELEMBRA_HARNESS\" RELEMBRA_MODEL=\"$RELEMBRA_MODEL\" PATH=\"$PATH\" HOME=\"$HOME\" XDG_CONFIG_HOME=\"$XDG_CONFIG_HOME\" SystemRoot=\"$SystemRoot\" /path/to/relembra hook"
+            "command": "/usr/bin/env -i RELEMBRA_HOME=\"$RELEMBRA_HOME\" RELEMBRA_SCOPE=\"$RELEMBRA_SCOPE\" RELEMBRA_GLOBAL_SCOPE=\"$RELEMBRA_GLOBAL_SCOPE\" RELEMBRA_AGENT=\"$RELEMBRA_AGENT\" RELEMBRA_HARNESS=\"$RELEMBRA_HARNESS\" RELEMBRA_MODEL=\"$RELEMBRA_MODEL\" RELEMBRA_WAKE_BUDGET=\"$RELEMBRA_WAKE_BUDGET\" PATH=\"$PATH\" HOME=\"$HOME\" XDG_CONFIG_HOME=\"$XDG_CONFIG_HOME\" SystemRoot=\"$SystemRoot\" /path/to/relembra hook"
           }
         ]
       }
