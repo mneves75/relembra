@@ -186,6 +186,7 @@ const expectations: readonly (readonly [Flaw, string])[] = [
   ["dirty-reads", "a read during an open transaction never sees its uncommitted writes"],
   ["no-serialization", "transactions on one store do not interleave"],
   ["no-serialization", "concurrent transactions lose no write"],
+  ["no-serialization", "concurrent transactions across two handles lose no write"],
   ["leaked-handle-writes", "a transaction handle refuses writes after its transaction ends"],
   ["forgets-on-reopen", "a reopened store keeps committed writes and drops rolled-back ones"],
   [
