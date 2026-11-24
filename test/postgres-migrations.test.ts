@@ -464,4 +464,54 @@ describePostgres("postgres migrations (IMPLEMENTATION-PLAN §4.5)", () => {
     });
     expect(timeless(actual)).toEqual(timeless(expected));
   });
+
+  test("upgrade migration locks store_lock before backfilling so an in-flight writer finishes first", async () => {
+    await migrate(client(), schema, 5000, MIGRATIONS.slice(0, 2));
+    const events: string[] = [];
+    let releaseLock!: () => void;
+    const held = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    let locked!: () => void;
+    const isLocked = new Promise<void>((resolve) => {
+      locked = resolve;
+    });
+    const holder = client().transaction(async (q) => {
+      await q.query(`SELECT id FROM ${schema}.store_lock WHERE id = 1 FOR UPDATE`);
+      events.push("holder:locked");
+      locked();
+      await held;
+      await q.query(
+        `INSERT INTO ${schema}.erasure_outbox (seq, memory_id, carriers) VALUES (1, 'm-race', $1)`,
+        [JSON.stringify([{ id: "c-race", kind: "mcp" }])],
+      );
+      events.push("holder:committed");
+    });
+    await isLocked;
+    const upgrading = migrate(client(), schema, 5000, MIGRATIONS).then(() => {
+      events.push("migrate:done");
+    });
+    try {
+      const deadline = Date.now() + 3000;
+      let waiting = false;
+      while (!waiting && Date.now() < deadline) {
+        const blocked = (await admin.unsafe(
+          `SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query LIKE '%"${schema}".store_lock%'`,
+        )) as unknown[];
+        if (blocked.length > 0) waiting = true;
+        else await new Promise((done) => setTimeout(done, 25));
+      }
+      expect(waiting).toBe(true);
+      expect(events).toEqual(["holder:locked"]);
+    } finally {
+      releaseLock();
+      await Promise.allSettled([holder, upgrading]);
+    }
+    await Promise.all([holder, upgrading]);
+    expect(events).toEqual(["holder:locked", "holder:committed", "migrate:done"]);
+    const rows = (await admin.unsafe(
+      `SELECT seq, carrier_id FROM ${schema}.erasure_pending WHERE seq = 1`,
+    )) as { seq: string; carrier_id: string }[];
+    expect(rows).toEqual([{ seq: "1", carrier_id: "c-race" }]);
+  });
 });

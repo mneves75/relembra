@@ -1080,4 +1080,79 @@ describe("host callbacks and sqlite transactions", () => {
       await store.close();
     }
   });
+
+  test("a raw file: path opens that literal file on POSIX and is refused on Windows", async () => {
+    const dir = tempDir();
+    const prev = process.cwd();
+    process.chdir(dir.path);
+    try {
+      if (process.platform === "win32") {
+        expect(() => openSqliteStore({ path: "file:literal-target.db" })).toThrow();
+        return;
+      }
+      const store = openSqliteStore({ path: "file:literal-target.db" });
+      await store.transaction((tx) => tx.putFence({ key: "k", epoch: 1 }));
+      await store.close();
+      expect(existsSync(join(dir.path, "file:literal-target.db"))).toBe(true);
+      expect(existsSync(join(dir.path, "literal-target.db"))).toBe(false);
+
+      // Intermediate symlink + .. resolves through the filesystem so check and SQLite open match.
+      const realParent = join(dir.path, "real");
+      const targetChild = join(realParent, "child");
+      const viaParent = join(dir.path, "via");
+      mkdirSync(targetChild, { recursive: true, mode: 0o700 });
+      mkdirSync(viaParent, { recursive: true, mode: 0o700 });
+      symlinkSync(targetChild, join(viaParent, "link"));
+      const traversed = `${viaParent}/link/../relembra.db`;
+      const linked = openSqliteStore({ path: traversed });
+      await linked.transaction((tx) => tx.putFence({ key: "k", epoch: 1 }));
+      await linked.close();
+      expect(existsSync(join(realParent, "relembra.db"))).toBe(true);
+      expect(existsSync(join(viaParent, "relembra.db"))).toBe(false);
+    } finally {
+      process.chdir(prev);
+    }
+  });
+
+  test("a loose or symlinked -journal sidecar is refused before opening", () => {
+    const dir = tempDir();
+    const path = join(dir.path, "store", "relembra.db");
+    const store = openSqliteStore({ path });
+    void store.close();
+    if (process.platform !== "win32") {
+      writeFileSync(`${path}-journal`, "", { mode: 0o644 });
+      chmodSync(`${path}-journal`, 0o644);
+      expect(() => openSqliteStore({ path })).toThrow(StoreFileModeError);
+      unlinkSync(`${path}-journal`);
+      const target = join(dir.path, "other-journal");
+      writeFileSync(target, "", { mode: 0o600 });
+      symlinkSync(target, `${path}-journal`);
+      expect(() => openSqliteStore({ path })).toThrow(StoreFileTypeError);
+    }
+  });
+
+  test("concurrent close() calls both wait and both observe WalScrubError when a reader blocks truncation", async () => {
+    const dir = tempDir();
+    const path = join(dir.path, "store", "relembra.db");
+    const store = openSqliteStore({ path, busyTimeoutMs: 50 });
+    const relembra = createRelembra<HostContext>({ store, policy: populatePolicy });
+    const noted = await relembra.note(
+      { user: "writer" },
+      { scope: SCOPE, text: "Secret.", provenance },
+    );
+    const blocker = new DatabaseSync(path);
+    blocker.exec("BEGIN DEFERRED");
+    blocker.prepare("SELECT count(*) FROM memories").get();
+    try {
+      await relembra.redact({ user: "writer" }, { memoryId: noted.id });
+      const [first, second] = await Promise.allSettled([store.close(), store.close()]);
+      expect(first.status).toBe("rejected");
+      expect(second.status).toBe("rejected");
+      if (first.status === "rejected") expect(first.reason).toBeInstanceOf(WalScrubError);
+      if (second.status === "rejected") expect(second.reason).toBeInstanceOf(WalScrubError);
+    } finally {
+      blocker.exec("ROLLBACK");
+      blocker.close();
+    }
+  });
 });

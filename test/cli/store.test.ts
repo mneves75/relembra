@@ -1,5 +1,16 @@
 import { afterEach, describe, expect } from "bun:test";
-import { chmodSync, closeSync, openSync, readFileSync, statSync, writeSync } from "node:fs";
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  statSync,
+  symlinkSync,
+  writeSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { createRelembra, type Principal } from "relembra";
 import { openSqliteStore } from "relembra/sqlite";
@@ -128,4 +139,62 @@ describe("store errors exit 3 with a JSON error document", () => {
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("relembra:");
   });
+
+  cliTest(
+    "redact exits 3 with wal-scrub when a reader blocks WAL truncation, while check still reports walScrubPending",
+    () => {
+      withStore();
+      const id = ok(box, ["note", "secret fact"]).memory.id as string;
+      const blocker = new DatabaseSync(box.store);
+      blocker.exec("BEGIN DEFERRED");
+      blocker.prepare("SELECT count(*) FROM memories").get();
+      try {
+        const redacted = run(box, ["redact", id, "--json"], { timeoutMs: 20_000 });
+        expect(redacted.status).toBe(3);
+        expect(redacted.json).toEqual({
+          ok: false,
+          error: { code: "wal-scrub" },
+        });
+        const checked = ok(box, ["check"], { timeoutMs: 20_000 });
+        expect(checked.integrity).toBe("ok");
+        expect(checked.walScrubPending).toBe(true);
+        // A non-redacting write (note) while an earlier WAL scrub is pending still returns its id.
+        const noted = run(box, ["note", "new fact", "--json"], { timeoutMs: 20_000 });
+        expect(noted.status).toBe(0);
+        expect(noted.json?.ok).toBe(true);
+        expect(
+          typeof (noted.json as { data?: { memory?: { id?: unknown } } }).data?.memory?.id,
+        ).toBe("string");
+        expect(noted.stderr).toContain("-wal");
+      } finally {
+        blocker.exec("ROLLBACK");
+        blocker.close();
+      }
+    },
+    50_000,
+  );
+
+  posixCliTest(
+    "check refuses a symlinked RELEMBRA_HOME directory before opening or modifying the target",
+    () => {
+      box = sandbox();
+      const targetDir = join(dirname(box.store), "raw-target");
+      mkdirSync(targetDir, { recursive: true, mode: 0o700 });
+      const targetDb = join(targetDir, "relembra.db");
+      const raw = new DatabaseSync(targetDb);
+      raw.exec("CREATE TABLE untouched (x INTEGER)");
+      raw.close();
+      chmodSync(targetDb, 0o600);
+      const before = readFileSync(targetDb);
+      const linkHome = join(dirname(box.store), "home-link");
+      symlinkSync(targetDir, linkHome);
+      const result = refused(box, ["check"], 3, "store-file", {
+        env: { RELEMBRA_HOME: linkHome },
+      });
+      expect(result.json?.ok === false && result.json.error.rule).toBe("type");
+      // Target was neither switched to WAL nor mutated before refusal.
+      expect(existsSync(`${targetDb}-wal`)).toBe(false);
+      expect(readFileSync(targetDb).equals(before)).toBe(true);
+    },
+  );
 });

@@ -736,4 +736,37 @@ describePostgres("postgres store: contention and transactions (IMPLEMENTATION-PL
       derived: [summary.id],
     });
   });
+
+  test("SQLSTATE 40003 (statement_completion_unknown) on COMMIT is treated as commit-unknown", async () => {
+    let failOnce = false;
+    const store = await open({
+      afterCommit: () => {
+        if (!failOnce) return;
+        failOnce = false;
+        throw Object.assign(new Error("statement completion unknown"), { code: "40003" });
+      },
+    });
+    failOnce = true;
+    const relembra = relembraOver(store, "sqlstate-40003");
+    const noted = await relembra.note(null, {
+      scope: SCOPE,
+      text: "Committed before 40003.",
+      provenance,
+      opId: "op-40003",
+    });
+    expect(noted.revision.text).toBe("Committed before 40003.");
+
+    let failNoOp = false;
+    const noOpStore = await open({
+      afterCommit: () => {
+        if (!failNoOp) return;
+        failNoOp = false;
+        throw Object.assign(new Error("statement completion unknown"), { code: "40003" });
+      },
+    });
+    failNoOp = true;
+    await expect(
+      noOpStore.transaction((tx) => tx.putFence({ key: "k-40003", epoch: 1 })),
+    ).rejects.toBeInstanceOf(StoreCommitUnknownError);
+  });
 });

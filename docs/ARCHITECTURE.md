@@ -184,7 +184,9 @@ store adapters    memory (tests) · sqlite (node:sqlite, works in Node and Bun) 
   tools `memory_note`, `memory_find` and `memory_brief`, all `replay: "safe"`, and a
   `relembra_memory` system prompt section carrying `wake`. Every rendering (the wake, `memory_find`,
   `memory_brief`) is recorded for the carrier `<hostNamespace>/<conversationId>`, kind
-  `pi-durable`, before the model gets it. `memory_note`'s op id is the §4.3
+  `pi-durable`, before the model gets it. When a host forks a conversation, the child inherits
+  earlier tool results without re-running the tools, so the host's `ErasureHook` is responsible for
+  cascading erasure of `<hostNamespace>/<parentId>` to forked descendants. `memory_note`'s op id is the §4.3
   tuple hash over host namespace, conversationId, taskId and callId: pi-durable commits a call's
   intent before `execute()` and reruns a safe call after a crash with the same ids, so the rerun gets the
   persisted first outcome. `memory_find` returns `findRendering`, so every rendering an agent
