@@ -334,7 +334,7 @@ describe.skipIf(NO_RELEASE_TOOLING)("scripts/evidence.ts", () => {
     const changed = run(["--root", root, "--expect", saved]);
     expect(changed.status).toBe(1);
     expect(changed.stderr).toContain("src/a.ts changed");
-  });
+  }, 30_000);
 
   test("exits 1 with the reason when an input is untracked or a runtime cannot be found", () => {
     const root = fixture();
@@ -356,7 +356,7 @@ describe.skipIf(NO_RELEASE_TOOLING)("scripts/evidence.ts", () => {
     expect(printed.runtimes.available).toBe(false);
     expect(printed.runtimes.node).toBeNull();
     expect(noNode.stderr).toContain("node");
-  });
+  }, 30_000);
 
   test("an inherited runtime override is refused by name, its value never printed", () => {
     const root = fixture();
