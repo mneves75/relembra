@@ -438,7 +438,11 @@ export function createRelembra<Context>(options: RelembraOptions<Context>): Rele
       const rendering = await render();
       if (rendering.memoryIds.length === 0) return rendering;
       const memoryIds = [...new Set(rendering.memoryIds)].sort();
-      const redacted = await store.recordExposure({ carrier, memoryIds, at: clock.now() });
+      const redacted = await store.recordExposure({
+        carrier,
+        memoryIds,
+        at: checkEpochMs(clock.now()),
+      });
       if (redacted.length === 0) return rendering;
       if (attempt === MAX_RENDER_ATTEMPTS) throw new ExposureRedactedError();
     }
@@ -495,7 +499,7 @@ export function createRelembra<Context>(options: RelembraOptions<Context>): Rele
         provenance,
       });
       // Generated before the transaction: no host callback runs while the store is locked.
-      const at = clock.now();
+      const at = checkEpochMs(clock.now());
       const memoryId = generatedMemoryId(ids);
       return store.transaction(async (tx) => {
         // Current authority first: a stale writer gets no replay of its own committed op either.
@@ -528,9 +532,10 @@ export function createRelembra<Context>(options: RelembraOptions<Context>): Rele
         pinned,
         provenance,
       });
-      const at = clock.now();
+      const at = checkEpochMs(clock.now());
       const memoryId = generatedMemoryId(ids);
-      return store.transaction(async (tx) => {
+      let verifyRedactedTargetPin: Scope | undefined;
+      const result = await store.transaction(async (tx) => {
         if (fence !== undefined) await enforceFence(tx, fence);
         const prior = await priorOutcome(tx, principal, provenance.opId, fingerprint);
         if (prior !== undefined) {
@@ -540,6 +545,16 @@ export function createRelembra<Context>(options: RelembraOptions<Context>): Rele
             throw new ScopeDeniedError("write");
           }
           if (!owns(principal, replacement.scope)) throw new ScopeDeniedError("own");
+          const hasPin = (principal.pinnable ?? []).includes(replacement.scope);
+          const target = await tx.memory(supersedes);
+          const targetPinned =
+            target !== undefined && target.status !== "redacted" && target.pinned;
+          if ((pinned || targetPinned) && !hasPin) {
+            throw new ScopeDeniedError("pin");
+          }
+          if (target?.status === "redacted" && !hasPin) {
+            verifyRedactedTargetPin = replacement.scope;
+          }
           return noted(
             prior.memoryId,
             replacement.scope,
@@ -580,6 +595,17 @@ export function createRelembra<Context>(options: RelembraOptions<Context>): Rele
         await retractAll(tx, summaries, principal);
         return replacement;
       });
+      if (verifyRedactedTargetPin !== undefined) {
+        const events = await store.events({ scopes: [verifyRedactedTargetPin] });
+        if (
+          events.some(
+            (event) => event.kind === "note" && event.memoryId === supersedes && event.pinned,
+          )
+        ) {
+          throw new ScopeDeniedError("pin");
+        }
+      }
+      return result;
     },
 
     async sweep(now, approval = {}) {
@@ -655,7 +681,7 @@ export function createRelembra<Context>(options: RelembraOptions<Context>): Rele
         requestedTrust,
         provenance,
       });
-      const at = clock.now();
+      const at = checkEpochMs(clock.now());
       const memoryId = generatedMemoryId(ids);
       return store.transaction(async (tx) => {
         if (fence !== undefined) await enforceFence(tx, fence);
@@ -668,6 +694,7 @@ export function createRelembra<Context>(options: RelembraOptions<Context>): Rele
           if (!principal.writable.includes(stored.scope)) throw new ScopeDeniedError("write");
           return summaryOutcome(stored);
         }
+        await ensureUnusedMemoryId(tx, memoryId);
         let floor: Trust = "owner";
         for (const { memoryId: sourceId, revision } of sources) {
           // Existence first, by the rule every read uses: a reader that does not own the scope
@@ -745,7 +772,7 @@ export function createRelembra<Context>(options: RelembraOptions<Context>): Rele
         requestedTrust,
         provenance,
       });
-      const at = clock.now();
+      const at = checkEpochMs(clock.now());
       const memoryId = generatedMemoryId(ids);
       return store.transaction(async (tx) => {
         if (fence !== undefined) await enforceFence(tx, fence);
@@ -764,6 +791,7 @@ export function createRelembra<Context>(options: RelembraOptions<Context>): Rele
           }
           return promotedOutcome(stored);
         }
+        await ensureUnusedMemoryId(tx, memoryId);
         // Existence first, by the rule every read uses: a reader that does not own the origin's
         // scope sees live memories only, so a retracted, superseded or redacted origin is not found.
         const origin = visible(principal, await tx.memory(originId));
@@ -998,7 +1026,7 @@ export function createRelembra<Context>(options: RelembraOptions<Context>): Rele
           return status === undefined ? [] : [{ carrierId: carrier.id, status }];
         });
         if (outcomes.length === 0) return;
-        const at = clock.now();
+        const at = checkEpochMs(clock.now());
         await store.transaction(async (tx) => {
           for (const { carrierId, status } of outcomes) {
             await tx.settle({ seq: row.seq, carrierId, status, at });
@@ -1102,6 +1130,9 @@ export function checkFence(fence: AuthorityFence): AuthorityFence {
 }
 
 const DAY_MS = 86_400_000;
+/** Largest JS Date epoch ms (±8.64e15), also well inside signed 64-bit integer range. */
+export const MAX_EPOCH_MS = 8_640_000_000_000_000;
+const MAX_RETENTION_DAYS = Math.floor(MAX_EPOCH_MS / DAY_MS);
 
 /** The retention rules copied once and checked: a valid scope, a positive whole number of days. */
 function checkRetention(given: readonly RetentionRule[]): readonly RetentionRule[] {
@@ -1111,8 +1142,10 @@ function checkRetention(given: readonly RetentionRule[]): readonly RetentionRule
       throw new RangeError(`a retention scope must be 1 to ${MAX_SCOPE_BYTES} UTF-8 bytes`);
     }
     checkName("scope", scope);
-    if (!Number.isSafeInteger(maxAgeDays) || maxAgeDays < 1) {
-      throw new RangeError("a retention rule's maxAgeDays must be a positive whole number");
+    if (!Number.isSafeInteger(maxAgeDays) || maxAgeDays < 1 || maxAgeDays > MAX_RETENTION_DAYS) {
+      throw new RangeError(
+        `a retention rule's maxAgeDays must be a whole number from 1 to ${MAX_RETENTION_DAYS}`,
+      );
     }
     return Object.freeze({ scope, maxAgeDays });
   });
@@ -1133,13 +1166,22 @@ export function checkSources(given: readonly SourceRevision[]): readonly SourceR
   if (!Array.isArray(given) || given.length < 1 || given.length > MAX_SUMMARY_SOURCES) {
     throw new RangeError(`a summary needs 1 to ${MAX_SUMMARY_SOURCES} sources`);
   }
-  const sources = given.map(({ memoryId, revision }) => {
+  const sources: SourceRevision[] = [];
+  for (let i = 0; i < given.length; i++) {
+    if (!Object.hasOwn(given, i)) {
+      throw new RangeError("every summary source must be an object with memoryId and revision");
+    }
+    const entry = given[i];
+    if (typeof entry !== "object" || entry === null) {
+      throw new RangeError("every summary source must be an object with memoryId and revision");
+    }
+    const { memoryId, revision } = entry;
     checkMemoryId(memoryId);
     if (!Number.isSafeInteger(revision) || revision < 1) {
       throw new RangeError("a source revision must be a positive integer");
     }
-    return Object.freeze({ memoryId, revision });
-  });
+    sources.push(Object.freeze({ memoryId, revision }));
+  }
   if (new Set(sources.map((s) => s.memoryId)).size !== sources.length) {
     throw new RangeError("a summary lists each source once");
   }
@@ -1196,6 +1238,7 @@ async function commitNote(
   fingerprint: string,
 ): Promise<Memory> {
   const { memoryId, scope, principal, pinned, at, text, provenance } = write;
+  await ensureUnusedMemoryId(tx, memoryId);
   const revision: Revision = Object.freeze({ number: 1, text, at, provenance });
   const event: NewEvent = {
     format: EVENT_FORMAT,
@@ -1609,12 +1652,27 @@ function noted(
   return Object.freeze({ id, scope, seq, pinned, notedAt, revision, status: "live" as const });
 }
 
+/** Refuses a generated memory id that already belongs to a stored memory or tombstone. */
+async function ensureUnusedMemoryId(tx: StoreTransaction, memoryId: MemoryId): Promise<void> {
+  if ((await tx.memory(memoryId)) !== undefined) {
+    throw new RangeError("Ids.memoryId returned a memory id that already exists in the store");
+  }
+}
+
+/** Validates a host Clock reading: whole epoch milliseconds representable as a Date and int64. */
+export function checkEpochMs(at: number): number {
+  if (!Number.isSafeInteger(at) || at < 0 || at > MAX_EPOCH_MS) {
+    throw new RangeError("the clock must give whole epoch milliseconds");
+  }
+  return at;
+}
+
 /**
  * The time a write is accepted at: the store's own time when it keeps one (StoreTransaction.now),
  * otherwise `callerNow`, the Clock's reading.
  */
 export async function acceptanceTime(tx: StoreTransaction, callerNow: number): Promise<number> {
-  if (tx.now === undefined) return callerNow;
+  if (tx.now === undefined) return checkEpochMs(callerNow);
   const now = await tx.now();
   if (!Number.isSafeInteger(now) || now < 0) {
     throw new TypeError("a store's time must be whole, non-negative epoch milliseconds");

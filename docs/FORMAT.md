@@ -310,8 +310,9 @@ all of it, or nothing and an error naming the rule and line (`docs/CLI.md`, `imp
   most the importing principal's ceiling); `untrusted` stays `untrusted`. A summary's trust is
   also at most its sources' in the store, and a copy's at most its origin's.
 - **Principal.** Every event written carries the importing principal's id as `principalId`. The
-  exception is a `redact` whose cause is `retention` for a memory the file knows only by its
-  tombstone: it replays with `null`, as written. A `redact` line for a memory the store holds is
+  exception is a `redact` whose cause is `retention` — or a `source` cascade from retention with
+  `principalId: null` — for a memory the file knows only by its tombstone: it replays with `null`,
+  as written. A `redact` line for a memory the store holds is
   recorded as the importer's request (cause `request`, the importer's id) whatever cause the file
   names, so a file cannot pass an erasure off as a retention sweep with no principal. The importer
   must own, and may write, every scope in the header. No op records are written.

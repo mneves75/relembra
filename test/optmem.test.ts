@@ -10,6 +10,7 @@ import {
   importOptmem,
   type Memory,
   type Principal,
+  ProvenanceError,
   ScopeDeniedError,
   type Store,
 } from "relembra";
@@ -1052,5 +1053,84 @@ describe("OptMem records that begin with #<n> <YYYY-MM-DD>", () => {
       { limit: 10 },
     );
     expect(fresh.map((m) => m.revision.text).sort()).toEqual([...texts].sort());
+  });
+
+  test("ordinary mixed-case OptMem store names import prefixed records without tripping the credential guard", async () => {
+    const store = createMemoryStore();
+    const log = Buffer.concat([
+      record("#0 2026-10-31 Deploys run after checks."),
+      record("#1 2026-11-01 Never skip the release gate."),
+    ]);
+    for (const storeName of ["MyProject", "WorkLog2026", "DevNotes-v1", "password"]) {
+      expect(await importOptmem(store, owner, { ...input(log), store: storeName })).toEqual({
+        imported: 2,
+        skipped: 0,
+        refused: [],
+      });
+    }
+    expect(
+      await importOptmem(createMemoryStore(), owner, {
+        ...input(new Uint8Array()),
+        store: "password",
+      }),
+    ).toEqual({ imported: 0, skipped: 0, refused: [] });
+    // Positive control: a high-entropy store name is still refused up front, even on an empty log.
+    const highEntropyName = ["aB3d", "E5fG", "7hI9", "jK1l", "M3nO", "5pQ7"].join("");
+    await expect(
+      importOptmem(store, owner, { ...input(new Uint8Array()), store: highEntropyName }),
+    ).rejects.toBeInstanceOf(ProvenanceError);
+  });
+
+  test("misaligned non-OptMem files and embedded-newline trailing chunks are refused as not-optmem", async () => {
+    const store = createMemoryStore();
+    const variableWidth = Buffer.from("first line is twenty\nsecond line\nthird line");
+    await expect(importOptmem(store, owner, input(variableWidth))).rejects.toMatchObject({
+      reason: "not-optmem",
+      line: 2,
+    });
+    const trailingEmbeddedNewline = Buffer.concat([
+      record("2026-01-21 Valid first record."),
+      Buffer.from("short line\nmore"),
+    ]);
+    await expect(importOptmem(store, owner, input(trailingEmbeddedNewline))).rejects.toMatchObject({
+      reason: "not-optmem",
+      line: 2,
+    });
+    const trailingZeroAndNewline = Buffer.concat([
+      record("2026-01-21 Valid first record."),
+      Buffer.from("short\n\0\0"),
+    ]);
+    await expect(importOptmem(store, owner, input(trailingZeroAndNewline))).rejects.toMatchObject({
+      reason: "not-optmem",
+      line: 2,
+    });
+    // Positive controls: a single crash-cut trailing record (with or without trailing zero padding) is dropped.
+    const first = record("2026-01-21 Valid first record.");
+    const crashCut = Buffer.concat([first, Buffer.from("partial write without newline")]);
+    expect(await importOptmem(store, owner, input(crashCut))).toEqual({
+      imported: 1,
+      skipped: 0,
+      refused: [],
+    });
+    const crashCutPadded = Buffer.concat([
+      first,
+      Buffer.from("x".repeat(first.length)),
+      Buffer.alloc(first.length),
+    ]);
+    expect(await importOptmem(createMemoryStore(), owner, input(crashCutPadded))).toEqual({
+      imported: 1,
+      skipped: 0,
+      refused: [],
+    });
+  });
+
+  test("an oversize width-1 log is refused as too-large immediately without scanning millions of records", async () => {
+    const store = createMemoryStore();
+    const huge = new Uint8Array(200_000);
+    huge.fill(0x0a);
+    await expect(importOptmem(store, owner, input(huge))).rejects.toMatchObject({
+      reason: "too-large",
+      detail: "records",
+    });
   });
 });

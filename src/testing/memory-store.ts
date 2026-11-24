@@ -115,6 +115,9 @@ export function createMemoryStore(): Store {
           },
           async redact(tombstone) {
             assertOpen();
+            if (memories.get(tombstone.id)?.status === "redacted") {
+              throw new Error(`memory ${tombstone.id} is already redacted`);
+            }
             memories.set(tombstone.id, snapshot(tombstone));
             index.delete(tombstone.id);
             events.forEach((event, index) => {
@@ -128,6 +131,16 @@ export function createMemoryStore(): Store {
           },
           async putErasure(work) {
             assertOpen();
+            if (erasures.some((existing) => existing.seq === work.seq)) {
+              throw new Error(`erasure outbox already holds seq ${work.seq}`);
+            }
+            const seen = new Set<string>();
+            for (const carrier of work.carriers) {
+              if (seen.has(carrier.id)) {
+                throw new Error(`duplicate erasure carrier ${carrier.id} for seq ${work.seq}`);
+              }
+              seen.add(carrier.id);
+            }
             erasures.push(snapshot(work));
           },
           async exposures(memoryId) {
@@ -290,9 +303,9 @@ function pendingIn(state: State): ErasureWork[] {
   return [...state.erasures]
     .sort((x, y) => x.seq - y.seq)
     .flatMap((work) => {
-      const carriers = work.carriers.filter(
-        (carrier) => !state.settlements.has(settlementKey(work.seq, carrier.id)),
-      );
+      const carriers = work.carriers
+        .filter((carrier) => !state.settlements.has(settlementKey(work.seq, carrier.id)))
+        .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
       return carriers.length === 0 ? [] : [{ ...work, carriers }];
     });
 }
