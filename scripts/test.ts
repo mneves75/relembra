@@ -16,6 +16,7 @@ const POSTGRES = /postgres-support|postgres-fixture|RELEMBRA_POSTGRES_URL/;
 const TEST_FILES = new Bun.Glob("**/*{.test,_test,.spec,_spec}.{js,jsx,ts,tsx,mjs,cjs,mts,cts}");
 
 const postgres = [...TEST_FILES.scanSync(".")]
+  .map((file) => file.replaceAll("\\", "/"))
   .filter((file) => !file.split("/").includes("node_modules"))
   .filter((file) => POSTGRES.test(readFileSync(file, "utf8")))
   .sort();

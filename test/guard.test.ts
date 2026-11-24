@@ -393,4 +393,32 @@ describe("guard: credentials", () => {
     await expectAccepted("key=<your-key> goes in the local config.");
     await expectAccepted("x={{ secrets.TOKEN }} in the workflow file.");
   });
+
+  test("unclosed quotes and embedded quotes in unquoted values do not bypass secret assignments", async () => {
+    await expectRejected(join("pass", 'word="', "mySecret123!@#"), "credential");
+    await expectRejected(join("api_", 'key="', filler(24, BASE62)), "credential");
+    await expectRejected(join("pass", "word=ab'c", filler(20, BASE62)), "credential");
+    await expectRejected(join('foo="bar tok', "en=", filler(24, BASE62)), "credential");
+    // Positive controls: unclosed prose quote or ordinary value without a secret is accepted.
+    await expectAccepted('Note: "check the release checklist before Friday');
+    await expectAccepted("owner=O'Connor maintains the service.");
+  });
+
+  test("ordinary URLs and colon-delimited identifiers are accepted, while secrets inside them are rejected", async () => {
+    await expectAccepted("See https://github.com/org/Repo/issues/42 for context.");
+    await expectAccepted(
+      "Docs at https://docs.example.com/v2/APIReference and https://example.com/UserGuide-v2.",
+    );
+    await expectAccepted("See HTTPS://example.com/docs?token=abc&foo=bar for the placeholder.");
+    await expectAccepted("Carrier pi-durable:conv-MySession2026:1 handled the turn.");
+    await expectRejected(
+      `Reset link https://example.com/reset/${filler(24, BASE62)}`,
+      "credential",
+    );
+    await expectRejected(
+      join("Callback https://example.com/cb?api_", "key=", filler(32, HEX)),
+      "credential",
+    );
+    await expectRejected(`Carrier pi-durable:${filler(24, BASE62)}:1`, "credential");
+  });
 });

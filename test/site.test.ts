@@ -427,10 +427,21 @@ describe("site: the page", () => {
     expect(Number.isNaN(Date.parse(expires))).toBe(false);
   });
 
+  // Extract the first inline <script> body without regex tag filtering.
+  function inlineScript(documentHtml: string): string {
+    const open = "<script>";
+    const close = "</script>";
+    const start = documentHtml.indexOf(open);
+    if (start < 0) return "";
+    const bodyStart = start + open.length;
+    const end = documentHtml.indexOf(close, bodyStart);
+    return end < 0 ? "" : documentHtml.slice(bodyStart, end);
+  }
+
   // The page is dark only, with no theme or motion toggle, so the bootstrap sets the language and
   // nothing else.
   test("theme and motion: the bootstrap sets neither, and the page has no toggle for them", async () => {
-    const boot = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1] ?? "";
+    const boot = inlineScript(html);
     // positive control: the bootstrap exists and still sets the language
     expect(boot).toContain("d.lang=l");
     const attrs = new Map<string, string>();
@@ -458,7 +469,7 @@ describe("site: the page", () => {
   });
 
   test("language: ?lang= in the link wins, then a saved choice, then the browser", () => {
-    const boot = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1] ?? "";
+    const boot = inlineScript(html);
     const langFor = (search: string, stored: string | null, browser: string) => {
       const element = { classList: { add() {} }, lang: "", setAttribute() {} };
       runInNewContext(boot, {

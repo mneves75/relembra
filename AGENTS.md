@@ -87,7 +87,7 @@ authoritative input list (including the Node runtime loader under `test/`):
 
 ```sh
 git diff --quiet <evidence-commit> <release-ref> -- \
-  src eval bench build scripts test examples .github .githooks \
+  src eval bench build scripts test examples site .github .githooks \
   package.json bun.lock bunfig.toml .npmrc .nvmrc .node-version \
   tsconfig.json tsconfig.build.json biome.json .gitattributes .gitignore .gitleaksignore .gitleaks.toml \
   install.sh README.md LICENSE docs/FORMAT.md docs/CLI.md ':!eval/out'

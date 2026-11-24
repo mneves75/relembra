@@ -207,4 +207,78 @@ describe("supersede", () => {
     const replacement = await replace("owner", plain.id, "Plain fact, corrected.");
     expect((await relembra.recall("reader")).map((m) => m.id)).toEqual([replacement.id]);
   });
+
+  test("retried pinned supersede still requires current pin rights", async () => {
+    const store = createMemoryStore();
+    let mayPin = true;
+    const relembra = createRelembra<null>({
+      store,
+      policy: () => ({
+        id: "owner",
+        readable: [SCOPE],
+        writable: [SCOPE],
+        promotable: [],
+        owned: [SCOPE],
+        pinnable: mayPin ? [SCOPE] : [],
+      }),
+    });
+    const old = await relembra.note(null, { scope: SCOPE, text: "Old fact.", provenance });
+    const first = await relembra.supersede(null, {
+      memoryId: old.id,
+      text: "Pinned replacement.",
+      pinned: true,
+      provenance,
+      opId: "pin-retry",
+    });
+    expect(first.pinned).toBe(true);
+    mayPin = false;
+    await expect(
+      relembra.supersede(null, {
+        memoryId: old.id,
+        text: "Pinned replacement.",
+        pinned: true,
+        provenance,
+        opId: "pin-retry",
+      }),
+    ).rejects.toMatchObject({ access: "pin" });
+
+    // Replacing a pinned original with an unpinned replacement also requires pin rights on replay.
+    mayPin = true;
+    const pinnedOld = await relembra.note(null, {
+      scope: SCOPE,
+      text: "Pinned old.",
+      pinned: true,
+      provenance,
+    });
+    await relembra.supersede(null, {
+      memoryId: pinnedOld.id,
+      text: "Unpinned replacement.",
+      pinned: false,
+      provenance,
+      opId: "unpin-retry",
+    });
+    mayPin = false;
+    await expect(
+      relembra.supersede(null, {
+        memoryId: pinnedOld.id,
+        text: "Unpinned replacement.",
+        pinned: false,
+        provenance,
+        opId: "unpin-retry",
+      }),
+    ).rejects.toMatchObject({ access: "pin" });
+    // Even after the pinned original is redacted, replaying the supersede still requires pin rights.
+    mayPin = true;
+    await relembra.redact(null, { memoryId: pinnedOld.id });
+    mayPin = false;
+    await expect(
+      relembra.supersede(null, {
+        memoryId: pinnedOld.id,
+        text: "Unpinned replacement.",
+        pinned: false,
+        provenance,
+        opId: "unpin-retry",
+      }),
+    ).rejects.toMatchObject({ access: "pin" });
+  });
 });

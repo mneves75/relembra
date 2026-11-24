@@ -13,6 +13,10 @@ export interface Manifest {
   readonly publishConfig?: { readonly access?: unknown; readonly tag?: unknown };
 }
 
+const VALID_DIST_TAG = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+// npm rejects dist-tags that parse as SemVer versions or ranges (npm dist-tag caveats).
+const SEMVER_DIST_TAG = /^v?(?:\d+|[xX])(?:\.(?:\d+|[xX])){0,2}(?:[-+].*)?$/;
+
 export function publishProblems(manifest: Manifest, libraryVersion: string): string[] {
   const problems: string[] = [];
   if (manifest.private === true) problems.push("package.json is private");
@@ -21,7 +25,10 @@ export function publishProblems(manifest: Manifest, libraryVersion: string): str
       `package.json version ${String(manifest.version)} differs from RELEMBRA_VERSION ${libraryVersion}`,
     );
   }
-  const url = typeof manifest.repository === "object" ? manifest.repository.url : undefined;
+  const url =
+    manifest.repository !== null && typeof manifest.repository === "object"
+      ? manifest.repository.url
+      : undefined;
   if (url !== REPOSITORY_URL) problems.push(`repository.url is not ${REPOSITORY_URL}`);
   if (manifest.publishConfig?.access !== "public") {
     problems.push("publishConfig.access is not public");
@@ -32,8 +39,15 @@ export function publishProblems(manifest: Manifest, libraryVersion: string): str
   }
   const prerelease = typeof manifest.version === "string" && manifest.version.includes("-");
   const tag = manifest.publishConfig?.tag;
-  if (prerelease && (typeof tag !== "string" || tag === "latest")) {
+  if (
+    tag !== undefined &&
+    (typeof tag !== "string" || !VALID_DIST_TAG.test(tag) || SEMVER_DIST_TAG.test(tag))
+  ) {
+    problems.push("publishConfig.tag must be a single valid npm dist-tag");
+  } else if (prerelease && (typeof tag !== "string" || tag === "latest")) {
     problems.push("a prerelease must publish under a dist-tag other than latest");
+  } else if (!prerelease && tag !== undefined && tag !== "latest") {
+    problems.push(`a stable release must publish under latest, not ${tag}`);
   }
   return problems;
 }

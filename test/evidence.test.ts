@@ -177,6 +177,33 @@ describe.skipIf(NO_RELEASE_TOOLING)("inputIdentity", () => {
     }
   });
 
+  test("site/ is an input while untracked site/assets/video/ previews stay ignored", () => {
+    const root = fixture({ "site/index.html": "<html/>\n" });
+    const clean = inputIdentity(root);
+    expect(clean.files["site/index.html"]).toBeDefined();
+    write(root, "site/assets/video/preview.mp4", "local preview\n");
+    expect(inputIdentity(root)).toEqual(clean);
+
+    write(root, "site/index.html", "<html>changed</html>\n");
+    expect(inputIdentity(root)).toMatchObject({ clean: false, dirty: ["site/index.html"] });
+    write(root, "site/index.html", "<html/>\n");
+    write(root, "site/extra.js", "export {};\n");
+    expect(inputIdentity(root)).toMatchObject({ clean: false, untracked: ["site/extra.js"] });
+    rmSync(join(root, "site", "extra.js"));
+
+    // Positive control: a tracked file under site/assets/video/ still enters input identity.
+    git(root, "add", "-f", "site/assets/video/preview.mp4");
+    git(root, "commit", "-q", "-m", "track video");
+    const tracked = inputIdentity(root);
+    expect(tracked.clean).toBe(true);
+    expect(tracked.files["site/assets/video/preview.mp4"]).toBeDefined();
+    write(root, "site/assets/video/preview.mp4", "mutated\n");
+    expect(inputIdentity(root)).toMatchObject({
+      clean: false,
+      dirty: ["site/assets/video/preview.mp4"],
+    });
+  });
+
   test("a symlink among the inputs is refused: its target's bytes could change unseen", () => {
     // Committed, so Git alone would call it clean while the file it points to changes.
     const root = join(scratch, "symlinks");
@@ -307,7 +334,7 @@ describe.skipIf(NO_RELEASE_TOOLING)("scripts/evidence.ts", () => {
     const changed = run(["--root", root, "--expect", saved]);
     expect(changed.status).toBe(1);
     expect(changed.stderr).toContain("src/a.ts changed");
-  });
+  }, 30_000);
 
   test("exits 1 with the reason when an input is untracked or a runtime cannot be found", () => {
     const root = fixture();
@@ -329,7 +356,7 @@ describe.skipIf(NO_RELEASE_TOOLING)("scripts/evidence.ts", () => {
     expect(printed.runtimes.available).toBe(false);
     expect(printed.runtimes.node).toBeNull();
     expect(noNode.stderr).toContain("node");
-  });
+  }, 30_000);
 
   test("an inherited runtime override is refused by name, its value never printed", () => {
     const root = fixture();

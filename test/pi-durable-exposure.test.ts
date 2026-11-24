@@ -120,4 +120,26 @@ describe("pi-durable records what each conversation received", () => {
     // Positive control: a namespace with a slash, as the other tests use, is accepted.
     await open("tenant/7/journal");
   });
+
+  test("beforeRequest records no exposure when relembra_memory is absent or removed", async () => {
+    const { hook, calls } = await open();
+    const absent = await hook.beforeRequest(
+      { messages: [{ role: "system", sections: { other: "hello" } }] },
+      { conversationId: 11 },
+    );
+    expect(absent).toBeUndefined();
+    expect(calls).toEqual([]);
+
+    const removed = (await hook.beforeRequest(
+      {
+        messages: [
+          { role: "system", sections: { [MEMORY_SECTION_KEY]: "<wake>stale</wake>" } },
+          { role: "system", sections: { [MEMORY_SECTION_KEY]: null } },
+        ],
+      },
+      { conversationId: 12 },
+    )) as { messages: { sections?: Record<string, string | null> }[] } | undefined;
+    expect(removed?.messages[0]?.sections).toEqual({});
+    expect(calls).toEqual([]);
+  });
 });

@@ -25,6 +25,7 @@ import {
 import { hostname } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { pathToFileURL } from "node:url";
 import { ImportError, MemoryNotFoundError, PlanChangedError } from "../errors.js";
 import { guardText } from "../guard.js";
 import {
@@ -44,7 +45,7 @@ import {
   type Relembra,
 } from "../relembra.js";
 import { identityEgress, renderMemory } from "../render.js";
-import { OWNER_MODES } from "../sqlite/database.js";
+import { OWNER_MODES, resolveStorePath } from "../sqlite/database.js";
 import { openSqliteStore, type SqliteStore } from "../sqlite/index.js";
 import { exportJsonl, type ImportReport, importJsonl, MAX_IMPORT_BYTES } from "../transfer.js";
 import { RELEMBRA_VERSION } from "../version.js";
@@ -133,13 +134,19 @@ const hasOwnerTrust = (memory: StoredMemory): memory is Memory =>
 
 /**
  * The owner-trust memories a command would change, from the library's plan (redactionPreview):
- * for redact ("all") the memory and every summary it erases; for retract and supersede ("live")
- * the memory and the live summaries they retract.
+ * for redact, the memory and every derived summary/copy it erases; for retract and supersede,
+ * only when the target is live (and for supersede, not a summary), together with the live
+ * derived summaries in its scope (never promoted copies).
  */
-function ownersIn(plan: readonly Memory[], which: "all" | "live"): Memory[] {
+function ownersIn(plan: readonly Memory[], mode: "redact" | "retract" | "supersede"): Memory[] {
   const [target, ...derived] = plan;
   if (target === undefined) return [];
-  const summaries = which === "all" ? derived : derived.filter((m) => m.status === "live");
+  if (mode === "redact") return [target, ...derived].filter(hasOwnerTrust);
+  if (target.status !== "live") return [];
+  if (mode === "supersede" && target.sources !== undefined) return [];
+  const summaries = derived.filter(
+    (m) => m.status === "live" && m.scope === target.scope && m.origin === undefined,
+  );
   return [target, ...summaries].filter(hasOwnerTrust);
 }
 
@@ -281,9 +288,10 @@ async function serveStdio(env: CliEnv, scopes: SessionScopes, store: SqliteStore
   const relembra = createRelembra<null>({ store, policy: () => principal, egress });
   const pick = (variable: string | undefined, fallback: string) =>
     variable === undefined || variable === "" ? fallback : variable;
-  // A write to a closed pipe is reported through the write callback; without a listener the
-  // stream's error event would end the process before the store closes.
+  // A write to a closed pipe is reported through the write callback; without listeners on both
+  // stdout and stderr, an EPIPE error event would end the process before the store closes.
   process.stdout.on("error", () => {});
+  process.stderr.on("error", () => {});
   await serveMcp(
     process.stdin,
     {
@@ -308,6 +316,21 @@ async function serveStdio(env: CliEnv, scopes: SessionScopes, store: SqliteStore
       },
     },
   );
+}
+
+function wakeBudget(context: Context): number | undefined {
+  const flag = intFlag(context.parsed, "--budget", MAX_BUDGET);
+  if (flag !== undefined) return flag;
+  const raw = context.env.RELEMBRA_WAKE_BUDGET;
+  if (raw === undefined || raw === "") return undefined;
+  if (!/^[0-9]{1,15}$/.test(raw)) {
+    throw usage("bad-value", `RELEMBRA_WAKE_BUDGET takes a whole number from 1 to ${MAX_BUDGET}`);
+  }
+  const number = Number(raw);
+  if (number < 1 || number > MAX_BUDGET) {
+    throw usage("bad-value", `RELEMBRA_WAKE_BUDGET takes a whole number from 1 to ${MAX_BUDGET}`);
+  }
+  return number;
 }
 
 function hookOutput(text: string): HookOutput {
@@ -386,7 +409,8 @@ async function runStoreCommand(
     }
     case "wake":
     case "brief": {
-      const budgetBytes = intFlag(parsed, "--budget", MAX_BUDGET);
+      const budgetBytes =
+        name === "wake" ? wakeBudget(context) : intFlag(parsed, "--budget", MAX_BUDGET);
       const budget = budgetBytes === undefined ? {} : { budgetBytes };
       const rendering =
         name === "wake"
@@ -406,7 +430,7 @@ async function runStoreCommand(
       const memoryId = first as string;
       await gated(async (changed) => {
         const expect = await relembra.redactionPreview(null, { memoryId });
-        const owners = ownersIn(expect, "live");
+        const owners = ownersIn(expect, "retract");
         if (owners.length > 0) requireOwner([...changed, ...changeLines("retract", owners)]);
         await relembra.retract(null, { memoryId, expect });
       });
@@ -416,7 +440,7 @@ async function runStoreCommand(
       const memoryId = first as string;
       const redaction = await gated(async (changed) => {
         const expect = await relembra.redactionPreview(null, { memoryId });
-        const owners = ownersIn(expect, "all");
+        const owners = ownersIn(expect, "redact");
         if (owners.length > 0) requireOwner([...changed, ...changeLines("redact", owners)]);
         return relembra.redact(null, { memoryId, expect });
       });
@@ -428,7 +452,7 @@ async function runStoreCommand(
       const text = await textOrStdin(second);
       const memory = await gated(async (changed) => {
         const expect = await relembra.redactionPreview(null, { memoryId });
-        const owners = ownersIn(expect, "live");
+        const owners = ownersIn(expect, "supersede");
         if (owners.length > 0) {
           guardText(text);
           requireOwner([...changed, ...changeLines("replace", owners), `with: ${text}`]);
@@ -515,7 +539,12 @@ async function runStoreCommand(
       return { data: report, text: reportText(report) };
     }
     case "hook": {
-      const rendering = await composeWake(relembra, scopes);
+      const budgetBytes = wakeBudget(context);
+      const rendering = await composeWake(
+        relembra,
+        scopes,
+        budgetBytes === undefined ? {} : { budgetBytes },
+      );
       const output = hookOutput(rendering.text);
       return { data: output, text: JSON.stringify(output) };
     }
@@ -632,17 +661,26 @@ function parseSource(value: string): { memoryId: string; revision: number } {
   return { memoryId, revision: Number(revision) };
 }
 
+/** Verifies the store's parent directory is a real, owner-only directory before any write-capable open. */
+function checkStoreHome(path: string): void {
+  const homeStat = lstatSync(dirname(path));
+  if (!homeStat.isDirectory()) {
+    throw new CliError("store-file", "the store's directory is not a regular directory", "type");
+  }
+  const homeMode = Number(homeStat.mode) & 0o777;
+  if (OWNER_MODES && (homeMode & 0o077) !== 0) {
+    throw new CliError("store-file", "the store's directory grants group or others access", "mode");
+  }
+}
+
 /**
  * The store's integrity: the open itself checks file types and modes, the schema version and
  * SQLite's verification; then SQLite's integrity_check, every event's JSON and format, and the
  * home directory's mode. Any failure is a store error.
  */
 async function check(scope: string, store: SqliteStore, path: string): Promise<Output> {
-  const homeMode = Number(lstatSync(dirname(path)).mode) & 0o777;
-  if (OWNER_MODES && (homeMode & 0o077) !== 0) {
-    throw new CliError("store-file", "the store's directory grants group or others access", "mode");
-  }
-  const db = new DatabaseSync(path, { readOnly: true });
+  checkStoreHome(path);
+  const db = new DatabaseSync(pathToFileURL(resolveStorePath(path)).href, { readOnly: true });
   let schemaVersion: number;
   let events = 0;
   let memories: number;
@@ -803,6 +841,9 @@ export async function main(
     if (name === "init") {
       const opened = init(env, cwd);
       store = opened.store;
+      const closing = store;
+      store = undefined;
+      await closing.close();
       return succeed(opened.output);
     }
     const scopes = resolveScopes(env, cwd);
@@ -819,12 +860,39 @@ export async function main(
       );
     }
     if (!existsSync(path)) throw new CliError("no-store", `no store at ${path}: run relembra init`);
+    if (name === "check") checkStoreHome(path);
     store = openSqliteStore({ path });
     if (server) {
       await serveStdio(env, scopes, store);
+      const closing = store;
+      store = undefined;
+      try {
+        await closing.close();
+      } catch (error) {
+        write(process.stderr, `relembra mcp: ${toCliError(error).message}`);
+      }
       return 0;
     }
-    return succeed(await runStoreCommand(context, scopes, store, path));
+    const output = await runStoreCommand(context, scopes, store, path);
+    const closing = store;
+    store = undefined;
+    // Commands that can redact (and hook) fail through the normal error path when WAL scrub cannot
+    // finish; other commands report their committed output first so a pending scrub from an
+    // earlier redaction never hides a committed memory id or causes duplicate retries.
+    if (name === "redact" || name === "sweep" || name === "import" || hook) {
+      await closing.close();
+      return succeed(output);
+    }
+    const code = succeed(output);
+    try {
+      await closing.close();
+    } catch (error) {
+      const failure = toCliError(error);
+      if (name !== "check" || failure.code !== "wal-scrub") {
+        write(process.stderr, `relembra: ${failure.message}`);
+      }
+    }
+    return code;
   } catch (error) {
     const failure = toCliError(error);
     if (hook) {
@@ -845,8 +913,8 @@ export async function main(
       try {
         await store.close();
       } catch (error) {
-        // A close that fails after the command succeeded still reports, on stderr only.
-        write(process.stderr, `relembra: ${toCliError(error).message}`);
+        // Primary operation error takes precedence; report close failures on stderr only.
+        if (!hook) write(process.stderr, `relembra: ${toCliError(error).message}`);
       }
     }
   }
@@ -879,6 +947,7 @@ if (import.meta.main) {
     RELEMBRA_AGENT,
     RELEMBRA_HARNESS,
     RELEMBRA_MODEL,
+    RELEMBRA_WAKE_BUDGET,
     BUN_OPTIONS,
     BUN_BYTECODE_ORDER_OUT,
     PATH,
@@ -893,6 +962,7 @@ if (import.meta.main) {
     RELEMBRA_AGENT,
     RELEMBRA_HARNESS,
     RELEMBRA_MODEL,
+    RELEMBRA_WAKE_BUDGET,
     BUN_OPTIONS,
     BUN_BYTECODE_ORDER_OUT,
     PATH,

@@ -204,7 +204,12 @@ export function createMemoryExtension<Context>(
         request: { readonly messages: readonly RequestMessage[] },
         api: { readonly conversationId: ConversationId },
       ) {
-        return withWake(request.messages, await currentWake(api.conversationId));
+        const state = wakeState(request.messages);
+        if (state === undefined) return undefined;
+        // Only render (and record exposures) when the section is still active; a removal marker
+        // only needs earlier stale copies stripped.
+        const wakeText = state.current === -1 ? undefined : await currentWake(api.conversationId);
+        return withWake(request.messages, state.current, wakeText);
       },
     },
   };
@@ -223,30 +228,39 @@ interface RequestMessage {
   readonly sections?: Readonly<Record<string, string | null>>;
 }
 
+const holdsWakeSection = (message: RequestMessage) =>
+  message.role === "system" && typeof message.sections?.[MEMORY_SECTION_KEY] === "string";
+
+const touchesWakeSection = (message: RequestMessage) =>
+  message.role === "system" &&
+  message.sections !== undefined &&
+  MEMORY_SECTION_KEY in message.sections;
+
+/** Locates the active relembra_memory section, or undefined when no system message mentions it. */
+function wakeState(messages: readonly RequestMessage[]): { readonly current: number } | undefined {
+  const newest = messages.findLastIndex(touchesWakeSection);
+  if (newest === -1) return undefined;
+  return { current: holdsWakeSection(messages[newest] as RequestMessage) ? newest : -1 };
+}
+
 /**
  * `messages` with relembra's section in their system messages set to `wake` where it is in effect
- * (the newest value, when the newest change set it rather than removed it) and removed everywhere
- * else. Every other key, message and field is left as it was. `undefined` when relembra's section
- * is in no system message.
+ * (`current >= 0`) and removed everywhere else. Every other key, message and field is left as it
+ * was.
  */
 function withWake(
   messages: readonly RequestMessage[],
-  wake: string,
-): { messages: RequestMessage[] } | undefined {
-  const holds = (message: RequestMessage) =>
-    message.role === "system" && typeof message.sections?.[MEMORY_SECTION_KEY] === "string";
-  const touches = (message: RequestMessage) =>
-    message.role === "system" &&
-    message.sections !== undefined &&
-    MEMORY_SECTION_KEY in message.sections;
-  const newest = messages.findLastIndex(touches);
-  if (newest === -1) return undefined;
-  const current = holds(messages[newest] as RequestMessage) ? newest : -1;
+  current: number,
+  wake: string | undefined,
+): { messages: RequestMessage[] } {
   return {
     messages: messages.map((message, index) => {
-      if (!holds(message)) return message;
+      if (!holdsWakeSection(message)) return message;
       const { [MEMORY_SECTION_KEY]: _stored, ...others } = message.sections ?? {};
-      const sections = index === current ? { ...others, [MEMORY_SECTION_KEY]: wake } : others;
+      const sections =
+        index === current && wake !== undefined
+          ? { ...others, [MEMORY_SECTION_KEY]: wake }
+          : others;
       return { ...message, sections };
     }),
   };

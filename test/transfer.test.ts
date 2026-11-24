@@ -1548,3 +1548,131 @@ describe("a retract, supersede or redact of another scope's memory answers as an
     });
   }
 });
+
+describe("pending tombstones reserve memory identity across scopes and live events", () => {
+  const bothOwner: Principal = {
+    id: "both-owner",
+    readable: [SCOPE, OTHER_SCOPE],
+    writable: [SCOPE, OTHER_SCOPE],
+    promotable: [SCOPE, OTHER_SCOPE],
+    owned: [SCOPE, OTHER_SCOPE],
+  };
+
+  test("a redacted-form event followed by a live event in another scope is refused as conflict and leaves no live derived copy", async () => {
+    const store = createMemoryStore();
+    const jsonl = crafted(
+      [SCOPE, OTHER_SCOPE],
+      [
+        {
+          kind: "note",
+          memoryId: "m1",
+          scope: SCOPE,
+          principalId: "x",
+          pinned: false,
+          redacted: true,
+        },
+        {
+          kind: "note",
+          memoryId: "m1",
+          scope: OTHER_SCOPE,
+          principalId: "x",
+          pinned: false,
+          revision: revisionLine("Secret fact."),
+        },
+        {
+          kind: "summarize",
+          memoryId: "s1",
+          scope: OTHER_SCOPE,
+          principalId: "x",
+          sources: [{ memoryId: "m1", revision: 1 }],
+          revision: revisionLine("Summary of secret."),
+        },
+        { kind: "redact", memoryId: "m1", scope: SCOPE, cause: "request", principalId: "x" },
+      ],
+    );
+    await expect(importJsonl(store, bothOwner, jsonl)).rejects.toMatchObject({
+      reason: "conflict",
+      line: 3,
+    });
+    expect(await store.events({ scopes: [SCOPE, OTHER_SCOPE] })).toEqual([]);
+  });
+
+  test("a redacted-form event followed by a live event in the same scope is refused as malformed", async () => {
+    const store = createMemoryStore();
+    const jsonl = crafted(
+      [SCOPE],
+      [
+        {
+          kind: "note",
+          memoryId: "m1",
+          scope: SCOPE,
+          principalId: "x",
+          pinned: false,
+          redacted: true,
+        },
+        {
+          kind: "note",
+          memoryId: "m1",
+          scope: SCOPE,
+          principalId: "x",
+          pinned: false,
+          revision: revisionLine("Resurrected fact."),
+        },
+        { kind: "redact", memoryId: "m1", scope: SCOPE, cause: "request", principalId: "x" },
+      ],
+    );
+    await expect(importJsonl(store, scopeOwner, jsonl)).rejects.toMatchObject({
+      reason: "malformed",
+      line: 3,
+    });
+    expect(await store.events({ scopes: [SCOPE] })).toEqual([]);
+  });
+
+  test("tombstone-only source cascade from retention preserves principalId null on replay", async () => {
+    const store = createMemoryStore();
+    const jsonl = crafted(
+      [SCOPE],
+      [
+        {
+          kind: "summarize",
+          memoryId: "sum-gone",
+          scope: SCOPE,
+          principalId: "x",
+          sources: [{ memoryId: "src-gone", revision: 1 }],
+          redacted: true,
+        },
+        { kind: "redact", memoryId: "sum-gone", scope: SCOPE, cause: "source", principalId: null },
+      ],
+    );
+    expect(await importJsonl(store, scopeOwner, jsonl)).toEqual({
+      imported: 2,
+      skipped: 0,
+      refused: [],
+    });
+    const redacts = (await store.events({ scopes: [SCOPE] })).filter((e) => e.kind === "redact");
+    expect(redacts.map((e) => ["cause" in e && e.cause, e.principalId])).toEqual([
+      ["source", null],
+    ]);
+  });
+
+  test("a NaN host clock is refused before parsing and cannot disable future-time checks", async () => {
+    const store = createMemoryStore();
+    const jsonl = crafted(
+      [SCOPE],
+      [
+        {
+          kind: "note",
+          memoryId: "future-1",
+          scope: SCOPE,
+          principalId: "x",
+          pinned: false,
+          revision: { ...revisionLine("Future fact."), at: 9_999_999_999_999 },
+        },
+      ],
+    );
+    await expect(
+      importJsonl(store, scopeOwner, jsonl, { clock: { now: () => Number.NaN } }),
+    ).rejects.toBeInstanceOf(RangeError);
+    expect(await store.events({ scopes: [SCOPE] })).toEqual([]);
+  });
+});

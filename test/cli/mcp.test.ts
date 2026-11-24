@@ -1267,4 +1267,35 @@ describe("erasure: what the client received is recorded under the server process
       expect(text).not.toMatch(/erased|deleted/);
     },
   );
+
+  cliTest("a 2025-03-26 batch notifications/cancelled cancels an earlier queued request", () => {
+    const box = initializedSandbox();
+    const initialized = JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" });
+    const cancelInBatch = JSON.stringify([
+      { jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 1 } },
+      JSON.parse(legacyRequest(2, "tools/call", { name: "wake", arguments: {} })),
+    ]);
+    const raw = run(box, ["mcp"], {
+      input: lines(
+        initialize(0, "2025-03-26"),
+        initialized,
+        legacyRequest(1, "tools/call", {
+          name: "note",
+          arguments: { text: "cancelled before running" },
+        }),
+        cancelInBatch,
+      ),
+    });
+    expect(raw.status).toBe(0);
+    const messages = raw.stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(messages).toHaveLength(2);
+    expect(messages[0]?.id).toBe(0);
+    expect(messages[0]?.result?.protocolVersion).toBe("2025-03-26");
+    expect(Array.isArray(messages[1])).toBe(true);
+    expect(messages[1]?.map((entry: { id?: unknown }) => entry.id)).toEqual([2]);
+    expect(recall(box)).toEqual([]);
+  });
 });

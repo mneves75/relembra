@@ -839,9 +839,24 @@ export async function serveMcp(
         legacyVersion === "2025-03-26" ||
         (legacyVersion === undefined && upcoming === "2025-03-26");
       if (mayAccept) {
+        // Snapshot keys already pending before this batch so notifications/cancelled inside the
+        // batch can cancel earlier queued or running requests without prematurely cancelling a
+        // later request in the same batch.
+        const priorPending = new Set(pendingByKey.keys());
         for (const element of message) {
           const response = triage(element, batch);
           if (response !== undefined) batch.elements.push({ response });
+        }
+        // Only cancel eagerly once 2025-03-26 is negotiated; if a queued initialize has not run
+        // yet, defer to the worker so a rejected batch cannot cancel earlier work.
+        if (legacyVersion === "2025-03-26") {
+          for (const element of batch.elements) {
+            if (!("notification" in element)) continue;
+            const key = cancellationKey(element.notification.method, element.notification.params);
+            if (key !== undefined && priorPending.has(key)) {
+              notify(element.notification.method, element.notification.params);
+            }
+          }
         }
       }
       // Count even a notification-only or invalid batch line until the worker handles it.

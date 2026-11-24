@@ -66,8 +66,37 @@ describe("publish manifest", () => {
     ]);
   });
 
-  test("a stable version may publish as latest", () => {
+  test("a stable version may publish as latest, never under a prerelease tag", () => {
     const stable = { ...good, version: "1.0.0", publishConfig: { access: "public" } };
     expect(publishProblems(stable, "1.0.0")).toEqual([]);
+    expect(
+      publishProblems({ ...stable, publishConfig: { access: "public", tag: "latest" } }, "1.0.0"),
+    ).toEqual([]);
+    expect(
+      publishProblems({ ...stable, publishConfig: { access: "public", tag: "beta" } }, "1.0.0"),
+    ).toEqual(["a stable release must publish under latest, not beta"]);
+  });
+
+  test("refuses malformed or SemVer-range dist-tags and null repository", () => {
+    for (const tag of [
+      "",
+      " ",
+      "-flag",
+      "beta\ntarball=/tmp/x",
+      "beta tag",
+      "1.2.3",
+      "1.x",
+      "v1.0.0",
+      "x",
+      "X.X",
+      "vX",
+    ]) {
+      expect(
+        publishProblems({ ...good, publishConfig: { access: "public", tag } }, "1.0.0-beta.1"),
+      ).toEqual(["publishConfig.tag must be a single valid npm dist-tag"]);
+    }
+    expect(
+      publishProblems({ ...good, repository: null as unknown as string }, "1.0.0-beta.1"),
+    ).toEqual(["repository.url is not git+https://github.com/mneves75/relembra.git"]);
   });
 });

@@ -151,12 +151,13 @@ export function fixture(options: Options = {}): Fixture {
   git(repo, "init", "-q", "-b", "main");
   git(repo, "config", "user.email", "test@example.com");
   git(repo, "config", "user.name", "test");
+  const distTag = version.includes("-") ? "beta" : "latest";
   const manifest = {
     name: "relembra",
     version,
     repository: { type: "git", url: "git+https://github.com/mneves75/relembra.git" },
     homepage: "https://example.test/relembra/",
-    publishConfig: { access: "public", tag: "beta" },
+    publishConfig: version.includes("-") ? { access: "public", tag: "beta" } : { access: "public" },
     type: "module",
   };
   writeFileSync(join(repo, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -213,6 +214,7 @@ export function fixture(options: Options = {}): Fixture {
   const archive = readFileSync(tgz);
   const identity = spawnSync("bun", ["scripts/evidence.ts"], { cwd: repo, encoding: "utf8" });
   if (identity.status !== 0) throw new Error(`evidence.ts: ${identity.stderr}`);
+  const identityJson = JSON.parse(identity.stdout) as { inputs: { digest: string } };
   writeFileSync(join(attempt, "gate", "identity-before.json"), identity.stdout);
   writeFileSync(join(attempt, "identity-final.json"), identity.stdout);
   const record = join(attempt, "bench", "bench-test", "bench.json");
@@ -224,7 +226,7 @@ export function fixture(options: Options = {}): Fixture {
       {
         verdict: "pass",
         complete: true,
-        candidate: { commit, digest: "d".repeat(64) },
+        candidate: { commit, digest: identityJson.inputs.digest },
         artifacts: [
           {
             name: "cli",
@@ -323,7 +325,7 @@ export function fixture(options: Options = {}): Fixture {
       line(`npm notice shasum: ${sha1(archive)}`),
       line(`npm notice integrity: ${sri(archive).slice(0, 20)}[...]${sri(archive).slice(-12)}`),
       line(`+ relembra@${version} (staged with id d039c1e8-0000-4000-8000-000000000001)`),
-      line(`npm notice stage package relembra@${version} has been staged with tag beta`),
+      line(`npm notice stage package relembra@${version} has been staged with tag ${distTag}`),
       "",
     ].join("\n"),
   );

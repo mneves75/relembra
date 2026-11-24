@@ -7,9 +7,10 @@ import {
   openSync,
   readFileSync,
   readSync,
+  realpathSync,
   unlinkSync,
 } from "node:fs";
-import { dirname, win32 } from "node:path";
+import { basename, dirname, join, win32 } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 import { StoreBusyError } from "../errors.js";
@@ -82,24 +83,37 @@ export function checkBusyTimeout(busyTimeoutMs: number): number {
 export const OWNER_MODES = process.platform !== "win32";
 
 /**
+ * Resolves the parent directory through the filesystem while keeping the leaf name unfollowed,
+ * so lexical `..` normalization in `pathToFileURL` can never diverge from OS path traversal when
+ * an intermediate symlink is present, and a symlinked leaf still fails the leaf type check.
+ */
+export function resolveStorePath(path: string): string {
+  const leaf = basename(path);
+  if (leaf === "" || leaf === "." || leaf === "..") throw new StoreFileTypeError(path);
+  return join(realpathSync.native(dirname(path)), leaf);
+}
+
+/**
  * Creates POSIX directories as 0700 and files as 0600. On Windows a new store needs an absent
  * directory, created with a private descriptor, and the empty store file is made in it under the
- * same lock. Existing files keep their existing checks.
+ * same lock. Existing files keep their existing checks. Returns the canonical parent + leaf path.
  */
 export function createOwnerOnly(
   path: string,
   // Tests stand in for the Windows creation step; the store always uses its own.
   windowsStep: ((path: string) => void) | undefined = OWNER_MODES ? undefined : createWindowsStore,
-): void {
+): string {
   if (windowsStep === undefined) mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   if (isSymbolicLink(path)) throw new StoreFileTypeError(path);
   // Windows ignores the modes: the directory must be private from creation, before any file.
   const stepRan = windowsStep !== undefined && !existsSync(path);
   if (stepRan) windowsStep(path);
+  const canonical = resolveStorePath(path);
+  if (isSymbolicLink(canonical)) throw new StoreFileTypeError(canonical);
   let made = false;
   try {
     // O_EXCL never follows a link, so a link made since the check fails here with EEXIST.
-    closeSync(openSync(path, "wx", 0o600));
+    closeSync(openSync(canonical, "wx", 0o600));
     made = true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
@@ -107,12 +121,13 @@ export function createOwnerOnly(
   // After the Windows step the file exists, made under the store's lock with the folder's grants;
   // one made here instead carries whatever the folder gives.
   if (made && stepRan) {
-    unlinkSync(path);
+    unlinkSync(canonical);
     throw new Error(
-      `the Windows store security step left no store file at ${path}; no store is created`,
+      `the Windows store security step left no store file at ${canonical}; no store is created`,
     );
   }
-  checkOwnerOnly(path);
+  checkOwnerOnly(canonical);
+  return canonical;
 }
 
 /**
@@ -220,7 +235,7 @@ export function storeFolderAccounts(userSid: string): string[] {
  * chmodded: someone else may already have read it.
  */
 function checkOwnerOnly(path: string): void {
-  for (const file of [path, `${path}-wal`, `${path}-shm`]) {
+  for (const file of [path, `${path}-wal`, `${path}-shm`, `${path}-journal`]) {
     let stats: ReturnType<typeof lstatSync>;
     try {
       stats = lstatSync(file);
@@ -310,7 +325,20 @@ function readOnlySchemaVersion(path: string, busyTimeoutMs: number): number {
     // A -wal without its -shm: only a writer could rebuild the index, so the version comes from
     // the image straight away. A read-only connection would refuse it on POSIX, but on Windows it
     // creates the -shm or answers SQLITE_PROTOCOL.
-    if (existsSync(`${path}-wal`) && !existsSync(`${path}-shm`)) return imageSchemaVersion(path);
+    const tryImage = () => {
+      try {
+        return imageSchemaVersion(path);
+      } catch (error) {
+        if (isRetryableImageError(error) && Date.now() < deadline) return undefined;
+        throw error;
+      }
+    };
+    if (existsSync(`${path}-wal`) && !existsSync(`${path}-shm`)) {
+      const version = tryImage();
+      if (version !== undefined) return version;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delay);
+      continue;
+    }
     const sidecars = existsSync(`${path}-wal`) || existsSync(`${path}-shm`);
     const parameters = sidecars ? "mode=ro&readonly_shm=1" : "mode=ro&immutable=1";
     let db: DatabaseSync | undefined;
@@ -319,8 +347,12 @@ function readOnlySchemaVersion(path: string, busyTimeoutMs: number): number {
       db.exec(`PRAGMA busy_timeout = ${busyTimeoutMs}`);
       return schemaVersion(db);
     } catch (error) {
-      if (needsWriter(error)) return imageSchemaVersion(path);
-      if (sidecars || !isTorn(error) || Date.now() >= deadline) throw error;
+      if (needsWriter(error)) {
+        const version = tryImage();
+        if (version !== undefined) return version;
+      } else if (sidecars || !isTorn(error) || Date.now() >= deadline) {
+        throw error;
+      }
     } finally {
       // Closed even after a failed read: Node keeps the file locked otherwise.
       db?.close();
@@ -329,14 +361,30 @@ function readOnlySchemaVersion(path: string, busyTimeoutMs: number): number {
   }
 }
 
+function isRetryableImageError(error: unknown): boolean {
+  return (
+    error instanceof StoreUnverifiedError || (error as NodeJS.ErrnoException)?.code === "ENOENT"
+  );
+}
+
 /**
  * The schema version of the store as its committed WAL frames leave it, read from an in-memory
- * image. Refuses with StoreUnverifiedError when the image cannot be built or read.
+ * image. Reads the main file before the WAL so a concurrent checkpoint cannot overlay stale WAL
+ * frames onto newer main pages. Refuses with StoreUnverifiedError when the image cannot be built
+ * or read.
  */
 function imageSchemaVersion(path: string): number {
-  const wal = existsSync(`${path}-wal`) ? readFileSync(`${path}-wal`) : new Uint8Array();
-  const image = walImage(readFileSync(path), wal);
+  const main = readFileSync(path);
+  let wal: Uint8Array;
+  try {
+    wal = readFileSync(`${path}-wal`);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") wal = new Uint8Array();
+    else throw error;
+  }
+  const image = walImage(main, wal);
   if (image === undefined) throw new StoreUnverifiedError(path);
+  if (image.length === 0) return 0;
   const memory = new DatabaseSync(":memory:");
   try {
     const copy = new Uint8Array(image);
@@ -398,20 +446,23 @@ export function walInHeader(path: string): boolean {
  * another process left.
  */
 function switchToWalVerified(path: string, busyTimeoutMs: number): void {
-  const db = new DatabaseSync(path, { defensive: true });
+  const db = new DatabaseSync(pathToFileURL(path).href, { defensive: true });
   try {
     db.exec(`PRAGMA busy_timeout = ${busyTimeoutMs}`);
     db.exec("BEGIN EXCLUSIVE");
     let version: number;
     let mode: unknown;
+    let committed = false;
     try {
       ({ journal_mode: mode } = db.prepare("PRAGMA journal_mode").get() as {
         journal_mode?: unknown;
       });
       version = schemaVersion(db);
       if (mode !== "wal") db.exec("PRAGMA locking_mode = EXCLUSIVE");
-    } finally {
       db.exec("COMMIT");
+      committed = true;
+    } finally {
+      if (!committed && db.isTransaction) db.exec("ROLLBACK");
     }
     if (version > MIGRATIONS.length) throw new SchemaTooNewError(version, MIGRATIONS.length);
     if (mode !== "wal") switchToWal(db, busyTimeoutMs);
@@ -427,7 +478,12 @@ function switchToWalVerified(path: string, busyTimeoutMs: number): void {
  * Opens the file defensively, refuses a newer schema before changing anything, then switches to
  * WAL with synchronous=FULL and migrates. Busy errors on the way become StoreBusyError.
  */
-export function openDatabase(path: string, busyTimeoutMs: number): DatabaseSync {
+export function openDatabase(
+  rawPath: string,
+  busyTimeoutMs: number,
+  options?: { readonly keepBusyTimeout?: boolean },
+): DatabaseSync {
+  const path = resolveStorePath(rawPath);
   // A store written by a newer relembra is refused before a write-capable handle exists: closing
   // one checkpoints a crashed writer's WAL into the main file and deletes the WAL and SHM. An
   // unverifiable version is refused too (StoreUnverifiedError).
@@ -448,7 +504,8 @@ export function openDatabase(path: string, busyTimeoutMs: number): DatabaseSync 
     throw error;
   }
   // Defensive mode blocks writes that can corrupt the file (writable_schema, schema_version).
-  const db = new DatabaseSync(path, { defensive: true });
+  // pathToFileURL prevents raw `file:` or `:memory:` paths from bypassing the checks above.
+  const db = new DatabaseSync(pathToFileURL(path).href, { defensive: true });
   try {
     // Opening is synchronous, so SQLite's own busy handler may wait here.
     db.exec(`PRAGMA busy_timeout = ${busyTimeoutMs}`);
@@ -467,9 +524,11 @@ export function openDatabase(path: string, busyTimeoutMs: number): DatabaseSync 
     };
     if (secureDelete !== 1) throw new Error("this SQLite cannot turn on secure_delete");
     migrate(db);
-    // After opening, waits happen asynchronously (the store's busy retry), so a writer never
-    // blocks the event loop while another handle in the same process holds the lock.
-    db.exec("PRAGMA busy_timeout = 0");
+    if (!options?.keepBusyTimeout) {
+      // After opening, waits happen asynchronously (the store's busy retry), so a writer never
+      // blocks the event loop while another handle in the same process holds the lock.
+      db.exec("PRAGMA busy_timeout = 0");
+    }
     // SQLite has created the -wal and -shm files by now: check them, and the store file, again.
     checkOwnerOnly(path);
     return db;

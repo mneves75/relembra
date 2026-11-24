@@ -86,11 +86,12 @@ describe("pinned Bun toolchain", () => {
     expect(existsSync(join(result.dest, "package"))).toBe(false);
   });
 
-  test("refuses an executable that reports another revision", () => {
+  test("refuses an executable that reports another revision and leaves nothing on disk", () => {
     const { root, integrity } = registry("9.9.9-canary.1+0000000");
     const result = run(pin(integrity), root);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("the pin says 9.9.9-canary.1+abcdef012");
+    expect(existsSync(result.dest)).toBe(false);
   });
 
   test("refuses a platform the pin does not name", () => {

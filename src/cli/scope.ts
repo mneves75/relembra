@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { accessSync, constants, existsSync, realpathSync, statSync } from "node:fs";
+import { accessSync, constants, existsSync, lstatSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { findGuardViolation } from "../guard.js";
@@ -17,6 +17,7 @@ export interface CliEnv {
   readonly RELEMBRA_AGENT?: string | undefined;
   readonly RELEMBRA_HARNESS?: string | undefined;
   readonly RELEMBRA_MODEL?: string | undefined;
+  readonly RELEMBRA_WAKE_BUDGET?: string | undefined;
   /** Bun startup options: refused when set (main.ts), since they could move the cwd. */
   readonly BUN_OPTIONS?: string | undefined;
   readonly BUN_BYTECODE_ORDER_OUT?: string | undefined;
@@ -170,8 +171,8 @@ function runGit(
   git: { git: string; path: string },
   env: CliEnv,
   args: readonly string[],
-): { status: number; stdout: string } {
-  const gitEnv: Record<string, string> = { PATH: git.path };
+): { status: number; stdout: string; stderr: string } {
+  const gitEnv: Record<string, string> = { PATH: git.path, LC_ALL: "C", LANGUAGE: "C" };
   for (const name of ["HOME", "XDG_CONFIG_HOME"] as const) {
     const value = env[name];
     if (value !== undefined && value !== "") gitEnv[name] = value;
@@ -181,7 +182,7 @@ function runGit(
     encoding: "utf8",
     timeout: GIT_TIMEOUT_MS,
     killSignal: "SIGKILL",
-    stdio: ["ignore", "pipe", "ignore"],
+    stdio: ["ignore", "pipe", "pipe"],
     shell: false,
     maxBuffer: 64 * 1024,
   });
@@ -194,7 +195,7 @@ function runGit(
       "unsupported-path",
     );
   }
-  return { status: result.status, stdout };
+  return { status: result.status, stdout, stderr: result.stderr ?? "" };
 }
 
 /**
@@ -210,6 +211,24 @@ function runGit(
  * `ls-remote --get-url origin` prints "origin" and exits 0, which reads like a relative remote;
  * `remote get-url` exits 2 (git 2.30 and later).
  */
+function hasGitMarker(startDir: string): boolean {
+  let dir = resolve(startDir);
+  for (;;) {
+    if (lstatSync(join(dir, ".git"), { throwIfNoEntry: false }) !== undefined) return true;
+    const head = lstatSync(join(dir, "HEAD"), { throwIfNoEntry: false });
+    if (
+      head?.isFile() &&
+      (lstatSync(join(dir, "objects"), { throwIfNoEntry: false })?.isDirectory() ||
+        lstatSync(join(dir, "config"), { throwIfNoEntry: false })?.isFile())
+    ) {
+      return true;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return false;
+    dir = parent;
+  }
+}
+
 function gitProject(env: CliEnv, cwd: string): { key: string; name: string } | undefined {
   const git = hostGit(env, cwd);
   const common = runGit(git, env, [
@@ -219,7 +238,23 @@ function gitProject(env: CliEnv, cwd: string): { key: string; name: string } | u
     "--path-format=absolute",
     "--git-common-dir",
   ]);
-  if (common.status !== 0 || common.stdout === "") return undefined;
+  if (common.status !== 0) {
+    if (/not a git repository \(or any /i.test(common.stderr) && !hasGitMarker(cwd)) {
+      return undefined;
+    }
+    throw new CliError(
+      "no-scope",
+      "no scope: git failed to inspect the repository; set RELEMBRA_SCOPE",
+      "git-failed",
+    );
+  }
+  if (common.stdout === "") {
+    throw new CliError(
+      "no-scope",
+      "no scope: git returned an empty repository path; set RELEMBRA_SCOPE",
+      "git-failed",
+    );
+  }
   const commonDir = safeRealpath(common.stdout);
   // The repository's folder, for its name: the one holding .git, or the git directory itself
   // (bare, or a separate git dir).

@@ -5,6 +5,47 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [1.0.0-beta.12] - 2026-11-24
+
+Repository-wide hardening across the core library, SQLite and Postgres adapters, CLI, MCP server,
+`pi-durable` integration, and release/CI tooling. The export format, SQLite and Postgres schemas,
+and CLI exit codes are unchanged.
+
+### Fixed
+
+- Guard: assignment scanning now handles unclosed and embedded quotes explicitly and inspects URL
+  query parameters and colon-delimited identifiers by component (case-insensitive URL schemes),
+  reducing false positives on ordinary URLs and store names while closing quoted-assignment bypasses.
+- Core & transfer: rejects host clock readings outside valid epoch milliseconds, guards generated
+  memory-id collisions, enforces current pin rights on `supersede` replay (including when the
+  superseded original was later redacted), rejects sparse source arrays, bounds `maxAgeDays`,
+  closes the `awaitingTombstone` live overwrite gap, compares sources/origin order-independently on
+  idempotent replay, floors summarize/promote trust via `trustOf`, fixes export byte-cap boundary
+  without a trailing newline, clamps import skew to `MAX_EPOCH_MS`, and preserves `principalId: null`
+  on tombstone-only retention-cascade source redacts.
+- OptMem import: pre-screens plain and dated store sources before writes, skips trailing zero blocks
+  in one pass while preserving crash-cut tails, rejects misaligned or embedded-newline chunks as
+  `not-optmem`, and checks `MAX_IMPORT_EVENTS` before scanning.
+- SQLite & Postgres: resolves parent directories via `realpathSync.native` while keeping leaf
+  symlink checks, opens every SQLite handle via `pathToFileURL`, validates `-journal` sidecars,
+  fixes read-only WAL schema-version retries and `switchToWalVerified` error rollback, prepares
+  statements under `busyTimeoutMs`, memoizes concurrent `close()`, checks full WAL truncation
+  counters, locks `store_lock` before Postgres upgrade backfills, and treats SQLSTATE `40003` as
+  commit-unknown.
+- CLI, MCP & `pi-durable`: fails closed on git errors, broken worktrees, and damaged bare repos
+  under `LC_ALL=C`; validates `check` home directories before opening; surfaces `WalScrubError` on
+  `redact`, `sweep`, `import`, and `hook` without hiding committed outputs of non-redacting
+  commands; rejects `--json` / `--` inside value-flag slots; handles short writes, `EAGAIN`, and
+  hangup on `/dev/tty`; scopes `2025-03-26` MCP batch cancellations to negotiated sessions and
+  prior pending keys; and skips `pi-durable` exposure recording when `relembra_memory` is absent.
+- Release, build & CI: strips ANSI codes in `build/cli.ts` flag detection (`FORCE_COLOR=1`), binds
+  `deploy.sh hmo` to `manifest.candidate.digest`, hardens security-gate record selection and
+  timestamp sorting, exempts the informational `pi-durable` CI job, enforces prerelease/stable
+  npm dist-tag policy and rejects SemVer-range or malformed tags, includes `site/` in input
+  identity, isolates implicit eval runs in temporary directories, and hardens `assemble.sh`,
+  `bun-toolchain.sh`, `init.sh`, `install.sh`, `with-postgres.sh`, `pack-check.ts`,
+  `gate-manifest.ts`, and `.githooks/pre-push`.
+
 ## [1.0.0-beta.11] - 2026-11-17
 
 Documentation and a new latency record. The library, the CLI, the export format and the SQLite
@@ -354,6 +395,7 @@ table of `docs/specs/IMPLEMENTATION-PLAN.md`. Known residuals are documented in 
 (import id existence) and `docs/CLI.md` (same-user trust model). Report vulnerabilities as
 [SECURITY.md](SECURITY.md) describes.
 
+[1.0.0-beta.12]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.12
 [1.0.0-beta.11]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.11
 [1.0.0-beta.10]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.10
 [1.0.0-beta.9]: https://github.com/mneves75/relembra/releases/tag/v1.0.0-beta.9

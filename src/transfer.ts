@@ -37,6 +37,7 @@ import {
 import { type Clock, type Store, type StoreTransaction, systemClock } from "./ports.js";
 import {
   acceptanceTime,
+  checkEpochMs,
   checkFence,
   checkPrincipal,
   checkProvenance,
@@ -45,6 +46,7 @@ import {
   enforceFence,
   liveDerived,
   lowerTrust,
+  MAX_EPOCH_MS,
   MAX_PRINCIPAL_ID_BYTES,
   owns,
   redactionPlan,
@@ -53,7 +55,7 @@ import {
   trustCeiling,
   visibleTo,
 } from "./relembra.js";
-import { isSummary, MAX_ID_BYTES, MAX_SCOPE_BYTES, utf8Bytes } from "./render.js";
+import { isSummary, MAX_ID_BYTES, MAX_SCOPE_BYTES, trustOf, utf8Bytes } from "./render.js";
 import { RELEMBRA_VERSION } from "./version.js";
 
 /** The first line of an export. */
@@ -184,13 +186,13 @@ export async function importJsonl(
   if (typeof jsonl !== "string") throw new TypeError("an export is a string of JSON lines");
   checkPrincipal(principal);
   // Read before the transaction: no host callback runs while the store is locked.
-  const hostNow = (options.clock ?? systemClock).now();
+  const hostNow = checkEpochMs((options.clock ?? systemClock).now());
   const fence = principal.fence === undefined ? undefined : checkFence(principal.fence);
   const maxTrust = lowerTrust(trustCeiling(principal), "agent");
   return store.transaction(async (tx) => {
     // Revision times are bounded by the store's time when it keeps one, else the host's clock;
     // the file is parsed under that bound inside the transaction, so refusals keep line order.
-    const latest = (await acceptanceTime(tx, hostNow)) + MAX_IMPORT_SKEW_MS;
+    const latest = Math.min((await acceptanceTime(tx, hostNow)) + MAX_IMPORT_SKEW_MS, MAX_EPOCH_MS);
     const { header, events } = parseExport(jsonl, latest);
     for (const scope of header.scopes) {
       if (!owns(principal, scope)) throw new ScopeDeniedError("own");
@@ -213,9 +215,10 @@ function parseExport(jsonl: string, latest: number): { header: ExportHeader; eve
   // Each UTF-16 code unit encodes to at least one UTF-8 byte, so a longer string is over the cap.
   if (jsonl.length > MAX_IMPORT_BYTES) throw new ImportError("too-large", 0, "file");
   const lines = jsonl.split("\n");
-  if (lines.at(-1) === "") lines.pop();
+  const trailingNewline = lines.at(-1) === "";
+  if (trailingNewline) lines.pop();
   if (lines.length === 0) throw new ImportError("malformed", 1);
-  checkBounds(lines);
+  checkBounds(lines, trailingNewline);
   const header = checkHeader(parseLine(lines[0] as string, 1));
   const events: Parsed[] = [];
   let lastSeq = 0;
@@ -242,7 +245,7 @@ function parseExport(jsonl: string, latest: number): { header: ExportHeader; eve
  * The event count, each line's bytes and the file's, checked before any line is parsed
  * (docs/FORMAT.md, "Import limits"): `too-large`, detail `events`, `line` or `file`.
  */
-function checkBounds(lines: readonly string[]): void {
+function checkBounds(lines: readonly string[], trailingNewline: boolean): void {
   if (lines.length - 1 > MAX_IMPORT_EVENTS) {
     throw new ImportError("too-large", MAX_IMPORT_EVENTS + 2, "events");
   }
@@ -250,7 +253,8 @@ function checkBounds(lines: readonly string[]): void {
   lines.forEach((text, index) => {
     const bytes = text.length > MAX_IMPORT_LINE_BYTES ? Infinity : utf8Bytes(text);
     if (bytes > MAX_IMPORT_LINE_BYTES) throw new ImportError("too-large", index + 1, "line");
-    total += bytes + 1;
+    const hasNewline = index < lines.length - 1 || trailingNewline;
+    total += bytes + (hasNewline ? 1 : 0);
   });
   if (total > MAX_IMPORT_BYTES) throw new ImportError("too-large", 0, "file");
 }
@@ -573,6 +577,14 @@ class Replay {
       case "summarize":
       case "promote":
         if ("redacted" in event) return this.redactedForm(line, event, stored);
+        {
+          // A memory noted earlier in this file in redacted form keeps its identity across scopes
+          // and cannot also be written live before its redact line arrives.
+          const pending = this.awaitingTombstone.get(event.memoryId);
+          if (pending !== undefined) {
+            throw new ImportError(pending.scope === event.scope ? "malformed" : "conflict", line);
+          }
+        }
         if (stored?.status === "redacted") throw new ImportError("redacted-in-target", line);
         if (stored !== undefined) {
           if (
@@ -662,7 +674,10 @@ class Replay {
         }
         // History of a memory known only from the file: its cause is replayed as written. No
         // ceiling applies to that history: it changes nothing the store held (docs/FORMAT.md).
-        const principalId = event.cause === "retention" ? null : this.principal.id;
+        const principalId =
+          event.cause === "retention" || (event.cause === "source" && event.principalId === null)
+            ? null
+            : this.principal.id;
         this.awaiting(line, event);
         this.awaitingTombstone.delete(event.memoryId);
         const { seq } = await this.tx.append({
@@ -694,7 +709,10 @@ class Replay {
       if (stored.status !== "redacted") this.awaitingRedact.set(event.memoryId, line);
       return false;
     }
-    if (this.awaitingTombstone.has(event.memoryId)) throw new ImportError("malformed", line);
+    const pending = this.awaitingTombstone.get(event.memoryId);
+    if (pending !== undefined) {
+      throw new ImportError(pending.scope === event.scope ? "malformed" : "conflict", line);
+    }
     // History of a memory whose text is gone: a copy's origin is not checked, since the copy
     // carries nothing of it any more.
     const principalId = this.principal.id;
@@ -845,7 +863,7 @@ class Replay {
       if (source.status !== "live" || source.revision.number !== revision) {
         throw new ImportError("conflict", line);
       }
-      floor = lowerTrust(floor, source.revision.provenance.trust);
+      floor = lowerTrust(floor, trustOf(source));
     }
     const revision = this.capped(given, floor);
     const { seq } = await this.tx.append({
@@ -899,7 +917,7 @@ class Replay {
     if (event.revision.text !== origin.revision.text) throw new ImportError("conflict", line);
     const revision = this.capped(
       { ...event.revision, text: origin.revision.text },
-      lowerTrust(this.maxTrust, origin.revision.provenance.trust),
+      lowerTrust(this.maxTrust, trustOf(origin)),
     );
     const { seq } = await this.tx.append({
       format: PROMOTE_FORMAT,
@@ -935,10 +953,27 @@ function sameMemory(
 ): boolean {
   if (stored.revision.text !== text) return false;
   if ((stored.sources === undefined) !== (sources === undefined)) return false;
-  if (JSON.stringify(stored.sources ?? null) !== JSON.stringify(sources ?? null)) return false;
-  const link = (o: SourceRevision | undefined) =>
-    o === undefined ? null : [o.memoryId, o.revision];
-  return JSON.stringify(link(stored.origin)) === JSON.stringify(link(origin));
+  if (stored.sources !== undefined && sources !== undefined) {
+    if (stored.sources.length !== sources.length) return false;
+    for (let i = 0; i < sources.length; i++) {
+      const left = stored.sources[i];
+      const right = sources[i];
+      if (
+        left === undefined ||
+        right === undefined ||
+        left.memoryId !== right.memoryId ||
+        left.revision !== right.revision
+      ) {
+        return false;
+      }
+    }
+  }
+  if ((stored.origin === undefined) !== (origin === undefined)) return false;
+  return (
+    stored.origin === undefined ||
+    origin === undefined ||
+    (stored.origin.memoryId === origin.memoryId && stored.origin.revision === origin.revision)
+  );
 }
 
 function omitSeq<E extends Event>(event: E): Omit<E, "seq"> {

@@ -183,6 +183,37 @@ describe.skipIf(NO_RELEASE_TOOLING)("contract: hmo refuses a candidate it must n
         }),
       "waiver SEC-20 has no valid expiry",
     ],
+    [
+      "a gate manifest whose candidate digest disagrees even if identity-before.json matches disk",
+      (f) =>
+        editManifest(f, (m) => {
+          (m as unknown as { candidate: { digest: string } }).candidate.digest = "f".repeat(64);
+        }),
+      "inputs changed since the release check",
+    ],
+    [
+      "a hosted artifact whose checksum file has duplicate entries for the binary",
+      (f) => {
+        const dir = join(f.fixtures, "artifacts", "relembra-cli-linux-x64");
+        const sum = sha256(readFileSync(join(dir, "relembra")));
+        writeFileSync(
+          join(dir, "relembra.sha256"),
+          `${sum}  relembra\n${"0".repeat(64)}  relembra\n`,
+        );
+      },
+      "duplicate entries for relembra",
+    ],
+    [
+      "a hosted run containing only the informational pi-durable job",
+      (f) =>
+        writeFileSync(
+          join(f.fixtures, `run-view-${RUN}.json`),
+          runView(f.commit, {
+            jobs: [{ name: "pi-durable (latest, informational)", conclusion: "failure" }],
+          }),
+        ),
+      `run ${RUN} has no required jobs`,
+    ],
   ];
   for (const [name, arrange, message] of refusals) {
     test(`refuses ${name}`, () => {
@@ -196,6 +227,63 @@ describe.skipIf(NO_RELEASE_TOOLING)("contract: hmo refuses a candidate it must n
       });
     });
   }
+
+  test("accepts a hosted run where only the informational pi-durable job failed", () => {
+    const f = fixture();
+    const view = JSON.parse(runView(f.commit));
+    view.jobs.push({ name: "pi-durable (latest, informational)", conclusion: "failure" });
+    writeFileSync(join(f.fixtures, `run-view-${RUN}.json`), JSON.stringify(view));
+    const run = hmo(f);
+    expect(run.stderr).toBe("");
+    expect(run.status).toBe(0);
+  });
+
+  test("gate_check ignores a corrupt unrelated sibling, refuses corrupt current commit record, and prefers dated records at equal priority", () => {
+    const f = fixture();
+    const badDir = join(f.repo, ".scratch", "security-gate", "0000000-corrupt");
+    mkdirSync(badDir, { recursive: true });
+    writeFileSync(join(badDir, "production.json"), "{not valid json");
+    // Give both tree-matching records non-HEAD commits (equal commit priority) so date order decides.
+    const tree = git(f.repo, "rev-parse", "HEAD^{tree}");
+    const undatedDir = join(f.repo, ".scratch", "security-gate", "1111111-undated");
+    mkdirSync(undatedDir, { recursive: true });
+    writeFileSync(
+      join(undatedDir, "production.json"),
+      JSON.stringify({
+        schema: 1,
+        target: "production",
+        commit: "1".repeat(40),
+        tree,
+        verdict: "blocked",
+        independent_acceptance: "blocked",
+        created_at: "2026-11-20T00:00:00Z",
+      }),
+    );
+    editRecord(f, (r) => {
+      (r as unknown as { commit: string }).commit = "2".repeat(40);
+      // Fractional seconds must sort newer than the same whole second without fractional seconds.
+      (r as unknown as { created_at?: string }).created_at = "2026-11-20T00:00:00.500Z";
+    });
+    const run = hmo(f);
+    expect(run.stderr).toBe("");
+    expect(run.status).toBe(0);
+
+    // Corrupting the current commit's own record must be refused rather than falling back to a sibling.
+    const backup = join(f.repo, ".scratch", "security-gate", "2222222-valid");
+    mkdirSync(backup, { recursive: true });
+    copyFileSync(
+      join(f.repo, ".scratch", "security-gate", f.commit, "production.json"),
+      join(backup, "production.json"),
+    );
+    writeFileSync(
+      join(f.repo, ".scratch", "security-gate", f.commit, "production.json"),
+      "{corrupt current commit",
+    );
+    rmSync(planDir(f), { recursive: true, force: true });
+    const corruptCurrent = hmo(f);
+    expect(corruptCurrent.status).toBe(1);
+    expect(corruptCurrent.stderr).toContain("is unreadable");
+  });
 });
 
 describe.skipIf(NO_RELEASE_TOOLING)("contract: prd publishes only hmo's bytes", () => {
@@ -539,6 +627,36 @@ describe.skipIf(NO_RELEASE_TOOLING)(
       expect(run.status).toBe(1);
       expect(run.stderr).toContain("security gate record changed since hmo");
       expect(tagged(f)).toBe(false);
+    });
+
+    test("refuses a prerelease staged under latest and a stable release staged under beta", () => {
+      const pre = fixture();
+      expect(hmo(pre).status).toBe(0);
+      writeFileSync(
+        join(pre.fixtures, "log-900.txt"),
+        readFileSync(join(pre.fixtures, "log-900.txt"), "utf8").replace(
+          "with tag beta",
+          "with tag latest",
+        ),
+      );
+      const preRun = prd(pre);
+      expect(preRun.status).toBe(1);
+      expect(preRun.stderr).toContain("staged under latest");
+      expect(preRun.stderr).toContain("npm stage reject");
+
+      const stable = fixture({ version: "1.2.3" });
+      expect(hmo(stable).status).toBe(0);
+      writeFileSync(
+        join(stable.fixtures, "log-900.txt"),
+        readFileSync(join(stable.fixtures, "log-900.txt"), "utf8").replace(
+          "with tag latest",
+          "with tag beta",
+        ),
+      );
+      const stableRun = prd(stable);
+      expect(stableRun.status).toBe(1);
+      expect(stableRun.stderr).toContain("staged under beta, not latest");
+      expect(stableRun.stderr).toContain("npm stage reject");
     });
 
     test("refuses when origin/main moved since hmo, before tagging", () => {

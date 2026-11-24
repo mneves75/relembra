@@ -736,6 +736,23 @@ describe.skipIf(NO_RELEASE_TOOLING)("scripts/gate-manifest.ts", () => {
     expect(changed.status).toBe(1);
     expect(changed.stderr).toContain("package: changed after it was recorded");
   });
+
+  test("artifacts refuses a symlink or directory replacing a recorded artifact", () => {
+    const g = gated("pinned-symlink");
+    const pinned = writeManifest(g.path, g.manifest);
+    const target = join(g.dir, "real-pkg");
+    writeFileSync(target, "tested package\n");
+    rmSync(g.pkg);
+    symlinkSync(target, g.pkg);
+    const link = manifestCli("artifacts", g.path, pinned);
+    expect(link.status).toBe(1);
+    expect(link.stderr).toContain("is not a regular file");
+    rmSync(g.pkg);
+    mkdirSync(g.pkg);
+    const dir = manifestCli("artifacts", g.path, pinned);
+    expect(dir.status).toBe(1);
+    expect(dir.stderr).toContain("is not a regular file");
+  });
 });
 
 describe.skipIf(NO_RELEASE_TOOLING)("benchProblems", () => {

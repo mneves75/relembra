@@ -5,6 +5,18 @@ Dated entries, newest first. Keep out secrets, local paths, private names and se
 the repository is public. Code and procedure live in their own files; this file holds only what
 those files cannot say: the mistake, the dead end, the thing that turned out to matter.
 
+## 2026-11-24: 1.0.0-beta.12 (hardening)
+
+- **`FORCE_COLOR=1` in parallel Bun test workers:** `bun test --parallel` can inject ANSI color
+  escapes into `bun build --help` output, breaking substring flag checks unless stripped with
+  `stripVTControlCharacters` (`build/cli.ts`, `test/build-flags.test.ts`).
+- **Bun `fs.realpathSync` vs `fs.realpathSync.native`:** Bun's `fs.realpathSync` can lexically
+  collapse `link/..` before OS symlink resolution. Use `realpathSync.native(dirname(path))` when
+  canonicalizing store parent directories while preserving leaf symlink checks
+  (`src/sqlite/database.ts`).
+- **Disposable smoke directories with `relembra check`:** `check` now calls `checkStoreHome` before
+  opening the store, so disposable test directories need `mkdir -m 700` on POSIX.
+
 ## 2026-11-17: docs refresh and a latency record
 
 - **Strict benchmark alone:** `bun bench/eval-latency.ts --check --out <dir>` runs without the

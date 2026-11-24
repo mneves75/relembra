@@ -7,8 +7,8 @@
 #
 # hmo (homologação) touches nothing outside .scratch/deploy/<version>/: it binds HEAD to the
 # release check (the gated binary, the retained archive, the same relevant inputs, and the marker
-# scripts/check-release.sh writes last), to the hosted CI run of the push to main (every job green
-# on this commit) and to the security gate record (pass or waived, independently accepted, no
+# scripts/check-release.sh writes last), to the hosted CI run of the push to main (every required
+# job green on this commit) and to the security gate record (pass or waived, independently accepted, no
 # expired waiver); downloads the hosted binaries and checks each against the checksum beside it;
 # lays out the seven release assets under their release names with SHA256SUMS and the release
 # notes from CHANGELOG.md; and writes plan.json, which records every asset's sha256. It can be
@@ -122,11 +122,23 @@ gate_check() {
     const [tree, commit] = process.argv.slice(1);
     const fail = (m) => { console.error(m); process.exit(1); };
     const records = fs.existsSync(dir)
-      ? fs.readdirSync(dir).map((d) => path.join(dir, d, "production.json")).filter((p) => fs.existsSync(p))
-          .map((p) => ({ p, r: JSON.parse(fs.readFileSync(p, "utf8")) }))
-          .filter(({ r }) => r.target === "production" && r.tree === tree)
+      ? fs.readdirSync(dir).flatMap((d) => {
+          const p = path.join(dir, d, "production.json");
+          try {
+            return [{ p, r: JSON.parse(fs.readFileSync(p, "utf8")) }];
+          } catch (err) {
+            if (err && err.code === "ENOENT") return [];
+            if (d === commit || d === tree) fail(`security gate record ${p} is unreadable`);
+            return [];
+          }
+        })
+          .filter(({ r }) => r && typeof r === "object" && r.target === "production" && r.tree === tree)
       : [];
-    records.sort((a, b) => (b.r.commit === commit) - (a.r.commit === commit) || String(b.r.created_at).localeCompare(String(a.r.created_at)));
+    const ts = (r) => {
+      const parsed = typeof r.created_at === "string" ? Date.parse(r.created_at) : NaN;
+      return Number.isFinite(parsed) ? parsed : -Infinity;
+    };
+    records.sort((a, b) => (b.r.commit === commit) - (a.r.commit === commit) || ts(b.r) - ts(a.r));
     const found = records[0];
     if (!found) fail(`no security gate record for tree ${tree} under ${dir}`);
     const { r, p } = found;
@@ -194,7 +206,7 @@ hmo() {
   [ -f "$manifest" ] || refuse "release check $check has no gate/manifest.json"
   [ "$(json "$marker" manifestSha256)" = "$(hash_of "$manifest")" ] ||
     refuse "gate/manifest.json changed after the release check ($marker names another sha256)"
-  local artifacts binary_sha archive_sha archive
+  local artifacts binary_sha archive_sha archive candidate_digest
   artifacts=$(node -e '
     const m = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
     if (m.verdict !== "pass" || m.complete !== true) { console.error("the gate manifest did not pass"); process.exit(1); }
@@ -203,9 +215,11 @@ hmo() {
     const cli = named("cli"), pkg = named("package");
     if (!cli) { console.error("no verified cli artifact in the gate manifest"); process.exit(1); }
     if (!pkg) { console.error("no verified package artifact in the gate manifest"); process.exit(1); }
-    process.stdout.write(`${cli.sha256After}\n${pkg.sha256After}\n${pkg.path}\n`);
+    const digest = m.candidate?.digest;
+    if (typeof digest !== "string" || !hex.test(digest)) { console.error("no valid candidate digest in the gate manifest"); process.exit(1); }
+    process.stdout.write(`${cli.sha256After}\n${pkg.sha256After}\n${pkg.path}\n${digest}\n`);
   ' "$manifest" 2>&1) || refuse "release check $check: $artifacts"
-  { read -r binary_sha; read -r archive_sha; read -r archive; } <<<"$artifacts"
+  { read -r binary_sha; read -r archive_sha; read -r archive; read -r candidate_digest; } <<<"$artifacts"
   [ -f bin/relembra ] || refuse "bin/relembra is missing"
   [ "$(hash_of bin/relembra)" = "$binary_sha" ] ||
     refuse "bin/relembra is not the binary the release check tested (sha256 $(hash_of bin/relembra), tested $binary_sha)"
@@ -217,7 +231,8 @@ hmo() {
   # A squash keeps the inputs and changes the commit, so the binding is by inputs, not by commit.
   tmp_now=$(mktemp) || exit 1
   bun scripts/evidence.ts >"$tmp_now" || refuse "the inputs on disk differ from HEAD, or a runtime is missing"
-  local changed
+  local now_digest changed
+  now_digest=$(json "$tmp_now" inputs.digest) || refuse "cannot read the current inputs digest"
   changed=$(node -e '
     const read = (p) => JSON.parse(require("node:fs").readFileSync(p, "utf8")).inputs.files;
     const before = read(process.argv[1]), after = read(process.argv[2]);
@@ -226,6 +241,8 @@ hmo() {
   ' "$check/gate/identity-before.json" "$tmp_now" 2>/dev/null) ||
     refuse "cannot compare the inputs with the release check's ($check/gate/identity-before.json)"
   [ -z "$changed" ] || refuse "inputs changed since the release check: $changed"
+  [ "$now_digest" = "$candidate_digest" ] ||
+    refuse "inputs changed since the release check (digest $now_digest, gate manifest $candidate_digest)"
 
   # The security gate record for this tree.
   gate_check
@@ -252,12 +269,14 @@ hmo() {
   red=$(printf '%s' "$jobs" | node -e '
     const jobs = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
     if (!Array.isArray(jobs) || jobs.length === 0) { process.stdout.write("has no jobs"); process.exit(0); }
-    const bad = jobs.find((j) => j.conclusion !== "success");
+    const required = jobs.filter((j) => j.name !== "pi-durable (latest, informational)");
+    if (required.length === 0) { process.stdout.write("has no required jobs"); process.exit(0); }
+    const bad = required.find((j) => j.conclusion !== "success");
     if (bad) process.stdout.write(`job ${bad.name} is ${bad.conclusion}`);
   ') || refuse "run $run: cannot read its jobs"
   case $red in
   '') ;;
-  "has no jobs") refuse "run $run has no jobs" ;;
+  "has no jobs" | "has no required jobs") refuse "run $run $red" ;;
   *) refuse "run $run: $red" ;;
   esac
   [ "$(json "$run_json" conclusion)" = success ] || refuse "run $run concluded $(json "$run_json" conclusion)"
@@ -276,7 +295,17 @@ hmo() {
     # The entry for this binary by name, as install.sh reads it: a checksum file that names other
     # files cannot vouch for it.
     local expected
-    expected=$(awk -v name="$file" '$2 == name || $2 == "*" name { print $1; exit }' "$dir/relembra.sha256")
+    expected=$(NAME="$file" awk '
+      NF == 2 && ($2 == ENVIRON["NAME"] || $2 == "*" ENVIRON["NAME"]) {
+        count++
+        sum = $1
+      }
+      END {
+        if (count == 1) print sum
+        else if (count > 1) print "DUPLICATE"
+      }
+    ' "$dir/relembra.sha256")
+    [ "$expected" != "DUPLICATE" ] || refuse "relembra-cli-$artifact: relembra.sha256 has duplicate entries for $file"
     [ -n "$expected" ] || refuse "relembra-cli-$artifact: relembra.sha256 has no entry for $file"
     [ "$(hash_of "$dir/$file")" = "$expected" ] ||
       refuse "relembra-cli-$artifact: $file does not match its relembra.sha256"
@@ -516,7 +545,14 @@ prd() {
   stage_id=$(printf '%s\n' "$log" | sed -n 's/.*staged with id \([0-9a-f-]*\).*/\1/p' | head -n 1)
   dist_tag=$(printf '%s\n' "$log" | sed -n 's/.*staged with tag \([A-Za-z0-9._-]*\).*/\1/p' | head -n 1)
   staged_sha1=$(printf '%s\n' "$log" | sed -n 's/.*npm notice shasum: \([0-9a-f]\{40\}\).*/\1/p' | head -n 1)
-  [ -n "$stage_id" ] && [ -n "$staged_sha1" ] || refuse "release.yml run $release_run: no stage id or shasum in its log"
+  [ -n "$stage_id" ] && [ -n "$staged_sha1" ] && [ -n "$dist_tag" ] ||
+    refuse "release.yml run $release_run: no stage id, dist-tag or shasum in its log"
+  if [ "$prerelease" = 1 ] && [ "$dist_tag" = latest ]; then
+    refuse "prerelease $version was staged under latest; reject it: npm stage reject $stage_id"
+  fi
+  if [ "$prerelease" = 0 ] && [ "$dist_tag" != latest ]; then
+    refuse "stable release $version was staged under $dist_tag, not latest; reject it: npm stage reject $stage_id"
+  fi
   archive_sha1=$(sha1_of "$plan/relembra-$version.tgz")
   [ "$staged_sha1" = "$archive_sha1" ] ||
     refuse "npm staged shasum $staged_sha1, the archive's is $archive_sha1; reject it: npm stage reject $stage_id"
