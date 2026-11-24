@@ -33,6 +33,7 @@ describe("retention rules", () => {
       [{ scope: SCOPE, maxAgeDays: -1 }],
       [{ scope: SCOPE, maxAgeDays: 1.5 }],
       [{ scope: SCOPE, maxAgeDays: Number.POSITIVE_INFINITY }],
+      [{ scope: SCOPE, maxAgeDays: Number.MAX_SAFE_INTEGER }],
       [
         { scope: SCOPE, maxAgeDays: 30 },
         { scope: SCOPE, maxAgeDays: 60 },

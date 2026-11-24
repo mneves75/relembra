@@ -72,10 +72,13 @@ const CREDENTIAL_SHAPES: readonly RegExp[] = [
 
 /**
  * `name = value` or `name: value`, where the name may be quoted (JSON, YAML, `.env`, Markdown
- * code). A quoted value runs to its matching closing quote (group 3); an unquoted value runs to
- * whitespace, commas included, so a comma cannot split a secret into harmless pieces (group 4).
+ * code). Values are scanned explicitly so unclosed quotes and quotes embedded inside unquoted
+ * passwords cannot hide a secret, while recognized URLs and colon-delimited structured
+ * identifiers inspect their segments instead of scoring the concatenated string as one random value.
  */
-const ASSIGNMENT = /["'`]?([A-Za-z_][\w.-]*)["'`]?\s*[:=]\s*(?:(["'`])(.*?)\2|([^\s"'`]+))/g;
+const ASSIGNMENT_HEAD = /["'`]?([A-Za-z_][\w.-]*)["'`]?\s*([:=])\s*/g;
+const URL_SCHEME = /^[a-z][a-z0-9+.-]*$/i;
+const COLON_STRUCTURED = /^[A-Za-z0-9._-]+(?::[A-Za-z0-9._-]+)+$/;
 /** Sentence punctuation that may follow an unquoted value without being part of it. */
 const TRAILING_PUNCTUATION = /[.,;:!?)\]]+$/;
 const SECRET_NAME =
@@ -126,18 +129,71 @@ function holdsCredential(text: string): boolean {
 
 /**
  * Checks every assignment in `text`, and every assignment inside each quoted value
- * (`cmd='export token=...'`). Quoted content is strictly shorter than its text, so this ends.
+ * (`cmd='export token=...'`) or unquoted compound value. Recursed substrings are strictly shorter
+ * than `text`, so this always terminates.
  */
 function holdsSecretAssignment(text: string): boolean {
-  for (const [, name = "", , quoted, unquoted = ""] of text.matchAll(ASSIGNMENT)) {
-    if (quoted !== undefined && holdsSecretAssignment(quoted)) return true;
-    const value = quoted ?? unquoted.replace(TRAILING_PUNCTUATION, "");
+  const head = new RegExp(ASSIGNMENT_HEAD.source, "g");
+  for (let match = head.exec(text); match !== null; match = head.exec(text)) {
+    const name = match[1] ?? "";
+    const sep = match[2] ?? "=";
+    const pos = match.index + match[0].length;
+    if (pos >= text.length) break;
+    const first = text[pos];
+    let value: string;
+    let quoted: string | undefined;
+    if (first === '"' || first === "'" || first === "`") {
+      const close = text.indexOf(first, pos + 1);
+      quoted = close >= 0 ? text.slice(pos + 1, close) : text.slice(pos + 1);
+      head.lastIndex = close >= 0 ? close + 1 : text.length;
+      if (quoted.length < text.length && holdsSecretAssignment(quoted)) return true;
+      value = quoted;
+    } else {
+      const ws = text.slice(pos).search(/\s/);
+      const end = ws < 0 ? text.length : pos + ws;
+      const unquoted = text.slice(pos, end);
+      head.lastIndex = end;
+      value = unquoted.replace(TRAILING_PUNCTUATION, "");
+    }
     if (isReference(value)) continue;
     const bare = value.replace(REFERENCE_PREFIX, "").replace(REFERENCE_SUFFIX, "");
     // A quoted value may be prose; spaces alone do not make it look like a secret.
     if (SECRET_NAME.test(name) && bare.length >= 8 && /[^A-Za-z\s]/.test(bare)) return true;
     if (hasSecretWord(name) && looksEncoded(bare)) return true;
+    if (sep === ":" && quoted === undefined && URL_SCHEME.test(name) && value.startsWith("//")) {
+      if (urlHoldsSecret(value)) return true;
+      continue;
+    }
+    if (sep === ":" && quoted === undefined && COLON_STRUCTURED.test(value)) {
+      for (const part of value.split(":")) {
+        if (looksRandom(part)) return true;
+        if (part.includes("=") && holdsSecretAssignment(part)) return true;
+      }
+      continue;
+    }
     if (looksRandom(bare)) return true;
+    if (
+      quoted === undefined &&
+      value.length < text.length &&
+      (value.includes("=") || value.includes(":")) &&
+      holdsSecretAssignment(value)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Checks query/fragment assignments and opaque path segments of a URL without scoring host+path as one token. */
+function urlHoldsSecret(rest: string): boolean {
+  const queryStart = rest.search(/[?#]/);
+  if (queryStart >= 0) {
+    for (const param of rest.slice(queryStart + 1).split(/[&#]/)) {
+      if (param.length > 0 && holdsSecretAssignment(param)) return true;
+    }
+  }
+  for (const segment of rest.slice(2).split(/[/#?&=@]+/)) {
+    if (looksRandom(segment)) return true;
   }
   return false;
 }

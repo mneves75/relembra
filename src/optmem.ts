@@ -16,6 +16,7 @@ import { sha256 } from "./ops.js";
 import { type Clock, type Store, systemClock } from "./ports.js";
 import {
   acceptanceTime,
+  checkEpochMs,
   checkFence,
   checkName,
   checkPrincipal,
@@ -101,25 +102,23 @@ export async function importOptmem(
   if (!(log instanceof Uint8Array)) throw new TypeError("an OptMem log is a Uint8Array");
   if (log.length > MAX_IMPORT_BYTES) throw new ImportError("too-large", 0, "file");
   // Read before the transaction: no host callback runs while the store is locked.
-  const at = (input.clock ?? systemClock).now();
-  if (!Number.isSafeInteger(at) || at < 0) {
-    throw new RangeError("the clock must give whole epoch milliseconds");
-  }
+  const at = checkEpochMs((input.clock ?? systemClock).now());
   const { agent, harness, model, host } = input.provenance;
   const trust = lowerTrust(trustCeiling(principal), "agent");
-  // Screened before anything is read or written, with a stand-in op id and a plain first record's
-  // source: the store name reaches every record's source and the checkpoint, so a name the guard
-  // refuses in a source (a credential shape) is refused here, as on the direct note path. Each
-  // record's own provenance is screened again below; a refusal there rolls the import back.
-  checkProvenance({
-    agent,
-    harness,
-    model,
-    host,
-    source: `optmem:${name}:1`,
-    trust,
-    opId: "optmem",
-  });
+  // Screened before anything is read or written, with a stand-in op id and both plain and
+  // dated first-record sources: a store name the guard refuses in either shape is refused before
+  // any memory or checkpoint is written.
+  for (const sampleSource of [`optmem:${name}:1`, `optmem:${name}:1:2000-01-01`]) {
+    checkProvenance({
+      agent,
+      harness,
+      model,
+      host,
+      source: sampleSource,
+      trust,
+      opId: "optmem",
+    });
+  }
   const fence = principal.fence === undefined ? undefined : checkFence(principal.fence);
   const { width, count } = readLog(log);
   if (count > MAX_IMPORT_EVENTS)
@@ -217,13 +216,23 @@ function readLog(log: Uint8Array): { width: number; count: number } {
   const at = (index: number) => log.subarray(index * width, (index + 1) * width);
   const good = (record: Uint8Array) =>
     record.length === width && record.indexOf(NEWLINE) === width - 1 && !record.includes(0);
-  let count = records;
+  // Skip trailing all-zero blocks in one pass so a zero-padded log never allocates millions of subarrays.
+  let lastNonZero = log.length - 1;
+  while (lastNonZero >= 0 && log[lastNonZero] === 0) lastNonZero--;
+  const activeRecords =
+    lastNonZero < 0 ? 0 : Math.min(records, Math.floor(lastNonZero / width) + 1);
+  let count = activeRecords;
   while (count > 0 && !good(at(count - 1))) {
     const record = at(count - 1);
-    // Never written: a crash left zeros in it, or cut it before its newline.
-    if (!record.includes(0) && record.at(-1) === NEWLINE)
+    // Never written: a crash left zeros in it, or cut the final non-zero record before its newline.
+    // Any non-zero bad chunk before the final non-zero chunk, or with an embedded newline, is misaligned.
+    if (record.includes(NEWLINE) || (!record.includes(0) && count !== activeRecords)) {
       throw new ImportError("not-optmem", count);
+    }
     count--;
+  }
+  if (count > MAX_IMPORT_EVENTS) {
+    throw new ImportError("too-large", MAX_IMPORT_EVENTS + 1, "records");
   }
   for (let index = 0; index < count; index++) {
     if (!good(at(index))) throw new ImportError("not-optmem", index + 1);
