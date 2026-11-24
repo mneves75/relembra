@@ -318,6 +318,21 @@ async function serveStdio(env: CliEnv, scopes: SessionScopes, store: SqliteStore
   );
 }
 
+function wakeBudget(context: Context): number | undefined {
+  const flag = intFlag(context.parsed, "--budget", MAX_BUDGET);
+  if (flag !== undefined) return flag;
+  const raw = context.env.RELEMBRA_WAKE_BUDGET;
+  if (raw === undefined || raw === "") return undefined;
+  if (!/^[0-9]{1,15}$/.test(raw)) {
+    throw usage("bad-value", `RELEMBRA_WAKE_BUDGET takes a whole number from 1 to ${MAX_BUDGET}`);
+  }
+  const number = Number(raw);
+  if (number < 1 || number > MAX_BUDGET) {
+    throw usage("bad-value", `RELEMBRA_WAKE_BUDGET takes a whole number from 1 to ${MAX_BUDGET}`);
+  }
+  return number;
+}
+
 function hookOutput(text: string): HookOutput {
   return { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: text } };
 }
@@ -394,7 +409,8 @@ async function runStoreCommand(
     }
     case "wake":
     case "brief": {
-      const budgetBytes = intFlag(parsed, "--budget", MAX_BUDGET);
+      const budgetBytes =
+        name === "wake" ? wakeBudget(context) : intFlag(parsed, "--budget", MAX_BUDGET);
       const budget = budgetBytes === undefined ? {} : { budgetBytes };
       const rendering =
         name === "wake"
@@ -523,7 +539,12 @@ async function runStoreCommand(
       return { data: report, text: reportText(report) };
     }
     case "hook": {
-      const rendering = await composeWake(relembra, scopes);
+      const budgetBytes = wakeBudget(context);
+      const rendering = await composeWake(
+        relembra,
+        scopes,
+        budgetBytes === undefined ? {} : { budgetBytes },
+      );
       const output = hookOutput(rendering.text);
       return { data: output, text: JSON.stringify(output) };
     }
@@ -926,6 +947,7 @@ if (import.meta.main) {
     RELEMBRA_AGENT,
     RELEMBRA_HARNESS,
     RELEMBRA_MODEL,
+    RELEMBRA_WAKE_BUDGET,
     BUN_OPTIONS,
     BUN_BYTECODE_ORDER_OUT,
     PATH,
@@ -940,6 +962,7 @@ if (import.meta.main) {
     RELEMBRA_AGENT,
     RELEMBRA_HARNESS,
     RELEMBRA_MODEL,
+    RELEMBRA_WAKE_BUDGET,
     BUN_OPTIONS,
     BUN_BYTECODE_ORDER_OUT,
     PATH,

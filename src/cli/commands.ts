@@ -153,8 +153,8 @@ export const COMMANDS: readonly CommandSpec[] = [
     name: "hook",
     summary: "Print the wake as a session-start hook response",
     positionals: "none",
-    flags: [],
-    usage: "relembra hook",
+    flags: [{ name: "--budget", value: true }],
+    usage: "relembra hook [--budget bytes]",
   },
   {
     name: "mcp",
@@ -189,6 +189,7 @@ export const ENV_VARS = [
   "RELEMBRA_AGENT",
   "RELEMBRA_HARNESS",
   "RELEMBRA_MODEL",
+  "RELEMBRA_WAKE_BUDGET",
   "BUN_OPTIONS",
   "BUN_BYTECODE_ORDER_OUT",
   "PATH",

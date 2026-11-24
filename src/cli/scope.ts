@@ -17,6 +17,7 @@ export interface CliEnv {
   readonly RELEMBRA_AGENT?: string | undefined;
   readonly RELEMBRA_HARNESS?: string | undefined;
   readonly RELEMBRA_MODEL?: string | undefined;
+  readonly RELEMBRA_WAKE_BUDGET?: string | undefined;
   /** Bun startup options: refused when set (main.ts), since they could move the cwd. */
   readonly BUN_OPTIONS?: string | undefined;
   readonly BUN_BYTECODE_ORDER_OUT?: string | undefined;

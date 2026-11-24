@@ -116,4 +116,65 @@ describe("the session-start hook fails open: whatever goes wrong, exit 0 and no 
       "Deploys go through staging.",
     );
   });
+
+  cliTest("hook --budget and RELEMBRA_WAKE_BUDGET cap additionalContext UTF-8 bytes", () => {
+    box = sandbox();
+    const command = ok(box, ["init"]).hooks.claudeCode.hooks.SessionStart[0].hooks[0].command;
+    expect(command).toContain('RELEMBRA_WAKE_BUDGET="$RELEMBRA_WAKE_BUDGET"');
+    for (let i = 0; i < 30; i++) {
+      ok(box, ["note", `Fact ${String(i).padStart(2, "0")}: ${"x".repeat(160)}`]);
+    }
+    const full = JSON.parse(run(box, ["hook"]).stdout).hookSpecificOutput
+      .additionalContext as string;
+    expect(Buffer.byteLength(full, "utf8")).toBeGreaterThan(2000);
+
+    const byFlag = run(box, ["hook", "--budget", "900"]);
+    expect(byFlag.status).toBe(0);
+    const flagCtx = JSON.parse(byFlag.stdout).hookSpecificOutput.additionalContext as string;
+    expect(Buffer.byteLength(flagCtx, "utf8")).toBeLessThanOrEqual(900);
+    expect(flagCtx).toContain("<wake>");
+
+    const byEnv = run(box, ["hook"], { env: { RELEMBRA_WAKE_BUDGET: "800" } });
+    expect(byEnv.status).toBe(0);
+    const envCtx = JSON.parse(byEnv.stdout).hookSpecificOutput.additionalContext as string;
+    expect(Buffer.byteLength(envCtx, "utf8")).toBeLessThanOrEqual(800);
+    expect(envCtx).toContain("<wake>");
+
+    // Explicit --budget overrides RELEMBRA_WAKE_BUDGET
+    const override = run(box, ["hook", "--budget", "1400"], {
+      env: { RELEMBRA_WAKE_BUDGET: "500" },
+    });
+    expect(override.status).toBe(0);
+    const overCtx = JSON.parse(override.stdout).hookSpecificOutput.additionalContext as string;
+    expect(Buffer.byteLength(overCtx, "utf8")).toBeGreaterThan(500);
+    expect(Buffer.byteLength(overCtx, "utf8")).toBeLessThanOrEqual(1400);
+
+    // init hook command passes RELEMBRA_WAKE_BUDGET through env -i
+    const viaInit = spawnSync(HOOK_SHELL, ["-c", command], {
+      cwd: box.repo,
+      env: sandboxEnv(box, { RELEMBRA_WAKE_BUDGET: "750" }),
+      encoding: "utf8",
+      timeout: 30_000,
+    });
+    expect(viaInit.status).toBe(0);
+    const initCtx = JSON.parse(viaInit.stdout).hookSpecificOutput.additionalContext as string;
+    expect(Buffer.byteLength(initCtx, "utf8")).toBeLessThanOrEqual(750);
+    expect(initCtx).toContain("<wake>");
+  });
+
+  cliTest("bad --budget or bad RELEMBRA_WAKE_BUDGET fails open on hook", () => {
+    box = sandbox();
+    ok(box, ["init"]);
+    ok(box, ["note", "Deploys go through staging."]);
+    for (const bad of ["0", "-5", "abc", "1000001", "10", "$(id)"]) {
+      expectSilent({}, ["--budget", bad]);
+      expectSilent({ env: { RELEMBRA_WAKE_BUDGET: bad } });
+    }
+    // Empty env counts as unset
+    const empty = run(box, ["hook"], { env: { RELEMBRA_WAKE_BUDGET: "" } });
+    expect(empty.status).toBe(0);
+    expect(JSON.parse(empty.stdout).hookSpecificOutput.additionalContext).toContain(
+      "Deploys go through staging.",
+    );
+  });
 });
