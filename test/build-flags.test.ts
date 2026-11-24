@@ -28,6 +28,17 @@ test("a flag only counts as itself, not as the prefix of a longer one", () => {
   ]);
 });
 
+test("ANSI color codes in bun build --help (e.g. under FORCE_COLOR=1) do not hide flags", () => {
+  const colored = [
+    "      \x1b[32m--compile\x1b[0m   x",
+    "      \x1b[32m--aot\x1b[0m   x",
+    "      \x1b[32m--trim\x1b[0m   x",
+    "      \x1b[32m--no-compile-autoload-dotenv\x1b[0m   x",
+    "      \x1b[32m--no-compile-autoload-bunfig\x1b[0m   x",
+  ].join("\n");
+  expect(missingBuildFlags(colored)).toEqual([]);
+});
+
 test("the refusal points at the pinned toolchain instead of carrying a copy of the pin", () => {
   const root = join(import.meta.dir, "..");
   const pin = readFileSync(join(root, "build", "bun-toolchain.txt"), "utf8");

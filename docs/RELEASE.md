@@ -4,8 +4,9 @@ A release is a SemVer version in `package.json` and `src/version.ts` (`scripts/p
 refuses a mismatch), a tag `v<version>`, the retained package archive published to npm, and a
 GitHub release carrying the CLI binaries (macOS arm64, Linux x64 and arm64, Windows x64 and
 arm64), `SHA256SUMS` and the same archive. A
-prerelease (`1.0.0-beta.1`) publishes under the npm dist-tag `beta`, never `latest`, and its
-GitHub release is marked as a prerelease. The evidence record `docs/eval/release-<version>.md`
+prerelease (`1.0.0-beta.1`) publishes under a non-`latest` npm dist-tag (`beta`), never `latest`,
+and its GitHub release is marked as a prerelease; a stable release (`1.0.0`) publishes under
+`latest`. The evidence record `docs/eval/release-<version>.md`
 establishes which steps have completed; this document only describes them.
 
 ## Local acceptance
@@ -13,7 +14,7 @@ establishes which steps have completed; this document only describes them.
 Commit all relevant inputs first. Both the gate and strict benchmark reject dirty or relevant
 untracked inputs and inherited runtime overrides; the gate also refuses
 `RELEMBRA_SKIP_BUILD_TOOLCHAIN`. The authoritative input list is `scripts/evidence.ts`, including
-source, eval, benchmark, build, scripts, tests/Node loader, examples, workflows/hooks, compiler,
+source, eval, benchmark, build, scripts, tests/Node loader, examples, `site/`, workflows/hooks, compiler,
 lint/scanner/runtime configuration, installer and package inputs ([AGENTS.md](../AGENTS.md#checks)).
 Generated reports and build output are excluded from input identity.
 
@@ -129,8 +130,8 @@ manifest whose bytes are unchanged) and verified the current `bin/relembra` and 
 named `relembra-<version>.tgz`, on the same relevant inputs as HEAD (by content, so a squash that
 keeps the tree is accepted); a production security gate record for HEAD's tree is `pass` or
 `waived`, independently accepted, every waiver with a valid expiry still ahead; and the named
-hosted run is the `ci` workflow's push to `main` for HEAD, completed, with at least one job and
-every job green. It then downloads that run's artifacts, checks each against its
+hosted run is the `ci` workflow's push to `main` for HEAD, completed, with at least one required job
+and every required job green (the informational `pi-durable` probe does not block). It then downloads that run's artifacts, checks each against its
 `relembra.sha256`, lays out the seven assets under their release names, writes `SHA256SUMS`, the
 notes (the CHANGELOG section plus the asset paragraph and the gate verdict), and `plan.json`,
 which records every asset's sha256; and runs `scripts/stage-release.ts` on the result, so an

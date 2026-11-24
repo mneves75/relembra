@@ -9,7 +9,8 @@
  * directory (the synthetic oracles read it).
  * Exit codes: 0 gate passed (suite: every candidate as expected), 1 failed, 2 usage error.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ROOT, today } from "./environment.js";
 import { DEFAULT_SEED, generate } from "./generate.js";
@@ -175,39 +176,45 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 0;
   }
   if (cli.kind === "all") {
-    const setDir = join(OUT, `seed-${cli.seed}`);
-    writeSet(setDir, generate({ seed: cli.seed }));
-    const { environment, candidates } = await runSuite(readSet(setDir), setDir, {
+    const setDir = mkdtempSync(join(tmpdir(), "relembra-eval-set-"));
+    try {
+      writeSet(setDir, generate({ seed: cli.seed }));
+      const { environment, candidates } = await runSuite(readSet(setDir), setDir, {
+        ...DEFAULT_OPTIONS,
+        deadlineMs: cli.deadlineMs,
+        maxLineBytes: cli.maxLineBytes,
+      });
+      const markdown = suiteMarkdown(environment, candidates);
+      const base = join(cli.out, `results-${today()}`);
+      mkdirSync(cli.out, { recursive: true });
+      writeFileSync(`${base}.md`, markdown);
+      writeFileSync(`${base}.json`, `${JSON.stringify({ environment, candidates }, null, 2)}\n`);
+      process.stdout.write(`${markdown}\nwritten: ${base}.md, ${base}.json\n`);
+      return suitePasses(candidates) ? 0 : 1;
+    } finally {
+      rmSync(setDir, { recursive: true, force: true });
+    }
+  }
+  const tempDir =
+    cli.set === undefined ? mkdtempSync(join(tmpdir(), "relembra-eval-set-")) : undefined;
+  try {
+    const setDir = cli.set ?? (tempDir as string);
+    if (tempDir !== undefined) writeSet(setDir, generate({ seed: cli.seed }));
+    const command = cli.command.map((part) => part.replaceAll("{set}", setDir));
+    const report = await score(readSet(setDir), command, {
       ...DEFAULT_OPTIONS,
       deadlineMs: cli.deadlineMs,
       maxLineBytes: cli.maxLineBytes,
     });
-    const markdown = suiteMarkdown(environment, candidates);
-    const base = join(cli.out, `results-${today()}`);
-    mkdirSync(cli.out, { recursive: true });
-    writeFileSync(`${base}.md`, markdown);
-    writeFileSync(`${base}.json`, `${JSON.stringify({ environment, candidates }, null, 2)}\n`);
-    process.stdout.write(`${markdown}\nwritten: ${base}.md, ${base}.json\n`);
-    return suitePasses(candidates) ? 0 : 1;
+    const verdict = gate(report);
+    if (cli.json !== undefined) {
+      writeFileSync(cli.json, `${JSON.stringify({ report, gate: verdict }, null, 2)}\n`);
+    }
+    process.stdout.write(markdown(report, verdict));
+    return verdict.pass ? 0 : 1;
+  } finally {
+    if (tempDir !== undefined) rmSync(tempDir, { recursive: true, force: true });
   }
-  let dir = cli.set;
-  if (dir === undefined) {
-    dir = join(OUT, `seed-${cli.seed}`);
-    writeSet(dir, generate({ seed: cli.seed }));
-  }
-  const setDir = dir;
-  const command = cli.command.map((part) => part.replaceAll("{set}", setDir));
-  const report = await score(readSet(setDir), command, {
-    ...DEFAULT_OPTIONS,
-    deadlineMs: cli.deadlineMs,
-    maxLineBytes: cli.maxLineBytes,
-  });
-  const verdict = gate(report);
-  if (cli.json !== undefined) {
-    writeFileSync(cli.json, `${JSON.stringify({ report, gate: verdict }, null, 2)}\n`);
-  }
-  process.stdout.write(markdown(report, verdict));
-  return verdict.pass ? 0 : 1;
 }
 
 if (import.meta.main) process.exitCode = await main(process.argv.slice(2));

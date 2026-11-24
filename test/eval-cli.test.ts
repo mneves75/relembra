@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_SEED, generate } from "../eval/generate.js";
@@ -92,6 +92,21 @@ describe("bun run eval", () => {
     for (const file of ["manifest.json", "corpus.jsonl", "questions.jsonl"]) {
       expect(readFileSync(join(b, file))).toEqual(readFileSync(join(a, file)));
     }
+  });
+
+  test("scoring with --seed uses a per-invocation temp directory instead of shared eval/out", () => {
+    const seed = 987654321;
+    const sharedDir = join(ROOT, "eval", "out", `seed-${seed}`);
+    rmSync(sharedDir, { recursive: true, force: true });
+    const run = evalCli(
+      "--seed",
+      String(seed),
+      "--",
+      process.execPath,
+      join(ROOT, "eval", "candidates", "empty.ts"),
+    );
+    expect(run.status).toBe(1);
+    expect(existsSync(sharedDir)).toBe(false);
   });
 
   test("the perfect candidate passes (exit 0); the empty one fails (exit 1)", () => {

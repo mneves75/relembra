@@ -26,7 +26,9 @@ function git(cwd: string, ...args: string[]): string {
 }
 
 /** A repository whose main commit has site/ and the manifest, and whose gh-pages has the video. */
-function fixture(options: { video?: string; page?: string } = {}): string {
+function fixture(
+  options: { video?: string; page?: string; css?: string; videoManifest?: string } = {},
+): string {
   const repo = mkdtempSync(join(tmpdir(), "relembra-assemble-"));
   dirs.push(repo);
   git(repo, "init", "-q", "-b", "main");
@@ -37,8 +39,11 @@ function fixture(options: { video?: string; page?: string } = {}): string {
   const page =
     options.page ?? '<link href="assets/site.css"><video src="assets/video/clip.mp4"></video>';
   writeFileSync(join(repo, "site", "index.html"), page);
-  writeFileSync(join(repo, "site", "assets", "site.css"), "body{}");
-  writeFileSync(join(repo, "scripts", "site", "video.sha256"), `${sha256("clip")}  clip.mp4\n`);
+  writeFileSync(join(repo, "site", "assets", "site.css"), options.css ?? "body{}");
+  writeFileSync(
+    join(repo, "scripts", "site", "video.sha256"),
+    options.videoManifest ?? `${sha256("clip")}  clip.mp4\n`,
+  );
   git(repo, "add", ".");
   git(repo, "commit", "-q", "-m", "main");
   git(repo, "switch", "-q", "--orphan", "gh-pages");
@@ -99,6 +104,22 @@ describe.skipIf(NO_RELEASE_TOOLING)("site assembly", () => {
     const run = assemble(fixture({ page: '<img src="assets/missing.png">' }));
     expect(run.status).not.toBe(0);
     expect(run.stderr).toContain("assets/missing.png");
+  });
+
+  test("refuses site.css pointing at a missing local font (including spaces and query strings) and handles video.sha256 without trailing newline", () => {
+    const missingFont = assemble(
+      fixture({
+        css: '@font-face { src: url( "fonts/missing.woff2?v=2#face" ) format("woff2"); }',
+      }),
+    );
+    expect(missingFont.status).not.toBe(0);
+    expect(missingFont.stderr).toContain("assets/fonts/missing.woff2");
+
+    // video.sha256 without a trailing newline must still verify and include the last entry.
+    const noNewline = assemble(fixture({ videoManifest: `${sha256("clip")}  clip.mp4` }));
+    expect(noNewline.stderr).toBe("");
+    expect(noNewline.status).toBe(0);
+    expect(files(noNewline.out)).toContain("assets/video/clip.mp4");
   });
 
   test("a relative output path means the caller's directory, never the repository root", () => {

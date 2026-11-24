@@ -25,10 +25,16 @@ const REQUIRED_EXPORTS = [".", "./pi-durable", "./postgres", "./sqlite", "./test
 const ALLOWED = [/^dist\//, /^package\.json$/, /^README\.md$/, /^LICENSE$/, /^docs\/FORMAT\.md$/];
 
 const repo = fileURLToPath(new URL("..", import.meta.url));
-execFileSync("npm", ["run", "build"], { cwd: repo, stdio: "inherit" });
+// Under `npm run`, the parent npm exports its config as npm_config_* variables, which a nested npm
+// reads as command-line flags; npm 11 then refuses some (allow-scripts) in a project install.
+const env = Object.fromEntries(
+  Object.entries(process.env).filter(([key]) => !key.toLowerCase().startsWith("npm_config_")),
+);
+execFileSync("npm", ["run", "build"], { cwd: repo, env, stdio: "inherit" });
 // --ignore-scripts: the build ran above, and prepack output would corrupt the JSON on stdout.
 const out = execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
   cwd: repo,
+  env,
   encoding: "utf8",
   stdio: ["ignore", "pipe", "inherit"],
 });

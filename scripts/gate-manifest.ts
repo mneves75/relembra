@@ -155,16 +155,19 @@ function artifactOf(dir: string, name: string, failures: string[]): Artifact {
 }
 
 function checkArtifact(name: string, path: string, before: string, failures: string[]): Artifact {
-  const after = existsSync(path) ? sha256(path) : null;
+  const stat = lstatSync(path, { throwIfNoEntry: false });
+  const after = stat?.isFile() ? sha256(path) : null;
   let verified = after === before;
-  if (after === null) failures.push(`${name}: ${path} is gone`);
+  if (stat === undefined) failures.push(`${name}: ${path} is gone`);
+  else if (!stat.isFile()) failures.push(`${name}: ${path} is not a regular file`);
   else if (!verified) {
     failures.push(`${name}: changed after it was recorded (${before}, now ${after})`);
   }
   // The binary's checksum file, as install.sh checks it, must name the tested binary.
   if (name === "cli" && verified) {
     const sums = `${path}.sha256`;
-    if (!existsSync(sums) || readFileSync(sums, "utf8") !== `${after}  ${basename(path)}\n`) {
+    const sumsStat = lstatSync(sums, { throwIfNoEntry: false });
+    if (!sumsStat?.isFile() || readFileSync(sums, "utf8") !== `${after}  ${basename(path)}\n`) {
       failures.push(`cli: ${sums} does not name the tested binary`);
       verified = false;
     }

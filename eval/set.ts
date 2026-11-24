@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 /** Mirrors `Trust` in src/model.ts. */
@@ -115,12 +115,18 @@ function jsonl(items: readonly unknown[]): string {
   return items.map((item) => `${JSON.stringify(item)}\n`).join("");
 }
 
-/** Writes the set as three files. The same set always gives the same bytes. */
+/** Writes the set as three files atomically. The same set always gives the same bytes. */
 export function writeSet(dir: string, set: EvalSet): void {
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, MANIFEST_FILE), `${JSON.stringify({ seed: set.seed }, null, 2)}\n`);
-  writeFileSync(join(dir, CORPUS_FILE), jsonl(set.corpus));
-  writeFileSync(join(dir, PROBES_FILE), jsonl(set.probes));
+  const atomicWrite = (name: string, content: string) => {
+    const target = join(dir, name);
+    const tmp = `${target}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
+    writeFileSync(tmp, content);
+    renameSync(tmp, target);
+  };
+  atomicWrite(MANIFEST_FILE, `${JSON.stringify({ seed: set.seed }, null, 2)}\n`);
+  atomicWrite(CORPUS_FILE, jsonl(set.corpus));
+  atomicWrite(PROBES_FILE, jsonl(set.probes));
 }
 
 function readJsonl<T>(path: string): T[] {

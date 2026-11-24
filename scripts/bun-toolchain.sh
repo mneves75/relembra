@@ -32,7 +32,9 @@ integrity=$(field "$platform")
 [ -n "$version" ] && [ -n "$revision" ] || refuse "$pin has no version or revision"
 [ -n "$integrity" ] || refuse "no pin for platform $platform"
 
-mkdir -p "$dest"
+mkdir -p "$(dirname -- "$dest")"
+mkdir "$dest" 2>/dev/null || refuse "$dest already exists"
+trap 'rm -rf "$dest"' EXIT
 archive="$dest/bun.tgz"
 url="$registry/@oven/bun-$platform/-/bun-$platform-$version.tgz"
 curl -fsSL --retry 3 -o "$archive" "$url" || refuse "could not download $url"
@@ -51,4 +53,5 @@ exe="$bin/bun"
 chmod +x "$exe"
 got=$("$exe" --revision)
 [ "$got" = "$revision" ] || refuse "the unpacked Bun is $got, the pin says $revision"
+trap - EXIT
 echo "$bin"

@@ -34,10 +34,20 @@ else
 fi
 
 name=$(basename "$binary")
-# The expected hash: the first field of the line whose second field is exactly the name.
-expected=$(awk -v name="$name" '$2 == name || $2 == "*" name { print $1; exit }' "$sums")
+# The expected hash: the unique line whose second field is exactly the name.
+expected=$(NAME="$name" awk '
+  NF == 2 && ($2 == ENVIRON["NAME"] || $2 == "*" ENVIRON["NAME"]) {
+    count++
+    sum = $1
+  }
+  END {
+    if (count == 1) print sum
+    else if (count > 1) print "DUPLICATE"
+  }
+' "$sums")
 case $expected in
   "") refuse "no sha256 for $name in $sums" ;;
+  DUPLICATE) refuse "duplicate sha256 entries for $name in $sums" ;;
 esac
 if [ "${#expected}" -ne 64 ] || ! printf '%s' "$expected" | grep -Eq '^[0-9a-f]+$'; then
   refuse "the sha256 for $name in $sums is malformed"
@@ -52,7 +62,11 @@ fi
 # Copy first, then verify the copy, so the bytes checked are the bytes installed.
 mkdir -p "$dest"
 tmp=$(mktemp "$dest/.relembra.XXXXXX")
-trap 'rm -f "$tmp"' EXIT HUP INT TERM
+cleanup() { rm -f "$tmp"; }
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 cp "$binary" "$tmp"
 actual=$(hash_of "$tmp")
 if [ "$actual" != "$expected" ]; then

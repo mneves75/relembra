@@ -21,9 +21,11 @@ gitleaks git --no-banner --redact
 bun run lint
 bun run typecheck
 
-# The import graph does not see the toolchain's configuration: when it changes, run every test.
+# The import graph does not see the toolchain's configuration or non-imported tested inputs: when
+# any of them changes, run every test.
 changed="--changed=origin/main"
-if git diff --name-only origin/main -- package.json bun.lock bunfig.toml 'tsconfig*.json' |
+if git diff --name-only origin/main -- \
+  package.json bun.lock bunfig.toml 'tsconfig*.json' site/ scripts/ install.sh build/ docs/CLI.md |
   grep -q .; then
   changed=""
 fi
