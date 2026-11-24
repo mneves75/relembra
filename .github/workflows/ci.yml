@@ -280,7 +280,7 @@ jobs:
         run: npm run test:node
 
   pi-durable-latest:
-    # Informational: the peer dependency claims exactly @earendil-works/pi-durable 1.4.0. This
+    # Informational: the peer dependency claims exactly @earendil-works/pi-durable 1.5.2. This
     # probe runs the integration tests against `latest` so a breaking release shows up early; it
     # changes neither package.json nor the claim, and its failure does not fail the workflow.
     name: pi-durable (latest, informational)
@@ -302,7 +302,7 @@ jobs:
           @earendil-works/pi-ai@latest
           @earendil-works/chord@latest
       - run: bun pm ls | grep '@earendil-works/'
-      - run: bun test test/pi-durable.test.ts test/pi-durable-crash.test.ts test/pi-durable-takeover.test.ts
+      - run: bun test test/pi-durable.test.ts test/pi-durable-crash.test.ts test/pi-durable-takeover.test.ts test/pi-durable-exposure.test.ts test/pi-durable-wake-crash.test.ts
 
   gitleaks:
     name: gitleaks
