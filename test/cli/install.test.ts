@@ -111,6 +111,11 @@ describe.skipIf(NO_RELEASE_TOOLING)(
         expect(install(binary, sums, dest()).status).toBe(1);
         writeFileSync(sums, "");
         expect(install(binary, sums, dest()).status).toBe(1);
+        const goodSum = sha256(readFileSync(binary));
+        writeFileSync(sums, `${goodSum}  relembra\n${"0".repeat(64)}  relembra\n`);
+        const dup = install(binary, sums, dest());
+        expect(dup.status).toBe(1);
+        expect(dup.stderr).toContain("duplicate");
         expect(existsSync(join(dest(), "relembra"))).toBe(false);
       },
       INSTALL_TIMEOUT_MS,

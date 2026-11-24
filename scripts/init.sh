@@ -38,11 +38,13 @@ problem() {
 # at_least VERSION MAJOR.MINOR: whether VERSION (a leading "v" allowed) is MAJOR.MINOR or newer.
 at_least() {
   version=${1#v}
+  case "$version" in *.*) ;; *) return 1 ;; esac
   have_major=${version%%.*}
   rest=${version#*.}
   have_minor=${rest%%.*}
   want_major=${2%%.*}
   want_minor=${2#*.}
+  [ -n "$have_major" ] && [ -n "$have_minor" ] || return 1
   case "$have_major$have_minor" in *[!0-9]*) return 1 ;; esac
   [ "$have_major" -gt "$want_major" ] ||
     { [ "$have_major" -eq "$want_major" ] && [ "$have_minor" -ge "$want_minor" ]; }
@@ -55,7 +57,7 @@ else
 fi
 
 if command -v bun >/dev/null 2>&1; then
-  bun_version=$(bun --version)
+  bun_version=$(bun --version 2>/dev/null || true)
   if at_least "$bun_version" 1.4; then
     echo "bun: $bun_version (>= 1.4)"
   else
@@ -66,7 +68,7 @@ else
 fi
 
 if command -v node >/dev/null 2>&1; then
-  node_version=$(node --version)
+  node_version=$(node --version 2>/dev/null || true)
   # node:sqlite has DatabaseSync#deserialize from 24.16 in 24 and from 26.1; 25 and 26.0 lack it.
   if { at_least "$node_version" 24.16 && ! at_least "$node_version" 25.0; } || at_least "$node_version" 26.1; then
     echo "node: $node_version (24.16+ or 26.1+)"

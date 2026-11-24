@@ -36,6 +36,7 @@ const INPUT_DIRS = [
   "scripts",
   "test",
   "examples",
+  "site",
   ".github",
   ".githooks",
 ];
@@ -78,6 +79,15 @@ const GENERATED = [
   "dist",
   "node_modules",
 ];
+/**
+ * Untracked local preview files ignored on disk only: any file actually tracked under these
+ * prefixes in HEAD still enters input identity so pages assembly cannot ship unverified bytes.
+ */
+const UNTRACKED_PREVIEW = ["site/assets/video"];
+
+function isPreviewPath(path: string): boolean {
+  return UNTRACKED_PREVIEW.some((dir) => path === dir || path.startsWith(`${dir}/`));
+}
 
 /** Whether a repository-relative path is a relevant input. */
 export function isInput(path: string): boolean {
@@ -145,10 +155,18 @@ function blobId(format: "sha1" | "sha256", bytes: Buffer): string {
  * Every input on disk under `root`, as `<mode> <blob id>` by path. A symlink is refused: Git
  * records only its target's name, so the bytes it points to could change while it stays clean.
  */
-function onDisk(root: string, format: "sha1" | "sha256"): Map<string, string> {
+function onDisk(
+  root: string,
+  format: "sha1" | "sha256",
+  head: ReadonlyMap<string, string>,
+): Map<string, string> {
   const found = new Map<string, string>();
   const visit = (path: string) => {
     if (!isInput(path) && !INPUT_DIRS.some((dir) => dir === path)) return;
+    if (isPreviewPath(path) && !head.has(path)) {
+      const hasTrackedUnder = [...head.keys()].some((k) => k.startsWith(`${path}/`));
+      if (!hasTrackedUnder) return;
+    }
     const full = join(root, path);
     const stat = lstatSync(full, { throwIfNoEntry: false });
     if (stat === undefined) return;
@@ -199,8 +217,8 @@ export function inputIdentity(root: string): InputIdentity {
     const format = git(root, ["rev-parse", "--show-object-format"]).trim();
     if (format !== "sha1" && format !== "sha256")
       throw new Error(`unknown object format ${format}`);
-    const disk = onDisk(root, format);
     const head = atHead(root);
+    const disk = onDisk(root, format, head);
     const paths = [...new Set([...disk.keys(), ...head.keys()])].sort();
     const dirty = paths.filter((path) => head.has(path) && disk.get(path) !== head.get(path));
     const untracked = paths.filter((path) => !head.has(path));

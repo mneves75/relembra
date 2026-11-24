@@ -100,6 +100,17 @@ describe.skipIf(NO_RELEASE_TOOLING)("scripts/init.sh --check", () => {
     expect(run.stderr).toContain("bun 1.3.9 is older than 1.4 (AGENTS.md)");
   });
 
+  test("malformed or empty tool versions without a minor number are refused", () => {
+    for (const node of ["v24", "v26", ""]) {
+      const run = check(tools({ node }));
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain("is not supported");
+    }
+    const noDotBun = check(tools({ bun: "2" }));
+    expect(noDotBun.status).toBe(1);
+    expect(noDotBun.stderr).toContain("bun 2 is older than 1.4");
+  });
+
   test("a missing required tool is refused, and every problem is listed at once", () => {
     const run = check(tools({ bun: null, gitleaks: null, node: "v20.0.0" }));
     expect(run.status).toBe(1);

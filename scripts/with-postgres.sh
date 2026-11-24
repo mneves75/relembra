@@ -14,7 +14,12 @@ docker run --detach --rm --name "$name" \
   --tmpfs /var/lib/postgresql/data \
   --publish 127.0.0.1::5432 \
   "$image" >/dev/null
-trap 'docker rm --force --volumes "$name" >/dev/null 2>&1 || true' EXIT INT TERM
+cleanup() {
+  docker rm --force --volumes "$name" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 port=$(docker port "$name" 5432/tcp | head -n 1 | sed 's/.*://')
 # The image's first start runs initdb on a socket-only server, then restarts on TCP: wait for TCP.

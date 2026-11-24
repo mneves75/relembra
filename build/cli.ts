@@ -8,6 +8,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 
 const ROOT = join(import.meta.dir, "..");
 const BIN = join(ROOT, "bin");
@@ -38,8 +39,9 @@ export const BUILD_FLAGS = [
  * different executable; the build refuses instead.
  */
 export function missingBuildFlags(help: string): string[] {
+  const plain = stripVTControlCharacters(help);
   return BUILD_FLAGS.filter((flag) => flag.startsWith("--")).filter(
-    (flag) => !new RegExp(`(^|\\s)${flag}(\\s|=|$)`, "m").test(help),
+    (flag) => !new RegExp(`(^|\\s)${flag}(\\s|=|$)`, "m").test(plain),
   );
 }
 

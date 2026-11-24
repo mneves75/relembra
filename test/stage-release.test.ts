@@ -100,6 +100,12 @@ describe("stage plan", () => {
     expect(stagePlan({ ...good, manifest: latest })).toEqual({
       problems: ["a prerelease must publish under a dist-tag other than latest"],
     });
+    for (const badTag of ["beta\ntarball=/tmp/x", "1.2.3", "1.x", "X.X", "vX"]) {
+      const bad = { ...manifest, publishConfig: { access: "public", tag: badTag } };
+      expect(stagePlan({ ...good, manifest: bad })).toEqual({
+        problems: ["publishConfig.tag must be a single valid npm dist-tag"],
+      });
+    }
   });
 });
 

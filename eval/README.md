@@ -21,8 +21,9 @@ bun run eval generate --seed 20261030 --out DIR     # write a set without scorin
   relembra commit, machine and runtime versions. It exits 0 only when relembra passes on both
   stores, perfect passes, and empty, leaky and the fifteen hollow candidates it runs (listed
   in `eval/suite.ts`) fail.
-- With no `--set`, the set for `--seed` (default 20261030) is generated into `eval/out/`, which
-  is git-ignored.
+- With no `--set`, the set for `--seed` (default 20261030) is generated into a per-invocation
+  temporary directory and removed when scoring finishes (`generate` defaults to `eval/out/`, which
+  is git-ignored).
 - In the candidate command, `{set}` becomes the set directory. Only the synthetic oracles read
   it.
 - `--json FILE` writes the full report and verdict. `--deadline-ms` and `--max-line-bytes` set
