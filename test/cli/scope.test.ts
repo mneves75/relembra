@@ -352,7 +352,24 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
     writeFileSync(join(linked, "commondir"), `${realpathSync(join(victim, ".git"))}\n`);
     const deliberate = join(base, "proj.git");
     gitInit(deliberate, "--bare");
-    for (const cwd of [vendored, join(vendored, "refs"), linked, deliberate]) {
+    // An empty decoy .git directory inside a bare layout must not hide the enclosing bare repo.
+    const decoyInBare = join(deliberate, "sub");
+    mkdirSync(join(decoyInBare, ".git"), { recursive: true });
+    // A bare layout whose objects entry is a symlink to a directory must still be refused.
+    const symlinkObjects = join(base, "symlink-objects");
+    const realObjects = join(base, "real-objects");
+    mkdirSync(symlinkObjects, { recursive: true });
+    mkdirSync(realObjects, { recursive: true });
+    writeFileSync(join(symlinkObjects, "HEAD"), "ref: refs/heads/main\n");
+    symlinkSync(realObjects, join(symlinkObjects, "objects"));
+    for (const cwd of [
+      vendored,
+      join(vendored, "refs"),
+      linked,
+      deliberate,
+      decoyInBare,
+      symlinkObjects,
+    ]) {
       const result = refused(box, ["check"], 2, "no-scope", { cwd });
       expect(result.json?.ok === false && result.json.error.rule).toBe("bare-repository");
     }
@@ -451,26 +468,43 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
     const bare = join(base, "bare");
     mkdirSync(join(bare, "bin"), { recursive: true });
     mkdirSync(join(bare, "objects"), { recursive: true });
-    mkdirSync(join(bare, "sub"), { recursive: true });
     writeFileSync(join(bare, "HEAD"), "ref: refs/heads/main\n");
     writeFileSync(
       join(bare, "bin", "git"),
       `#!/bin/sh\necho ran >> '${marker}'\nexec '${realGit}' "$@"\n`,
     );
     chmodSync(join(bare, "bin", "git"), 0o755);
+    // A real git repo nested inside a bare layout: repoMarker returns dotgit so hostGit runs,
+    // and hostGit must still fence the enclosing bare directory's bin/.
+    const bareInner = join(bare, "inner");
+    gitInit(bareInner);
+    // A main checkout whose name ends in a space: git strips only CR/LF from gitdir/commondir.
+    const spacedMain = join(base, "main ");
+    gitInit(spacedMain);
+    git(spacedMain, "commit", "-q", "--allow-empty", "-m", "first");
+    mkdirSync(join(spacedMain, "bin"), { recursive: true });
+    writeFileSync(
+      join(spacedMain, "bin", "git"),
+      `#!/bin/sh\necho ran >> '${marker}'\nexec '${realGit}' "$@"\n`,
+    );
+    chmodSync(join(spacedMain, "bin", "git"), 0o755);
+    const spacedWt = join(base, "spaced-wt");
+    git(spacedMain, "worktree", "add", "-q", spacedWt);
     const mainPath = `${join(main, "bin")}:${dirname(realGit)}:/usr/bin:/bin`;
     const barePath = `${join(bare, "bin")}:${dirname(realGit)}:/usr/bin:/bin`;
+    const spacedPath = `${join(spacedMain, "bin")}:${dirname(realGit)}:/usr/bin:/bin`;
     // Regression: the fence stopped at the nearest .git, so main/bin/git ran from each of these.
-    for (const [cwd, scope] of [
-      [nested, scopeFor(main)],
-      [elsewhere, scopeFor(main)],
-      [inner, scopeFor(inner)],
-      [decoy, scopeFor(main)],
+    for (const [cwd, scope, path] of [
+      [nested, scopeFor(main), mainPath],
+      [elsewhere, scopeFor(main), mainPath],
+      [inner, scopeFor(inner), mainPath],
+      [decoy, scopeFor(main), mainPath],
+      [bareInner, scopeFor(bareInner), barePath],
+      [spacedWt, scopeFor(spacedMain), spacedPath],
     ] as const) {
-      expect(ok(box, ["check"], { cwd, env: { PATH: mainPath } }).scope).toBe(scope);
-      run(box, ["hook"], { cwd, env: { PATH: mainPath } });
+      expect(ok(box, ["check"], { cwd, env: { PATH: path } }).scope).toBe(scope);
+      run(box, ["hook"], { cwd, env: { PATH: path } });
     }
-    expect(run(box, ["check"], { cwd: join(bare, "sub"), env: { PATH: barePath } }).status).toBe(2);
     expect(existsSync(marker)).toBe(false);
     // Positive control: outside every checkout the same PATH does run it.
     const plain = join(base, "plain");

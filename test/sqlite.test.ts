@@ -91,15 +91,29 @@ describe("sqlite store files", () => {
     await openSqliteStore({ path }).close();
   });
 
-  modeTest("an existing store file owned by another uid is refused", async () => {
+  modeTest("an existing store file or sidecar owned by another uid is refused", async () => {
     const path = join(dir.path, "relembra.db");
     await openSqliteStore({ path }).close();
     const realGetuid = process.getuid;
     if (realGetuid === undefined) return;
     const realUid = realGetuid();
     try {
+      // Main store file owned by another uid.
       process.getuid = () => realUid + 1;
       expect(() => openSqliteStore({ path })).toThrow(StoreFileOwnerError);
+
+      // Each sidecar (-wal, -shm, -journal): pass the main file (call 1), fail the sidecar (call 2).
+      for (const suffix of ["-wal", "-shm", "-journal"] as const) {
+        const sidecar = `${path}${suffix}`;
+        writeFileSync(sidecar, "", { mode: 0o600 });
+        try {
+          let calls = 0;
+          process.getuid = () => (++calls === 1 ? realUid : realUid + 1);
+          expect(() => openSqliteStore({ path })).toThrow(sidecar);
+        } finally {
+          unlinkSync(sidecar);
+        }
+      }
     } finally {
       process.getuid = realGetuid;
     }

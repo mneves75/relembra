@@ -152,7 +152,7 @@ function isWhitespace(text: string, index: number): boolean {
 function nextAssignmentHead(
   text: string,
   from: number,
-): { name: string; sep: string; pos: number } | undefined {
+): { name: string; nameStart: number; sep: string; pos: number } | undefined {
   for (let sepPos = from; sepPos < text.length; sepPos++) {
     const ch = text[sepPos];
     if (ch !== ":" && ch !== "=") continue;
@@ -166,7 +166,7 @@ function nextAssignmentHead(
     if (start > end) continue;
     let pos = sepPos + 1;
     while (pos < text.length && isWhitespace(text, pos)) pos++;
-    return { name: text.slice(start, end + 1), sep: ch, pos };
+    return { name: text.slice(start, end + 1), nameStart: start, sep: ch, pos };
   }
   return undefined;
 }
@@ -174,7 +174,7 @@ function nextAssignmentHead(
 /**
  * Checks every assignment in `text` (`name = value` or `name: value`, where `name` may be quoted),
  * and every assignment inside each quoted value (`cmd='export token=...'`) or unquoted compound
- * value. Recursed substrings are strictly shorter than `text`, so this always terminates.
+ * value in linear time without recursively rescanning overlapping suffixes.
  */
 function holdsSecretAssignment(text: string): boolean {
   let cursor = 0;
@@ -201,31 +201,80 @@ function holdsSecretAssignment(text: string): boolean {
       cursor = end;
       value = unquoted.replace(TRAILING_PUNCTUATION, "");
     }
-    if (isReference(value)) continue;
-    const bare = value.replace(REFERENCE_PREFIX, "").replace(REFERENCE_SUFFIX, "");
-    // A quoted value may be prose; spaces alone do not make it look like a secret.
-    if (SECRET_NAME.test(name) && bare.length >= 8 && /[^A-Za-z\s]/.test(bare)) return true;
-    if (hasSecretWord(name) && looksEncoded(bare)) return true;
-    if (sep === ":" && quoted === undefined && URL_SCHEME.test(name) && value.startsWith("//")) {
-      if (urlHoldsSecret(value)) return true;
+    const verdict = checkAssignedValue(name, sep, value, quoted);
+    if (verdict === "secret") return true;
+    if (verdict === "structured") continue;
+    if (quoted === undefined && (value.includes("=") || value.includes(":"))) {
+      if (compoundHoldsSecret(value)) return true;
+    }
+  }
+  return false;
+}
+
+/** Checks one extracted `(name, sep, value)` pair. */
+function checkAssignedValue(
+  name: string,
+  sep: string,
+  value: string,
+  quoted: string | undefined,
+): "secret" | "structured" | "clean" {
+  if (isReference(value)) return "structured";
+  const bare = value.replace(REFERENCE_PREFIX, "").replace(REFERENCE_SUFFIX, "");
+  // A quoted value may be prose; spaces alone do not make it look like a secret.
+  if (SECRET_NAME.test(name) && bare.length >= 8 && /[^A-Za-z\s]/.test(bare)) return "secret";
+  if (hasSecretWord(name) && looksEncoded(bare)) return "secret";
+  if (sep === ":" && quoted === undefined && URL_SCHEME.test(name) && value.startsWith("//")) {
+    return urlHoldsSecret(value) ? "secret" : "structured";
+  }
+  if (sep === ":" && quoted === undefined && COLON_STRUCTURED.test(value)) {
+    for (const part of value.split(":")) {
+      if (looksRandom(part)) return "secret";
+      if (part.includes("=") && holdsSecretAssignment(part)) return "secret";
+    }
+    return "structured";
+  }
+  return looksRandom(bare) ? "secret" : "clean";
+}
+
+/**
+ * Inspects nested assignments inside one whitespace-free compound token (such as
+ * `export:token=secret123` or `a=b=c=...`) in a single linear pass so overlapping suffixes are
+ * never rescanned quadratically.
+ */
+function compoundHoldsSecret(token: string): boolean {
+  let cursor = 0;
+  let current = nextAssignmentHead(token, cursor);
+  while (current !== undefined) {
+    const { name, sep, pos } = current;
+    if (pos >= token.length) break;
+    const first = token[pos];
+    if (first === '"' || first === "'" || first === "`") {
+      const close = token.indexOf(first, pos + 1);
+      const quoted = close >= 0 ? token.slice(pos + 1, close) : token.slice(pos + 1);
+      cursor = close >= 0 ? close + 1 : token.length;
+      if (quoted.length < token.length && holdsSecretAssignment(quoted)) return true;
+      if (checkAssignedValue(name, sep, quoted, quoted) === "secret") return true;
+      current = nextAssignmentHead(token, cursor);
       continue;
     }
-    if (sep === ":" && quoted === undefined && COLON_STRUCTURED.test(value)) {
-      for (const part of value.split(":")) {
-        if (looksRandom(part)) return true;
-        if (part.includes("=") && holdsSecretAssignment(part)) return true;
-      }
-      continue;
+    if (sep === ":" && URL_SCHEME.test(name) && token.startsWith("//", pos)) {
+      return urlHoldsSecret(token.slice(pos));
     }
-    if (looksRandom(bare)) return true;
+    const next = nextAssignmentHead(token, pos);
+    const segmentEnd = next === undefined ? token.length : next.nameStart;
+    const segment = token.slice(pos, segmentEnd).replace(TRAILING_PUNCTUATION, "");
+    if (checkAssignedValue(name, sep, segment, undefined) === "secret") return true;
+    // A secret password inside a compound token may itself contain `=` or `:` (already non-alpha).
     if (
-      quoted === undefined &&
-      value.length < text.length &&
-      (value.includes("=") || value.includes(":")) &&
-      holdsSecretAssignment(value)
+      SECRET_NAME.test(name) &&
+      next !== undefined &&
+      token.length - pos >= 8 &&
+      !isReference(segment)
     ) {
       return true;
     }
+    if (next === undefined) break;
+    current = next;
   }
   return false;
 }

@@ -183,8 +183,12 @@ export async function migrate(
     if (migration.version !== index + 1) throw new Error("migration versions must be 1, 2, 3, …");
   });
   const latest = migrations.length;
-  await verifySchemaOwnership(client, schema);
-  if (checked(await schemaVersion(client, schema), latest) === latest) return;
+  if (checked(await schemaVersion(client, schema), latest) === latest) {
+    // Verify after reading the latest version so a schema created concurrently between absent and
+    // ready cannot slip past the fast path without an ownership check.
+    await verifySchemaOwnership(client, schema);
+    return;
+  }
 
   const s = quoted(schema);
   await client.transaction(async (q) => {
@@ -225,27 +229,30 @@ export async function migrate(
 }
 
 /**
- * Refuses a schema whose namespace or any relation in it (tables, partitioned tables, sequences,
- * views, materialized views) is owned by a role `current_user` is not a member of. Returns cleanly
- * when the schema does not exist yet or every object belongs to `current_user` or a role it holds.
+ * Refuses a schema whose namespace does not belong to `current_user` (or a role it is a member of)
+ * or that holds any relation (table, partitioned table, sequence, view, materialized view) owned by
+ * a foreign role. Checked in one atomic snapshot query; a stub client returning no rows passes.
  */
 export async function verifySchemaOwnership(client: SqlQuery, schema: string): Promise<void> {
-  const rows = await client.query<{ kind: string; name: string }>(
-    `SELECT 'schema' AS kind, n.nspname AS name
-     FROM pg_catalog.pg_namespace n
-     WHERE n.nspname = $1::text
-       AND NOT pg_has_role(current_user, n.nspowner, 'MEMBER')
-     UNION ALL
-     SELECT 'relation' AS kind, c.relname AS name
-     FROM pg_catalog.pg_class c
-     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-     WHERE n.nspname = $1::text
-       AND c.relkind IN ('r', 'p', 'S', 'v', 'm')
-       AND NOT pg_has_role(current_user, c.relowner, 'MEMBER')
-     LIMIT 1`,
+  const [row] = await client.query<{ schema_ok: boolean; foreign_relation: boolean }>(
+    `SELECT
+       EXISTS (
+         SELECT 1 FROM pg_catalog.pg_namespace n
+         WHERE n.nspname = $1::text
+           AND pg_has_role(current_user, n.nspowner, 'MEMBER')
+       ) AS schema_ok,
+       EXISTS (
+         SELECT 1 FROM pg_catalog.pg_class c
+         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = $1::text
+           AND c.relkind IN ('r', 'p', 'S', 'v', 'm')
+           AND NOT pg_has_role(current_user, c.relowner, 'MEMBER')
+       ) AS foreign_relation`,
     [schema],
   );
-  if (rows.length > 0) throw new SchemaOwnershipError(schema);
+  if (row !== undefined && (!row.schema_ok || row.foreign_relation)) {
+    throw new SchemaOwnershipError(schema);
+  }
 }
 
 /** The highest applied version of `schema`, 0 when it has no version table. */

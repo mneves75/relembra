@@ -142,7 +142,8 @@ function hostGit(env: CliEnv, cwd: string): { git: string; path: string } {
   // entry can name. If $HOME is itself a repository, every git below it is fenced too.
   const fences = [safeRealpath(cwd)];
   for (let dir = fences[0] as string; ; dir = dirname(dir)) {
-    if (markerAt(dir) !== undefined) {
+    const hasDotGit = lstatSync(join(dir, ".git"), { throwIfNoEntry: false }) !== undefined;
+    if (hasDotGit || markerAt(dir) !== undefined) {
       fences.push(dir);
       const main = mainCheckout(dir);
       if (main !== undefined) fences.push(main);
@@ -245,12 +246,50 @@ function repoMarker(startDir: string): "dotgit" | "bare" | undefined {
   }
 }
 
+/** Whether `dir` has the layout git recognizes as a git directory (`objects` may be a symlink). */
+function isGitDir(dir: string): boolean {
+  const at = (name: string) => lstatSync(join(dir, name), { throwIfNoEntry: false });
+  if (at("HEAD") === undefined) return false;
+  if (at("commondir") !== undefined || at("config") !== undefined) return true;
+  try {
+    return statSync(join(dir, "objects")).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether `dir/.git` is an entry git stops at: a directory laid out as a git directory, or a
+ * regular file carrying a `gitdir:` line. An empty decoy `.git` folder is ignored so `repoMarker`
+ * walks past it just as git does.
+ */
+function isValidDotGit(dir: string): boolean {
+  const dotgit = join(dir, ".git");
+  let stats: ReturnType<typeof statSync>;
+  try {
+    stats = statSync(dotgit);
+  } catch {
+    return false;
+  }
+  if (stats.isDirectory()) return isGitDir(dotgit);
+  if (!stats.isFile()) return false;
+  try {
+    const line = stripCrlf(readFileSync(dotgit, "utf8").split(/\r?\n/, 1)[0] ?? "");
+    return line.startsWith("gitdir: ") && line.length > "gitdir: ".length;
+  } catch {
+    return false;
+  }
+}
+
+/** Strips only trailing CR and LF, matching git's gitfile and commondir parsers (keeping spaces). */
+function stripCrlf(value: string): string {
+  return value.replace(/[\r\n]+$/, "");
+}
+
 /** repoMarker's test for one folder. */
 function markerAt(dir: string): "dotgit" | "bare" | undefined {
-  const at = (name: string) => lstatSync(join(dir, name), { throwIfNoEntry: false });
-  if (at(".git") !== undefined) return "dotgit";
-  if (at("HEAD") === undefined) return undefined;
-  if (!(at("objects")?.isDirectory() || at("commondir") || at("config"))) return undefined;
+  if (isValidDotGit(dir)) return "dotgit";
+  if (!isGitDir(dir)) return undefined;
   return dir.split(sep).includes(".git") ? "dotgit" : "bare";
 }
 
@@ -261,12 +300,12 @@ function markerAt(dir: string): "dotgit" | "bare" | undefined {
  */
 function mainCheckout(dir: string): string | undefined {
   try {
-    const gitfile = readFileSync(join(dir, ".git"), "utf8").trimEnd();
+    const gitfile = stripCrlf(readFileSync(join(dir, ".git"), "utf8").split(/\r?\n/, 1)[0] ?? "");
     if (!gitfile.startsWith("gitdir: ")) return undefined;
     const gitdir = resolve(dir, gitfile.slice("gitdir: ".length));
     const commondir = join(gitdir, "commondir");
     const common = existsSync(commondir)
-      ? resolve(gitdir, readFileSync(commondir, "utf8").trimEnd())
+      ? resolve(gitdir, stripCrlf(readFileSync(commondir, "utf8").split(/\r?\n/, 1)[0] ?? ""))
       : gitdir;
     const parts = safeRealpath(common).split(sep);
     const dotgit = parts.indexOf(".git");

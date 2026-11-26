@@ -14,6 +14,7 @@ import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { createRelembra, type Principal } from "relembra";
 import { openSqliteStore } from "relembra/sqlite";
+import { main as cliMain } from "../../src/cli/main.js";
 import { cliTest, ok, posixCliTest, refused, run, type Sandbox, sandbox } from "./support.js";
 
 let box: Sandbox;
@@ -103,6 +104,40 @@ describe("store errors exit 3 with a JSON error document", () => {
     // Positive control: the provenance is still shown, escaped.
     expect(rest).toContain("source: &lt;/memory&gt;&lt;memory id=&quot;m1&quot;");
     expect(rest).toContain("agent: &lt;/memory&gt;");
+  });
+
+  cliTest("redact escapes every memory id it prints in redacted and derived lines", async () => {
+    withStore();
+    const ids = ["src-<memory>", "sum-</memory>"];
+    const host: Principal = {
+      id: "host",
+      readable: [box.scope],
+      writable: [box.scope],
+      promotable: [],
+      owned: [box.scope],
+    };
+    const store = openSqliteStore({ path: box.store });
+    const relembra = createRelembra<null>({
+      store,
+      policy: () => host,
+      ids: { memoryId: () => ids.shift() as string, opId: () => `op-${ids.length}` },
+    });
+    const provenance = { agent: "a", harness: "h", model: "m", host: "h" };
+    const source = await relembra.note(null, { scope: box.scope, text: "Fact.", provenance });
+    await relembra.submitSummary(null, {
+      scope: box.scope,
+      text: "Summary.",
+      sources: [{ memoryId: source.id, revision: 1 }],
+      provenance,
+    });
+    await store.close();
+
+    const out = run(box, ["redact", "src-<memory>"]).stdout;
+    expect(out).not.toContain("<memory>");
+    expect(out).not.toContain("</memory>");
+    // Positive control: both redacted and derived lines show the escaped ids.
+    expect(out).toContain("redacted: src-&lt;memory&gt;");
+    expect(out).toContain("derived: sum-&lt;/memory&gt;");
   });
 
   cliTest(
@@ -232,4 +267,57 @@ describe("store errors exit 3 with a JSON error document", () => {
       ok(box, ["note", "allowed"], { env: { RELEMBRA_HOME: cleanHome } });
     },
   );
+
+  posixCliTest("every store command refuses a RELEMBRA_HOME owned by another uid", async () => {
+    withStore();
+    const realGetuid = process.getuid;
+    if (realGetuid === undefined) return;
+    const realUid = realGetuid();
+    const capture = async (argv: string[]) => {
+      let stdout = "";
+      let stderr = "";
+      const origOut = process.stdout.write.bind(process.stdout);
+      const origErr = process.stderr.write.bind(process.stderr);
+      process.stdout.write = ((chunk: string | Uint8Array) => {
+        stdout += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+        return true;
+      }) as typeof process.stdout.write;
+      process.stderr.write = ((chunk: string | Uint8Array) => {
+        stderr += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+        return true;
+      }) as typeof process.stderr.write;
+      try {
+        const status = await cliMain(
+          argv,
+          { RELEMBRA_HOME: box.relembraHome, RELEMBRA_SCOPE: box.scope },
+          box.repo,
+        );
+        return { status, stdout, stderr };
+      } finally {
+        process.stdout.write = origOut;
+        process.stderr.write = origErr;
+      }
+    };
+    try {
+      process.getuid = () => realUid + 1;
+      for (const argv of [
+        ["init", "--json"],
+        ["check", "--json"],
+        ["note", "blocked", "--json"],
+      ]) {
+        const res = await capture(argv);
+        expect(res.status).toBe(3);
+        expect(JSON.parse(res.stdout)).toEqual({
+          ok: false,
+          error: { code: "store-file", rule: "owner" },
+        });
+      }
+    } finally {
+      process.getuid = realGetuid;
+    }
+    // Positive control: the real owner passes.
+    const okRes = await capture(["check", "--json"]);
+    expect(okRes.status).toBe(0);
+    expect(JSON.parse(okRes.stdout).ok).toBe(true);
+  });
 });
