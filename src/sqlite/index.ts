@@ -30,6 +30,7 @@ import { termIndex } from "./term-index.js";
 export {
   StoreBusyError,
   StoreFileModeError,
+  StoreFileOwnerError,
   StoreFileTypeError,
   StoreUnverifiedError,
 } from "./database.js";

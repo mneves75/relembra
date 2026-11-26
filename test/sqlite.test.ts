@@ -18,6 +18,7 @@ import {
   SchemaTooNewError,
   StoreBusyError,
   StoreFileModeError,
+  StoreFileOwnerError,
   StoreFileTypeError,
   WalScrubError,
 } from "relembra/sqlite";
@@ -87,6 +88,22 @@ describe("sqlite store files", () => {
       expect(() => openSqliteStore({ path })).toThrow(StoreFileModeError);
     }
     chmodSync(path, 0o600);
+    await openSqliteStore({ path }).close();
+  });
+
+  modeTest("an existing store file owned by another uid is refused", async () => {
+    const path = join(dir.path, "relembra.db");
+    await openSqliteStore({ path }).close();
+    const realGetuid = process.getuid;
+    if (realGetuid === undefined) return;
+    const realUid = realGetuid();
+    try {
+      process.getuid = () => realUid + 1;
+      expect(() => openSqliteStore({ path })).toThrow(StoreFileOwnerError);
+    } finally {
+      process.getuid = realGetuid;
+    }
+    // Positive control: the real owner opens cleanly.
     await openSqliteStore({ path }).close();
   });
 

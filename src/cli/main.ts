@@ -666,25 +666,34 @@ function parseSource(value: string): { memoryId: string; revision: number } {
   return { memoryId, revision: Number(revision) };
 }
 
-/** Verifies the store's parent directory is a real, owner-only directory before any write-capable open. */
+/** Verifies the store's parent directory is a real, owner-only directory owned by the user before any open. */
 function checkStoreHome(path: string): void {
   const homeStat = lstatSync(dirname(path));
   if (!homeStat.isDirectory()) {
     throw new CliError("store-file", "the store's directory is not a regular directory", "type");
   }
-  const homeMode = Number(homeStat.mode) & 0o777;
-  if (OWNER_MODES && (homeMode & 0o077) !== 0) {
-    throw new CliError("store-file", "the store's directory grants group or others access", "mode");
+  if (OWNER_MODES) {
+    const uid = process.getuid?.();
+    if (uid !== undefined && homeStat.uid !== uid) {
+      throw new CliError("store-file", "the store's directory is owned by another user", "owner");
+    }
+    const homeMode = Number(homeStat.mode) & 0o777;
+    if ((homeMode & 0o077) !== 0) {
+      throw new CliError(
+        "store-file",
+        "the store's directory grants group or others access",
+        "mode",
+      );
+    }
   }
 }
 
 /**
- * The store's integrity: the open itself checks file types and modes, the schema version and
- * SQLite's verification; then SQLite's integrity_check, every event's JSON and format, and the
- * home directory's mode. Any failure is a store error.
+ * The store's integrity: the open itself checks the store directory, file types, ownership and
+ * modes, the schema version and SQLite's verification; then SQLite's integrity_check and every
+ * event's JSON and format. Any failure is a store error.
  */
 async function check(scope: string, store: SqliteStore, path: string): Promise<Output> {
-  checkStoreHome(path);
   const db = new DatabaseSync(pathToFileURL(resolveStorePath(path)).href, { readOnly: true });
   let schemaVersion: number;
   let events = 0;
@@ -761,6 +770,8 @@ function plural(count: number, noun: string): string {
 
 function init(env: CliEnv, cwd: string): { output: Output; store: SqliteStore } {
   const path = storePath(env, cwd);
+  // If the store directory already exists (including as a symlink), verify it before opening or creating.
+  if (lstatSync(dirname(path), { throwIfNoEntry: false }) !== undefined) checkStoreHome(path);
   const created = !existsSync(path);
   let scope: string | null;
   try {
@@ -865,7 +876,7 @@ export async function main(
       );
     }
     if (!existsSync(path)) throw new CliError("no-store", `no store at ${path}: run relembra init`);
-    if (name === "check") checkStoreHome(path);
+    checkStoreHome(path);
     store = openSqliteStore({ path });
     if (server) {
       await serveStdio(env, scopes, store);

@@ -216,7 +216,7 @@ is the library's host: it decides the scope and the principal, never the agent c
 | `import` | 1 | `import` refused the file and wrote nothing ([`import`](#relembra-import)) | `format-too-new`, `malformed`, `malformed:summary-supersede`, `malformed:copy-replacement`, `malformed:summary-promote`, `malformed:<field>:<rule>` for an identifier, such as `malformed:memoryId:control-character`, `guard:<rule>`, `provenance:<field>:<rule>`, `future-time`, `redacted-in-target`, `conflict`, `denied:above-ceiling`, `denied:pin`, `denied:promote`, `truncated`, `modified`, `not-optmem`, `too-large:file`, `too-large:line`, `too-large:events`, `too-large:records` |
 | `no-store` | 3 | The store file does not exist; run `relembra init` | |
 | `schema-too-new` | 3 | A newer relembra wrote the store; it is left untouched | |
-| `store-file` | 3 | The store, a sidecar or its directory is not owner-only, or is not a regular file | `mode`, `type` |
+| `store-file` | 3 | The store, a sidecar or its directory is not owner-only, owned by the user, or a regular file/directory | `mode`, `type`, `owner` |
 | `store-unverified` | 3 | SQLite could not verify the store's schema | |
 | `store-busy` | 3 | Another writer held the lock past the busy timeout | |
 | `wal-scrub` | 3 | A redaction's old pages could not yet be truncated from the WAL | |
@@ -460,11 +460,12 @@ rule unattended.
 
 ### `relembra check`
 
-Verifies the store: opening it checks that the file and its sidecars are owner-only regular
-files, that the schema is not newer than this binary, and SQLite's schema verification; then
-`check` runs SQLite's `integrity_check`, parses every event and checks its format version (1, or
-2 for the promote events a library host may write; a newer one fails), and checks that the
-store's directory is owner-only. Any failure exits 3.
+Verifies the store: opening it checks that the store's directory is a real, owner-only directory
+owned by the user and that the file and its sidecars are owner-only regular files owned by the user
+(every store command runs these checks before opening), that the schema is not newer than this
+binary, and SQLite's schema verification; then `check` runs SQLite's `integrity_check` and parses
+every event and checks its format version (1, or 2 for the promote events a library host may write;
+a newer one fails). Any failure exits 3.
 
 `data`: `{ scope, store, integrity: "ok", schemaVersion, events, memories, walScrubPending,
 erasurePending: { work, carriers } }`. `walScrubPending: true` is a warning, not a failure.

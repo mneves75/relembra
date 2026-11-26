@@ -32,6 +32,16 @@ export class StoreFileModeError extends Error {
   }
 }
 
+/** Thrown when an existing store file, or its -wal, -shm or -journal file, is owned by another OS user. */
+export class StoreFileOwnerError extends Error {
+  override readonly name = "StoreFileOwnerError";
+  readonly uid: number;
+  constructor(path: string, uid: number) {
+    super(`store file ${path} is owned by uid ${uid}; relembra requires the current user`);
+    this.uid = uid;
+  }
+}
+
 /**
  * Thrown when the store path, or its -wal or -shm file, is a symbolic link or anything else that is
  * not a regular file: a link could send SQLite's writes to a file the mode checks never saw.
@@ -249,6 +259,8 @@ function checkOwnerOnly(path: string): void {
     // access control list grants. A new store's folder is created private (createWindowsStore);
     // an existing one keeps its folder's ACL (docs/CLI.md, Windows).
     if (OWNER_MODES) {
+      const uid = process.getuid?.();
+      if (uid !== undefined && stats.uid !== uid) throw new StoreFileOwnerError(file, stats.uid);
       const mode = Number(stats.mode) & 0o777;
       if ((mode & 0o077) !== 0) throw new StoreFileModeError(file, mode);
     }

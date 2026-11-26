@@ -191,7 +191,7 @@ describe("store errors exit 3 with a JSON error document", () => {
   );
 
   posixCliTest(
-    "check refuses a symlinked RELEMBRA_HOME directory before opening or modifying the target",
+    "every store command refuses a symlinked or group/world-accessible RELEMBRA_HOME before opening",
     () => {
       box = sandbox();
       const targetDir = join(dirname(box.store), "raw-target");
@@ -204,13 +204,32 @@ describe("store errors exit 3 with a JSON error document", () => {
       const before = readFileSync(targetDb);
       const linkHome = join(dirname(box.store), "home-link");
       symlinkSync(targetDir, linkHome);
-      const result = refused(box, ["check"], 3, "store-file", {
-        env: { RELEMBRA_HOME: linkHome },
-      });
-      expect(result.json?.ok === false && result.json.error.rule).toBe("type");
-      // Target was neither switched to WAL nor mutated before refusal.
-      expect(existsSync(`${targetDb}-wal`)).toBe(false);
-      expect(readFileSync(targetDb).equals(before)).toBe(true);
+      for (const args of [["init"], ["check"], ["note", "blocked"], ["find", "x"], ["wake"]]) {
+        const result = refused(box, args, 3, "store-file", {
+          env: { RELEMBRA_HOME: linkHome },
+        });
+        expect(result.json?.ok === false && result.json.error.rule).toBe("type");
+      }
+      // Loose (0777) directory is also refused by init and every store command.
+      chmodSync(targetDir, 0o777);
+      try {
+        for (const args of [["init"], ["check"], ["note", "blocked"], ["wake"]]) {
+          const result = refused(box, args, 3, "store-file", {
+            env: { RELEMBRA_HOME: targetDir },
+          });
+          expect(result.json?.ok === false && result.json.error.rule).toBe("mode");
+        }
+        // Target was neither switched to WAL nor mutated before refusal.
+        expect(existsSync(`${targetDb}-wal`)).toBe(false);
+        expect(readFileSync(targetDb).equals(before)).toBe(true);
+      } finally {
+        chmodSync(targetDir, 0o700);
+      }
+      // Positive control: once owner-only (0700), a real directory initializes and opens.
+      const cleanHome = join(dirname(box.store), "clean-home");
+      mkdirSync(cleanHome, { mode: 0o700 });
+      ok(box, ["init"], { env: { RELEMBRA_HOME: cleanHome } });
+      ok(box, ["note", "allowed"], { env: { RELEMBRA_HOME: cleanHome } });
     },
   );
 });
