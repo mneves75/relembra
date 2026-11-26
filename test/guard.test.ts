@@ -435,8 +435,8 @@ describe("guard: credentials", () => {
     // Quadratic regex backtracking took ~200 ms for 2000 calls on 256-byte runs; linear is <20 ms.
     expect(performance.now() - start).toBeLessThan(150);
     // Compound unquoted assignments (`a=b=c=...`) must also scale linearly, not quadratically.
-    const small = "a=".repeat(256) + "x";
-    const large = "a=".repeat(2048) + "x";
+    const small = `${"a=".repeat(256)}x`;
+    const large = `${"a=".repeat(2048)}x`;
     // Warm up JIT, then compare 8x input size.
     expect(findGuardViolation(small, small.length)).toBeUndefined();
     expect(findGuardViolation(large, large.length)).toBeUndefined();
