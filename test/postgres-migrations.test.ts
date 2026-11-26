@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import type { SQL } from "bun";
-import { openPostgresStore, SchemaTooNewError, type SqlClient } from "relembra/postgres";
+import {
+  openPostgresStore,
+  SchemaOwnershipError,
+  SchemaTooNewError,
+  type SqlClient,
+} from "relembra/postgres";
 import { MIGRATIONS, migrate, schemaVersion } from "../src/postgres/migrations.js";
 import { derivedQuery } from "../src/postgres/queries.js";
 import {
@@ -512,5 +517,76 @@ describePostgres("postgres migrations (IMPLEMENTATION-PLAN §4.5)", () => {
       `SELECT seq, carrier_id FROM ${schema}.erasure_pending WHERE seq = 1`,
     )) as { seq: string; carrier_id: string }[];
     expect(rows).toEqual([{ seq: "1", carrier_id: "c-race" }]);
+  });
+
+  test("refuses a pre-created schema or tables owned by another role, while allowing own or member roles", async () => {
+    const tag = `${process.pid}_${Date.now().toString(36)}`;
+    const roleA = `relembra_own_a_${tag}`;
+    const roleB = `relembra_own_b_${tag}`;
+    const shared = `relembra_own_shared_${tag}`;
+    const fullSquat = freshSchema("squat_full");
+    const emptySquat = freshSchema("squat_empty");
+    const ownB = freshSchema("own_b");
+    const sharedSchema = freshSchema("shared_role");
+    const asRole = (role: string): SqlClient => {
+      const inner = client();
+      return {
+        query: (text, params = []) =>
+          inner.transaction(async (tx) => {
+            await tx.query(`SET LOCAL ROLE "${role}"`);
+            return tx.query(text, params);
+          }),
+        transaction: (work) =>
+          inner.transaction(async (tx) => {
+            await tx.query(`SET LOCAL ROLE "${role}"`);
+            return work(tx);
+          }),
+      };
+    };
+    const [dbRow] = (await admin.unsafe("SELECT current_database() AS db")) as { db: string }[];
+    const db = dbRow?.db as string;
+    try {
+      await admin.unsafe(`CREATE ROLE "${roleA}" NOLOGIN`);
+      await admin.unsafe(`CREATE ROLE "${roleB}" NOLOGIN`);
+      await admin.unsafe(`CREATE ROLE "${shared}" NOLOGIN`);
+      await admin.unsafe(`GRANT "${shared}" TO "${roleB}"`);
+      await admin.unsafe(`GRANT CREATE ON DATABASE "${db}" TO "${roleA}", "${roleB}", "${shared}"`);
+
+      // Variant 1: roleA pre-creates a full v3 store and grants roleB full DML access.
+      await openPostgresStore({ client: asRole(roleA), schema: fullSquat });
+      await admin.unsafe(`GRANT USAGE ON SCHEMA "${fullSquat}" TO "${roleB}"`);
+      await admin.unsafe(
+        `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "${fullSquat}" TO "${roleB}"`,
+      );
+      await admin.unsafe(`GRANT USAGE ON ALL SEQUENCES IN SCHEMA "${fullSquat}" TO "${roleB}"`);
+      await expect(
+        openPostgresStore({ client: asRole(roleB), schema: fullSquat }),
+      ).rejects.toBeInstanceOf(SchemaOwnershipError);
+
+      // Variant 2: roleA pre-creates an empty schema and grants roleB USAGE and CREATE.
+      await asRole(roleA).query(`CREATE SCHEMA "${emptySquat}"`);
+      await admin.unsafe(`GRANT USAGE, CREATE ON SCHEMA "${emptySquat}" TO "${roleB}"`);
+      await expect(
+        openPostgresStore({ client: asRole(roleB), schema: emptySquat }),
+      ).rejects.toBeInstanceOf(SchemaOwnershipError);
+      expect(await schemaVersion(bunClient(admin), emptySquat)).toBe(0);
+
+      // Positive control 1: roleB opens its own schema cleanly.
+      await openPostgresStore({ client: asRole(roleB), schema: ownB });
+      expect(await schemaVersion(bunClient(admin), ownB)).toBe(LATEST);
+
+      // Positive control 2: roleB opens a schema owned by a shared role it is a member of.
+      await openPostgresStore({ client: asRole(shared), schema: sharedSchema });
+      await admin.unsafe(`GRANT USAGE ON SCHEMA "${sharedSchema}" TO "${roleB}"`);
+      await admin.unsafe(
+        `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "${sharedSchema}" TO "${roleB}"`,
+      );
+      await admin.unsafe(`GRANT USAGE ON ALL SEQUENCES IN SCHEMA "${sharedSchema}" TO "${roleB}"`);
+      await openPostgresStore({ client: asRole(roleB), schema: sharedSchema });
+    } finally {
+      for (const s of [fullSquat, emptySquat, ownB, sharedSchema]) await dropSchema(admin, s);
+      await admin.unsafe(`REVOKE ALL ON DATABASE "${db}" FROM "${roleA}", "${roleB}", "${shared}"`);
+      await admin.unsafe(`DROP ROLE IF EXISTS "${roleA}", "${roleB}", "${shared}"`);
+    }
   });
 });

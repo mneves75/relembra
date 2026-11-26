@@ -24,6 +24,7 @@ import { indexMemory, readIndex, unindexMemory } from "./term-index.js";
 
 export { SchemaTooNewError, StoreBusyError } from "../errors.js";
 export type { SqlClient, SqlQuery } from "./client.js";
+export { SchemaOwnershipError } from "./migrations.js";
 
 export interface PostgresStoreOptions {
   /** The host's SQL client (see SqlClient); relembra opens no connection of its own. */

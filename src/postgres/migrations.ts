@@ -2,6 +2,22 @@ import { SchemaTooNewError } from "../errors.js";
 import type { SqlClient, SqlQuery } from "./client.js";
 
 /**
+ * The Postgres schema, or a table, sequence or view in it, is owned by a role `current_user` is
+ * not a member of. Refused before any write so another database role cannot pre-create a schema
+ * and read, tamper with or drop this store's tables.
+ */
+export class SchemaOwnershipError extends Error {
+  override readonly name = "SchemaOwnershipError";
+  readonly schema: string;
+  constructor(schema: string) {
+    super(
+      `store schema "${schema}" or a relation in it is owned by a role the connecting user is not a member of`,
+    );
+    this.schema = schema;
+  }
+}
+
+/**
  * One forward-only schema step: statements run one at a time (a host's driver may not accept
  * several in one query), each given the store's quoted schema identifier. Versions start at 1 and
  * increase by 1.
@@ -167,6 +183,7 @@ export async function migrate(
     if (migration.version !== index + 1) throw new Error("migration versions must be 1, 2, 3, …");
   });
   const latest = migrations.length;
+  await verifySchemaOwnership(client, schema);
   if (checked(await schemaVersion(client, schema), latest) === latest) return;
 
   const s = quoted(schema);
@@ -183,6 +200,9 @@ export async function migrate(
     // SCHEMA IF NOT EXISTS collides with the one it waited for (23505). A relation lock does read them.
     await q.query("LOCK TABLE pg_catalog.pg_namespace IN ACCESS SHARE MODE");
     await q.query(`CREATE SCHEMA IF NOT EXISTS ${s}`);
+    // Re-check inside the migration lock before creating or altering any table: another role may
+    // have pre-created the schema (with USAGE+CREATE) or populated tables in it.
+    await verifySchemaOwnership(q, schema);
     await q.query(
       `CREATE TABLE IF NOT EXISTS ${s}.schema_version (version integer PRIMARY KEY, applied_at bigint NOT NULL)`,
     );
@@ -202,6 +222,30 @@ export async function migrate(
       );
     }
   });
+}
+
+/**
+ * Refuses a schema whose namespace or any relation in it (tables, partitioned tables, sequences,
+ * views, materialized views) is owned by a role `current_user` is not a member of. Returns cleanly
+ * when the schema does not exist yet or every object belongs to `current_user` or a role it holds.
+ */
+export async function verifySchemaOwnership(client: SqlQuery, schema: string): Promise<void> {
+  const rows = await client.query<{ kind: string; name: string }>(
+    `SELECT 'schema' AS kind, n.nspname AS name
+     FROM pg_catalog.pg_namespace n
+     WHERE n.nspname = $1::text
+       AND NOT pg_has_role(current_user, n.nspowner, 'MEMBER')
+     UNION ALL
+     SELECT 'relation' AS kind, c.relname AS name
+     FROM pg_catalog.pg_class c
+     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = $1::text
+       AND c.relkind IN ('r', 'p', 'S', 'v', 'm')
+       AND NOT pg_has_role(current_user, c.relowner, 'MEMBER')
+     LIMIT 1`,
+    [schema],
+  );
+  if (rows.length > 0) throw new SchemaOwnershipError(schema);
 }
 
 /** The highest applied version of `schema`, 0 when it has no version table. */
