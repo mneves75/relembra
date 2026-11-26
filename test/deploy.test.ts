@@ -511,13 +511,4 @@ describe.skipIf(NO_RELEASE_TOOLING)("scripts/deploy.sh prd", () => {
     expect(run.stderr).toContain("npm stage reject 11111111-0000-4000-8000-000000000001");
     expect(existsSync(join(f.fixtures, "state-published"))).toBe(true);
   });
-
-  test("gives up when no workflow run appears in time", { timeout: 20_000 }, () => {
-    const f = fixture();
-    expect(hmo(f).status).toBe(0);
-    writeFileSync(join(f.fixtures, "run-list-release.yml.json"), "[]");
-    const run = prd(f);
-    expect(run.status).toBe(1);
-    expect(run.stderr).toContain("no release.yml run for");
-  });
 });

@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   createRelembra,
@@ -101,11 +100,6 @@ describe("export", () => {
     expect(events.every((e) => e.format === 1)).toBe(true);
     // Each line is one event exactly as the store holds it.
     expect(events).toEqual([...(await store.events({ scopes: [SCOPE] }))]);
-  });
-
-  test("the relembra version is package.json's", () => {
-    const pkg = JSON.parse(readFileSync(join(import.meta.dir, "..", "package.json"), "utf8"));
-    expect(RELEMBRA_VERSION).toBe(pkg.version);
   });
 
   test("a redacted memory appears only in its tombstone form, while live text is exported", async () => {

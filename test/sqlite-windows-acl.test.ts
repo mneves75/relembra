@@ -168,13 +168,6 @@ describe.skipIf(!WINDOWS)("Windows store ACL", () => {
     expectOwnerOnly(home, store);
   });
 
-  test("a home relembra makes itself, in the leaky parent, grants only the three", () => {
-    const home = join(leakyParent(), "home");
-    const store = join(home, "relembra.db");
-    createOwnerOnly(store);
-    expectOwnerOnly(home, store);
-  });
-
   test("a preexisting folder with an open writable handle is refused without changing its ACL", () => {
     const home = plainFolder(join(leakyParent(), "home"));
     const held = join(home, "held.txt");

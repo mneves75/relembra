@@ -279,13 +279,12 @@ describePostgres("postgres migrations (IMPLEMENTATION-PLAN §4.5)", () => {
     await openPostgresStore({ client: client(), schema });
   });
 
-  test("the golden schema-v1 fixture opens with its contents intact", async () => {
+  // Its contents after the upgrade are checked by "the golden schema-v1 fixture migrates to 3".
+  test("the golden schema-v1 fixture restores at version 1 and takes writes once opened", async () => {
     await restoreFixture(schema);
     expect(await schemaVersion(client(), schema)).toBe(1);
     const store = await openPostgresStore({ client: client(), schema });
-    const expected = JSON.parse(readFileSync(FIXTURE_JSON, "utf8"));
-    expect(JSON.parse(JSON.stringify(await fixtureContents(store)))).toEqual(expected);
-    // Positive control: a write to the restored store lands after its sequences.
+    // A write to the restored store lands after its sequences.
     await store.transaction((tx) => tx.putFence({ key: "fixture-lease", epoch: 4 }));
     expect(await store.transaction((tx) => tx.fenceEpoch("fixture-lease"))).toBe(4);
   });

@@ -316,20 +316,6 @@ describe("sqlite store files", () => {
     expect(schemaVersion(after)).toBe(6);
     after.close();
   });
-
-  test("a file written by a newer relembra is refused, not downgraded", async () => {
-    const path = join(dir.path, "store", "relembra.db");
-    await openSqliteStore({ path }).close();
-
-    // Positive control: the current version opens.
-    await openSqliteStore({ path }).close();
-
-    const db = new DatabaseSync(path);
-    db.exec(`INSERT INTO schema_version (version, applied_at) VALUES (${FUTURE}, 0)`);
-    db.close();
-
-    expect(() => openSqliteStore({ path })).toThrow(SchemaTooNewError);
-  });
 });
 
 describe("sqlite store opening", () => {

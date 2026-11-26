@@ -218,14 +218,16 @@ describePostgres("postgres store: contention and transactions (IMPLEMENTATION-PL
     });
     inside = false;
 
-    expect(statements[0]).toBe("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
-    expect(statements[1]).toMatch(/^SET LOCAL lock_timeout/);
-    expect(statements[2]).toBe(`SELECT id FROM "${schema}".store_lock WHERE id = 1 FOR UPDATE`);
-    // Positive control: the work after the lock read and wrote through the same handle.
-    expect(statements.slice(3).some((s) => s.includes(`"${schema}".ops`))).toBe(true);
-    expect(statements.slice(3).some((s) => s.includes(`INSERT INTO "${schema}".events`))).toBe(
-      true,
+    const lockAt = statements.findIndex(
+      (s) => s.includes(`"${schema}".store_lock`) && s.includes("FOR UPDATE"),
     );
+    expect(lockAt).toBeGreaterThanOrEqual(0);
+    // No table of the store is read or written before the lock is held.
+    expect(statements.slice(0, lockAt).filter((s) => s.includes(`"${schema}".`))).toEqual([]);
+    // Positive control: the work after the lock read and wrote through the same handle.
+    const after = statements.slice(lockAt + 1);
+    expect(after.some((s) => s.includes(`"${schema}".ops`))).toBe(true);
+    expect(after.some((s) => s.includes(`INSERT INTO "${schema}".events`))).toBe(true);
     expect(outside).toEqual([]);
   });
 

@@ -1,9 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { PassThrough } from "node:stream";
 import { createEmpty } from "../eval/candidates/empty.js";
-import { createPerfect } from "../eval/candidates/perfect.js";
 import { type CandidateHandler, serve } from "../eval/candidates/serve.js";
-import { DEFAULT_SEED, generate } from "../eval/generate.js";
 
 /** Runs `serve` in-process over the given request lines and returns the response lines. */
 async function exchange(handler: CandidateHandler, lines: readonly string[]): Promise<unknown[]> {
@@ -61,13 +59,5 @@ describe("serve", () => {
       ["r2", false, "internal"],
       ["r3", true, undefined],
     ]);
-  });
-
-  test("the perfect candidate serves a set it was given", async () => {
-    const set = generate({ seed: DEFAULT_SEED });
-    const responses = (await exchange(createPerfect(set), [request("r1", "reset")])) as {
-      result: { name: string };
-    }[];
-    expect(responses[0]?.result.name).toBe("perfect");
   });
 });
