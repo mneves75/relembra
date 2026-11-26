@@ -177,7 +177,8 @@ function runGit(
     const value = env[name];
     if (value !== undefined && value !== "") gitEnv[name] = value;
   }
-  const result = spawnSync(git.git, args, {
+  // Git 2.38 and later then refuse a bare repository found by walking up, as repoMarker does.
+  const result = spawnSync(git.git, ["-c", "safe.bareRepository=explicit", ...args], {
     env: gitEnv,
     encoding: "utf8",
     timeout: GIT_TIMEOUT_MS,
@@ -211,25 +212,39 @@ function runGit(
  * `ls-remote --get-url origin` prints "origin" and exits 0, which reads like a relative remote;
  * `remote get-url` exits 2 (git 2.30 and later).
  */
-function hasGitMarker(startDir: string): boolean {
+/**
+ * What git would find walking up from `startDir`: a folder holding `.git` (`"dotgit"`), or first a
+ * folder laid out as a git directory itself (`"bare"`). A git directory inside a `.git` folder
+ * (the folder itself, its worktrees and modules) counts as `"dotgit"`. A bare layout is anything
+ * a checkout can carry, so the CLI never takes a project from one, on every git version; git 2.38
+ * and later refuse it too (`safe.bareRepository=explicit`, see runGit).
+ */
+function repoMarker(startDir: string): "dotgit" | "bare" | undefined {
+  const at = (dir: string, name: string) => lstatSync(join(dir, name), { throwIfNoEntry: false });
   let dir = resolve(startDir);
   for (;;) {
-    if (lstatSync(join(dir, ".git"), { throwIfNoEntry: false }) !== undefined) return true;
-    const head = lstatSync(join(dir, "HEAD"), { throwIfNoEntry: false });
+    if (at(dir, ".git") !== undefined) return "dotgit";
     if (
-      head?.isFile() &&
-      (lstatSync(join(dir, "objects"), { throwIfNoEntry: false })?.isDirectory() ||
-        lstatSync(join(dir, "config"), { throwIfNoEntry: false })?.isFile())
+      at(dir, "HEAD") !== undefined &&
+      (at(dir, "objects")?.isDirectory() || at(dir, "commondir") || at(dir, "config"))
     ) {
-      return true;
+      return dir.split(sep).includes(".git") ? "dotgit" : "bare";
     }
     const parent = dirname(dir);
-    if (parent === dir) return false;
+    if (parent === dir) return undefined;
     dir = parent;
   }
 }
 
 function gitProject(env: CliEnv, cwd: string): { key: string; name: string } | undefined {
+  const marker = repoMarker(safeRealpath(cwd));
+  if (marker === "bare") {
+    throw new CliError(
+      "no-scope",
+      "no scope: a git directory without a .git folder (a bare repository) is not a project; set RELEMBRA_SCOPE",
+      "bare-repository",
+    );
+  }
   const git = hostGit(env, cwd);
   const common = runGit(git, env, [
     "-C",
@@ -239,7 +254,7 @@ function gitProject(env: CliEnv, cwd: string): { key: string; name: string } | u
     "--git-common-dir",
   ]);
   if (common.status !== 0) {
-    if (/not a git repository \(or any /i.test(common.stderr) && !hasGitMarker(cwd)) {
+    if (/not a git repository \(or any /i.test(common.stderr) && marker === undefined) {
       return undefined;
     }
     throw new CliError(

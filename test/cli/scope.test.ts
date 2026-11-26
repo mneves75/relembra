@@ -333,7 +333,40 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
     );
   });
 
-  cliTest("a separate git dir and its worktrees share one scope; a bare repository has one", () => {
+  cliTest("a git directory found without a .git folder is never a project", () => {
+    const base = join(dirname(box.repo), "embedded");
+    const victim = join(base, "victim");
+    gitInit(victim);
+    git(victim, "remote", "add", "origin", "https://example.invalid/team/victim.git");
+    const clone = join(base, "clone");
+    gitInit(clone);
+    git(clone, "remote", "add", "origin", "https://example.invalid/team/clone.git");
+    // A checked-out bare layout naming another project's origin.
+    const vendored = join(clone, "vendor", "lib");
+    gitInit(vendored, "--bare");
+    git(vendored, "remote", "add", "origin", "https://example.invalid/team/victim.git");
+    // A worktree-style git dir (HEAD and commondir) pointing at another repository's.
+    const linked = join(clone, "vendor", "wt");
+    mkdirSync(linked, { recursive: true });
+    writeFileSync(join(linked, "HEAD"), "ref: refs/heads/main\n");
+    writeFileSync(join(linked, "commondir"), `${realpathSync(join(victim, ".git"))}\n`);
+    const deliberate = join(base, "proj.git");
+    gitInit(deliberate, "--bare");
+    for (const cwd of [vendored, join(vendored, "refs"), linked, deliberate]) {
+      const result = refused(box, ["check"], 2, "no-scope", { cwd });
+      expect(result.json?.ok === false && result.json.error.rule).toBe("bare-repository");
+    }
+    // Positive controls: the clone, and its own .git folder, are the clone's project; an
+    // explicit RELEMBRA_SCOPE still works inside a bare repository.
+    const cloneScope = `${USER}/clone-${hash16("origin:example.invalid/team/clone")}`;
+    expect(ok(box, ["check"], { cwd: clone }).scope).toBe(cloneScope);
+    expect(ok(box, ["check"], { cwd: join(clone, ".git") }).scope).toBe(cloneScope);
+    expect(ok(box, ["check"], { cwd: deliberate, env: { RELEMBRA_SCOPE: OTHER } }).scope).toBe(
+      OTHER,
+    );
+  });
+
+  cliTest("a separate git dir and its worktrees share one scope", () => {
     const base = join(dirname(box.repo), "separate");
     const shared = join(base, "sharedgit");
     const main = join(base, "separate-main");
@@ -344,11 +377,6 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
     const expected = `${USER}/sharedgit-${hash16(`gitdir:${realpathSync(shared)}`)}`;
     expect(ok(box, ["check"], { cwd: main }).scope).toBe(expected);
     expect(ok(box, ["check"], { cwd: linked }).scope).toBe(expected);
-    const bareRepo = join(base, "proj.git");
-    gitInit(bareRepo, "--bare");
-    expect(ok(box, ["check"], { cwd: bareRepo }).scope).toBe(
-      `${USER}/proj-${hash16(`gitdir:${realpathSync(bareRepo)}`)}`,
-    );
   });
 
   cliTest("without git on PATH there is no scope, and the hook stays quiet", () => {
