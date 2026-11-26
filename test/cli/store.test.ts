@@ -273,7 +273,9 @@ describe("store errors exit 3 with a JSON error document", () => {
     const realGetuid = process.getuid;
     if (realGetuid === undefined) return;
     const realUid = realGetuid();
-    const capture = async (argv: string[]) => {
+    const emptyHome = join(dirname(box.store), "empty-foreign-home");
+    mkdirSync(emptyHome, { mode: 0o700 });
+    const capture = async (argv: string[], home = box.relembraHome) => {
       let stdout = "";
       let stderr = "";
       const origOut = process.stdout.write.bind(process.stdout);
@@ -289,7 +291,7 @@ describe("store errors exit 3 with a JSON error document", () => {
       try {
         const status = await cliMain(
           argv,
-          { RELEMBRA_HOME: box.relembraHome, RELEMBRA_SCOPE: box.scope },
+          { RELEMBRA_HOME: home, RELEMBRA_SCOPE: box.scope },
           box.repo,
         );
         return { status, stdout, stderr };
@@ -300,8 +302,15 @@ describe("store errors exit 3 with a JSON error document", () => {
     };
     try {
       process.getuid = () => realUid + 1;
+      // An empty directory with no store file isolates checkStoreHome's UID check from checkOwnerOnly.
+      const initEmpty = await capture(["init", "--json"], emptyHome);
+      expect(initEmpty.status).toBe(3);
+      expect(JSON.parse(initEmpty.stdout)).toEqual({
+        ok: false,
+        error: { code: "store-file", rule: "owner" },
+      });
+      expect(existsSync(join(emptyHome, "relembra.db"))).toBe(false);
       for (const argv of [
-        ["init", "--json"],
         ["check", "--json"],
         ["note", "blocked", "--json"],
       ]) {
@@ -315,7 +324,10 @@ describe("store errors exit 3 with a JSON error document", () => {
     } finally {
       process.getuid = realGetuid;
     }
-    // Positive control: the real owner passes.
+    // Positive control: the real owner initializes the empty directory and passes check.
+    const okInit = await capture(["init", "--json"], emptyHome);
+    expect(okInit.status).toBe(0);
+    expect(JSON.parse(okInit.stdout).ok).toBe(true);
     const okRes = await capture(["check", "--json"]);
     expect(okRes.status).toBe(0);
     expect(JSON.parse(okRes.stdout).ok).toBe(true);

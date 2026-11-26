@@ -526,6 +526,7 @@ describePostgres("postgres migrations (IMPLEMENTATION-PLAN §4.5)", () => {
     const shared = `relembra_own_shared_${tag}`;
     const fullSquat = freshSchema("squat_full");
     const emptySquat = freshSchema("squat_empty");
+    const foreignRelSquat = freshSchema("squat_rel");
     const ownB = freshSchema("own_b");
     const sharedSchema = freshSchema("shared_role");
     const asRole = (role: string): SqlClient => {
@@ -571,6 +572,17 @@ describePostgres("postgres migrations (IMPLEMENTATION-PLAN §4.5)", () => {
       ).rejects.toBeInstanceOf(SchemaOwnershipError);
       expect(await schemaVersion(bunClient(admin), emptySquat)).toBe(0);
 
+      // Variant 3: roleB owns the schema itself, but roleA owns a relation (view) inside it.
+      await asRole(roleB).query(`CREATE SCHEMA "${foreignRelSquat}"`);
+      await admin.unsafe(`GRANT USAGE, CREATE ON SCHEMA "${foreignRelSquat}" TO "${roleA}"`);
+      await asRole(roleA).query(
+        `CREATE VIEW "${foreignRelSquat}".schema_version AS SELECT ${LATEST} AS version`,
+      );
+      await admin.unsafe(`GRANT SELECT ON "${foreignRelSquat}".schema_version TO "${roleB}"`);
+      await expect(
+        openPostgresStore({ client: asRole(roleB), schema: foreignRelSquat }),
+      ).rejects.toBeInstanceOf(SchemaOwnershipError);
+
       // Positive control 1: roleB opens its own schema cleanly.
       await openPostgresStore({ client: asRole(roleB), schema: ownB });
       expect(await schemaVersion(bunClient(admin), ownB)).toBe(LATEST);
@@ -584,7 +596,9 @@ describePostgres("postgres migrations (IMPLEMENTATION-PLAN §4.5)", () => {
       await admin.unsafe(`GRANT USAGE ON ALL SEQUENCES IN SCHEMA "${sharedSchema}" TO "${roleB}"`);
       await openPostgresStore({ client: asRole(roleB), schema: sharedSchema });
     } finally {
-      for (const s of [fullSquat, emptySquat, ownB, sharedSchema]) await dropSchema(admin, s);
+      for (const s of [fullSquat, emptySquat, foreignRelSquat, ownB, sharedSchema]) {
+        await dropSchema(admin, s);
+      }
       await admin.unsafe(`REVOKE ALL ON DATABASE "${db}" FROM "${roleA}", "${roleB}", "${shared}"`);
       await admin.unsafe(`DROP ROLE IF EXISTS "${roleA}", "${roleB}", "${shared}"`);
     }

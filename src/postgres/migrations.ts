@@ -183,11 +183,13 @@ export async function migrate(
     if (migration.version !== index + 1) throw new Error("migration versions must be 1, 2, 3, …");
   });
   const latest = migrations.length;
-  if (checked(await schemaVersion(client, schema), latest) === latest) {
-    // Verify after reading the latest version so a schema created concurrently between absent and
-    // ready cannot slip past the fast path without an ownership check.
-    await verifySchemaOwnership(client, schema);
-    return;
+  // Verify ownership before touching schema_version so a foreign view cannot run before refusal,
+  // and re-verify after the version read in case the schema was replaced concurrently.
+  if (await checkSchemaOwnership(client, schema)) {
+    if (checked(await schemaVersion(client, schema), latest) === latest) {
+      if (!(await checkSchemaOwnership(client, schema))) throw new SchemaOwnershipError(schema);
+      return;
+    }
   }
 
   const s = quoted(schema);
@@ -206,7 +208,7 @@ export async function migrate(
     await q.query(`CREATE SCHEMA IF NOT EXISTS ${s}`);
     // Re-check inside the migration lock before creating or altering any table: another role may
     // have pre-created the schema (with USAGE+CREATE) or populated tables in it.
-    await verifySchemaOwnership(q, schema);
+    await checkSchemaOwnership(q, schema);
     await q.query(
       `CREATE TABLE IF NOT EXISTS ${s}.schema_version (version integer PRIMARY KEY, applied_at bigint NOT NULL)`,
     );
@@ -229,13 +231,23 @@ export async function migrate(
 }
 
 /**
- * Refuses a schema whose namespace does not belong to `current_user` (or a role it is a member of)
- * or that holds any relation (table, partitioned table, sequence, view, materialized view) owned by
- * a foreign role. Checked in one atomic snapshot query; a stub client returning no rows passes.
+ * Returns whether `schema` exists, throwing `SchemaOwnershipError` if the namespace or any
+ * relation in it (table, partitioned table, sequence, view, materialized view) is owned by a role
+ * `current_user` is not a member of. Queries only `pg_catalog` in one atomic snapshot so a foreign
+ * view inside `schema` can never execute before refusal; a stub client returning no rows returns
+ * `false`.
  */
-export async function verifySchemaOwnership(client: SqlQuery, schema: string): Promise<void> {
-  const [row] = await client.query<{ schema_ok: boolean; foreign_relation: boolean }>(
+export async function checkSchemaOwnership(client: SqlQuery, schema: string): Promise<boolean> {
+  const [row] = await client.query<{
+    exists: boolean;
+    schema_ok: boolean;
+    foreign_relation: boolean;
+  }>(
     `SELECT
+       EXISTS (
+         SELECT 1 FROM pg_catalog.pg_namespace n
+         WHERE n.nspname = $1::text
+       ) AS exists,
        EXISTS (
          SELECT 1 FROM pg_catalog.pg_namespace n
          WHERE n.nspname = $1::text
@@ -250,9 +262,9 @@ export async function verifySchemaOwnership(client: SqlQuery, schema: string): P
        ) AS foreign_relation`,
     [schema],
   );
-  if (row !== undefined && (!row.schema_ok || row.foreign_relation)) {
-    throw new SchemaOwnershipError(schema);
-  }
+  if (row === undefined || !row.exists) return false;
+  if (!row.schema_ok || row.foreign_relation) throw new SchemaOwnershipError(schema);
+  return true;
 }
 
 /** The highest applied version of `schema`, 0 when it has no version table. */
