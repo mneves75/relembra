@@ -70,13 +70,6 @@ const CREDENTIAL_SHAPES: readonly RegExp[] = [
   /(?<![A-Za-z0-9])[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:[^\s/@]+@/i,
 ];
 
-/**
- * `name = value` or `name: value`, where the name may be quoted (JSON, YAML, `.env`, Markdown
- * code). Values are scanned explicitly so unclosed quotes and quotes embedded inside unquoted
- * passwords cannot hide a secret, while recognized URLs and colon-delimited structured
- * identifiers inspect their segments instead of scoring the concatenated string as one random value.
- */
-const ASSIGNMENT_HEAD = /["'`]?([A-Za-z_][\w.-]*)["'`]?\s*([:=])\s*/g;
 const URL_SCHEME = /^[a-z][a-z0-9+.-]*$/i;
 const COLON_STRUCTURED = /^[A-Za-z0-9._-]+(?::[A-Za-z0-9._-]+)+$/;
 /** Sentence punctuation that may follow an unquoted value without being part of it. */
@@ -127,17 +120,70 @@ function holdsCredential(text: string): boolean {
   return holdsSecretAssignment(text);
 }
 
+function isNameChar(code: number): boolean {
+  return (
+    (code >= 65 && code <= 90) ||
+    (code >= 97 && code <= 122) ||
+    (code >= 48 && code <= 57) ||
+    code === 95 ||
+    code === 46 ||
+    code === 45
+  );
+}
+
+function isNameStart(code: number): boolean {
+  return (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === 95;
+}
+
+function isQuote(code: number): boolean {
+  return code === 34 || code === 39 || code === 96;
+}
+
+function isWhitespace(text: string, index: number): boolean {
+  const code = text.charCodeAt(index);
+  return code === 32 || code === 9 || (code > 127 && /\s/.test(text[index] ?? ""));
+}
+
 /**
- * Checks every assignment in `text`, and every assignment inside each quoted value
- * (`cmd='export token=...'`) or unquoted compound value. Recursed substrings are strictly shorter
- * than `text`, so this always terminates.
+ * Finds the next `name = ` or `name: ` head at or after `from` in linear time (matching an
+ * optional quote, `[A-Za-z_][\w.-]*`, optional quote, whitespace, `:` or `=`, and trailing
+ * whitespace), without backtracking over long `[\w.-]` runs that have no `:` or `=` after them.
+ */
+function nextAssignmentHead(
+  text: string,
+  from: number,
+): { name: string; sep: string; pos: number } | undefined {
+  for (let sepPos = from; sepPos < text.length; sepPos++) {
+    const ch = text[sepPos];
+    if (ch !== ":" && ch !== "=") continue;
+    let end = sepPos - 1;
+    while (end >= from && isWhitespace(text, end)) end--;
+    if (end >= from && isQuote(text.charCodeAt(end))) end--;
+    let start = end;
+    while (start >= from && isNameChar(text.charCodeAt(start))) start--;
+    start++;
+    while (start <= end && !isNameStart(text.charCodeAt(start))) start++;
+    if (start > end) continue;
+    let pos = sepPos + 1;
+    while (pos < text.length && isWhitespace(text, pos)) pos++;
+    return { name: text.slice(start, end + 1), sep: ch, pos };
+  }
+  return undefined;
+}
+
+/**
+ * Checks every assignment in `text` (`name = value` or `name: value`, where `name` may be quoted),
+ * and every assignment inside each quoted value (`cmd='export token=...'`) or unquoted compound
+ * value. Recursed substrings are strictly shorter than `text`, so this always terminates.
  */
 function holdsSecretAssignment(text: string): boolean {
-  const head = new RegExp(ASSIGNMENT_HEAD.source, "g");
-  for (let match = head.exec(text); match !== null; match = head.exec(text)) {
-    const name = match[1] ?? "";
-    const sep = match[2] ?? "=";
-    const pos = match.index + match[0].length;
+  let cursor = 0;
+  for (
+    let match = nextAssignmentHead(text, cursor);
+    match !== undefined;
+    match = nextAssignmentHead(text, cursor)
+  ) {
+    const { name, sep, pos } = match;
     if (pos >= text.length) break;
     const first = text[pos];
     let value: string;
@@ -145,14 +191,14 @@ function holdsSecretAssignment(text: string): boolean {
     if (first === '"' || first === "'" || first === "`") {
       const close = text.indexOf(first, pos + 1);
       quoted = close >= 0 ? text.slice(pos + 1, close) : text.slice(pos + 1);
-      head.lastIndex = close >= 0 ? close + 1 : text.length;
+      cursor = close >= 0 ? close + 1 : text.length;
       if (quoted.length < text.length && holdsSecretAssignment(quoted)) return true;
       value = quoted;
     } else {
       const ws = text.slice(pos).search(/\s/);
       const end = ws < 0 ? text.length : pos + ws;
       const unquoted = text.slice(pos, end);
-      head.lastIndex = end;
+      cursor = end;
       value = unquoted.replace(TRAILING_PUNCTUATION, "");
     }
     if (isReference(value)) continue;

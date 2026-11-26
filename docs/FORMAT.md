@@ -225,17 +225,19 @@ all of it, or nothing and an error naming the rule and line (`docs/CLI.md`, `imp
   guard allows excepted) and no credential shape, and the rule is the detail: a memory id holding
   ESC is refused as `malformed`, detail `memoryId:control-character`. A string that is not one,
   is empty or is not well-formed Unicode stays plain `malformed`. Provenance fields already go
-  through the guard (`provenance`). What a line holds on its own (its JSON
+  through the guard (`provenance`). The importing principal is checked first, before any file
+  parsing, as for every operation: a principal listing a scope the rule refuses is an
+  `IdentifierError`. Next, still before the transaction opens, line 1 (the header) is validated and
+  its scopes are checked against the importer's ownership and write rights (see Principal), followed
+  by the file, line and event-count bounds: an unauthorized or oversized import never takes the
+  store write lock. Then, inside the import's transaction (because the `future-time` bound needs
+  the acceptance time read there; see Time), what each event line holds on its own (its JSON
   shape, format, fields, `seq` order, identifiers, text, provenance and the `future-time` bound) is
-  checked for every line of the file, then the header's scopes against the importer's rights
-  (see Principal), before the first event is written. That happens inside the import's
-  transaction, because the `future-time` bound needs the acceptance time read there (see Time).
-  What depends on the store or on earlier lines (an event about a memory no earlier line noted, a
-  replacement's whereabouts, and the rules under Identity, Summary sources, Promotions, Live
-  target and replacement and Authority) is checked as each line is applied, after the lines
-  before it were written in that transaction. A refusal at any point rolls the transaction back,
-  so it writes nothing. The importing principal itself is checked first, before the transaction,
-  as for every operation: a principal listing a scope the rule refuses is an `IdentifierError`.
+  checked in line order before the first event is written. What depends on the store or on earlier
+  lines (an event about a memory no earlier line noted, a replacement's whereabouts, and the rules
+  under Identity, Summary sources, Promotions, Live target and replacement and Authority) is
+  checked as each line is applied, after the lines before it were written in that transaction. A
+  refusal at any point rolls the transaction back, so it writes nothing.
 - **Identity.** Memories keep their ids. A memory the store holds with the same scope, text,
   sources and origin is skipped, so importing a file twice adds nothing; one it holds with other content
   refuses the import (`conflict`). A memory keeps its scope through the file: a line that names

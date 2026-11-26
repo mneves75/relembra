@@ -1669,4 +1669,26 @@ describe("pending tombstones reserve memory identity across scopes and live even
     ).rejects.toBeInstanceOf(RangeError);
     expect(await store.events({ scopes: [SCOPE] })).toEqual([]);
   });
+
+  test("an unauthorized import is refused before opening a store transaction", async () => {
+    const source = open();
+    await source.note("Owned elsewhere.", { scope: OTHER_SCOPE });
+    const jsonl = await exportJsonl(source.store, owner, { scope: OTHER_SCOPE });
+    const backing = createMemoryStore();
+    let transactions = 0;
+    const tracked: Store = {
+      ...backing,
+      transaction(work) {
+        transactions++;
+        return backing.transaction(work);
+      },
+    };
+    await expect(importJsonl(tracked, scopeOwner, jsonl)).rejects.toThrow(
+      new ScopeDeniedError("own"),
+    );
+    expect(transactions).toBe(0);
+    // Positive control: an authorized owner opens the transaction and imports the event.
+    expect(await importJsonl(tracked, owner, jsonl)).toMatchObject({ imported: 1 });
+    expect(transactions).toBe(1);
+  });
 });

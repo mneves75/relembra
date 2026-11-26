@@ -189,15 +189,19 @@ export async function importJsonl(
   const hostNow = checkEpochMs((options.clock ?? systemClock).now());
   const fence = principal.fence === undefined ? undefined : checkFence(principal.fence);
   const maxTrust = lowerTrust(trustCeiling(principal), "agent");
+  // Check the file cap, line 1 header and scope rights before taking the store write lock, so an
+  // unauthorized importer never holds the lock or parses event lines.
+  const header = readHeader(jsonl);
+  for (const scope of header.scopes) {
+    if (!owns(principal, scope)) throw new ScopeDeniedError("own");
+    if (!principal.writable.includes(scope)) throw new ScopeDeniedError("write");
+  }
+  const lines = splitBoundedLines(jsonl);
   return store.transaction(async (tx) => {
     // Revision times are bounded by the store's time when it keeps one, else the host's clock;
-    // the file is parsed under that bound inside the transaction, so refusals keep line order.
+    // event lines are parsed under that bound inside the transaction, so refusals keep line order.
     const latest = Math.min((await acceptanceTime(tx, hostNow)) + MAX_IMPORT_SKEW_MS, MAX_EPOCH_MS);
-    const { header, events } = parseExport(jsonl, latest);
-    for (const scope of header.scopes) {
-      if (!owns(principal, scope)) throw new ScopeDeniedError("own");
-      if (!principal.writable.includes(scope)) throw new ScopeDeniedError("write");
-    }
+    const events = parseEvents(lines, header, latest);
     if (fence !== undefined) await enforceFence(tx, fence);
     const replay = new Replay(tx, principal, maxTrust);
     for (const parsed of events) await replay.apply(parsed);
@@ -210,21 +214,36 @@ interface Parsed {
   readonly event: Event;
 }
 
-/** The header and events of an export, each checked against docs/FORMAT.md. */
-function parseExport(jsonl: string, latest: number): { header: ExportHeader; events: Parsed[] } {
+/** Validates the overall cap and line 1 header without splitting or scanning the rest of the file. */
+function readHeader(jsonl: string): ExportHeader {
   // Each UTF-16 code unit encodes to at least one UTF-8 byte, so a longer string is over the cap.
   if (jsonl.length > MAX_IMPORT_BYTES) throw new ImportError("too-large", 0, "file");
+  if (jsonl.length === 0) throw new ImportError("malformed", 1);
+  const nl = jsonl.indexOf("\n");
+  const first = nl < 0 ? jsonl : jsonl.slice(0, nl);
+  const bytes = first.length > MAX_IMPORT_LINE_BYTES ? Infinity : utf8Bytes(first);
+  if (bytes > MAX_IMPORT_LINE_BYTES) throw new ImportError("too-large", 1, "line");
+  return checkHeader(parseLine(first, 1));
+}
+
+/** Splits `jsonl` into lines and checks event, line and total byte caps before locking the store. */
+function splitBoundedLines(jsonl: string): string[] {
   const lines = jsonl.split("\n");
   const trailingNewline = lines.at(-1) === "";
   if (trailingNewline) lines.pop();
   if (lines.length === 0) throw new ImportError("malformed", 1);
   checkBounds(lines, trailingNewline);
-  const header = checkHeader(parseLine(lines[0] as string, 1));
+  return lines;
+}
+
+/** The event lines of an export, each checked against docs/FORMAT.md. */
+function parseEvents(lines: readonly string[], header: ExportHeader, latest: number): Parsed[] {
+  const scopeSet = new Set(header.scopes);
   const events: Parsed[] = [];
   let lastSeq = 0;
   lines.slice(1).forEach((text, index) => {
     const line = index + 2;
-    const event = checkEvent(parseLine(text, line), line, header, latest);
+    const event = checkEvent(parseLine(text, line), line, header, scopeSet, latest);
     if (event.seq <= lastSeq) throw new ImportError("malformed", line);
     lastSeq = event.seq;
     // A memory is never its own replacement. Where the replacement must already be (the store,
@@ -238,7 +257,7 @@ function parseExport(jsonl: string, latest: number): { header: ExportHeader; eve
     }
     events.push({ line, event });
   });
-  return { header, events };
+  return events;
 }
 
 /**
@@ -378,9 +397,9 @@ function checkEvent(
   value: UncheckedLine,
   line: number,
   header: ExportHeader,
+  scopeSet: ReadonlySet<Scope>,
   latest: number,
 ): Event {
-  const { scopes } = header;
   checkFormat(value.format, line);
   // The header names the newest format of its lines.
   if (value.format > header.format) throw new ImportError("malformed", line);
@@ -388,7 +407,7 @@ function checkEvent(
   if (!Number.isSafeInteger(seq) || (seq as number) < 1) throw new ImportError("malformed", line);
   checkId(memoryId, line);
   checkScope(scope, line);
-  if (!scopes.includes(scope)) throw new ImportError("malformed", line);
+  if (!scopeSet.has(scope)) throw new ImportError("malformed", line);
   const common = { format: EVENT_FORMAT, seq: seq as number, memoryId, scope } as const;
   if (kind === "redact") {
     const { cause } = value;
