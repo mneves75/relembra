@@ -144,12 +144,6 @@ describe("bad input, refused cleanly by the compiled binary", () => {
     expect(text.stderr).toContain("--bogus");
   });
 
-  cliTest("--help prints the usage and exits 0", () => {
-    const result = run(box, ["--help"]);
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("relembra note");
-  });
-
   cliTest("--help gives every command a one-line summary and keeps every usage line", () => {
     const result = run(box, ["--help"]);
     expect(result.status).toBe(0);

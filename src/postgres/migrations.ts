@@ -2,6 +2,22 @@ import { SchemaTooNewError } from "../errors.js";
 import type { SqlClient, SqlQuery } from "./client.js";
 
 /**
+ * The Postgres schema, or a table, sequence or view in it, is owned by a role `current_user` is
+ * not a member of. Refused before any write so another database role cannot pre-create a schema
+ * and read, tamper with or drop this store's tables.
+ */
+export class SchemaOwnershipError extends Error {
+  override readonly name = "SchemaOwnershipError";
+  readonly schema: string;
+  constructor(schema: string) {
+    super(
+      `store schema "${schema}" or a relation in it is owned by a role the connecting user is not a member of`,
+    );
+    this.schema = schema;
+  }
+}
+
+/**
  * One forward-only schema step: statements run one at a time (a host's driver may not accept
  * several in one query), each given the store's quoted schema identifier. Versions start at 1 and
  * increase by 1.
@@ -167,7 +183,14 @@ export async function migrate(
     if (migration.version !== index + 1) throw new Error("migration versions must be 1, 2, 3, …");
   });
   const latest = migrations.length;
-  if (checked(await schemaVersion(client, schema), latest) === latest) return;
+  // Verify ownership before touching schema_version so a foreign view cannot run before refusal,
+  // and re-verify after the version read in case the schema was replaced concurrently.
+  if (await checkSchemaOwnership(client, schema)) {
+    if (checked(await schemaVersion(client, schema), latest) === latest) {
+      if (!(await checkSchemaOwnership(client, schema))) throw new SchemaOwnershipError(schema);
+      return;
+    }
+  }
 
   const s = quoted(schema);
   await client.transaction(async (q) => {
@@ -183,6 +206,9 @@ export async function migrate(
     // SCHEMA IF NOT EXISTS collides with the one it waited for (23505). A relation lock does read them.
     await q.query("LOCK TABLE pg_catalog.pg_namespace IN ACCESS SHARE MODE");
     await q.query(`CREATE SCHEMA IF NOT EXISTS ${s}`);
+    // Re-check inside the migration lock before creating or altering any table: another role may
+    // have pre-created the schema (with USAGE+CREATE) or populated tables in it.
+    await checkSchemaOwnership(q, schema);
     await q.query(
       `CREATE TABLE IF NOT EXISTS ${s}.schema_version (version integer PRIMARY KEY, applied_at bigint NOT NULL)`,
     );
@@ -202,6 +228,43 @@ export async function migrate(
       );
     }
   });
+}
+
+/**
+ * Returns whether `schema` exists, throwing `SchemaOwnershipError` if the namespace or any
+ * relation in it (table, partitioned table, sequence, view, materialized view) is owned by a role
+ * `current_user` is not a member of. Queries only `pg_catalog` in one atomic snapshot so a foreign
+ * view inside `schema` can never execute before refusal; a stub client returning no rows returns
+ * `false`.
+ */
+export async function checkSchemaOwnership(client: SqlQuery, schema: string): Promise<boolean> {
+  const [row] = await client.query<{
+    exists: boolean;
+    schema_ok: boolean;
+    foreign_relation: boolean;
+  }>(
+    `SELECT
+       EXISTS (
+         SELECT 1 FROM pg_catalog.pg_namespace n
+         WHERE n.nspname = $1::text
+       ) AS exists,
+       EXISTS (
+         SELECT 1 FROM pg_catalog.pg_namespace n
+         WHERE n.nspname = $1::text
+           AND pg_has_role(current_user, n.nspowner, 'MEMBER')
+       ) AS schema_ok,
+       EXISTS (
+         SELECT 1 FROM pg_catalog.pg_class c
+         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = $1::text
+           AND c.relkind IN ('r', 'p', 'S', 'v', 'm')
+           AND NOT pg_has_role(current_user, c.relowner, 'MEMBER')
+       ) AS foreign_relation`,
+    [schema],
+  );
+  if (row === undefined || !row.exists) return false;
+  if (!row.schema_ok || row.foreign_relation) throw new SchemaOwnershipError(schema);
+  return true;
 }
 
 /** The highest applied version of `schema`, 0 when it has no version table. */

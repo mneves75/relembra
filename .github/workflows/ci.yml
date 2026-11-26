@@ -283,7 +283,10 @@ jobs:
     # Informational: the peer dependency claims exactly @earendil-works/pi-durable 1.5.2. This
     # probe runs the integration tests against `latest` so a breaking release shows up early; it
     # changes neither package.json nor the claim, and its failure does not fail the workflow.
+    # Never run on `push` so unpinned third-party code never shares a workflow run or main-branch
+    # cache with the `cli` job whose artifacts become the Linux and Windows release binaries.
     name: pi-durable (latest, informational)
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     continue-on-error: true

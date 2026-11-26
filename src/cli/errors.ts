@@ -18,6 +18,7 @@ import {
 import {
   StoreBusyError,
   StoreFileModeError,
+  StoreFileOwnerError,
   StoreFileTypeError,
   StoreUnverifiedError,
 } from "../sqlite/database.js";
@@ -123,6 +124,9 @@ export function toCliError(error: unknown): CliError {
   }
   if (error instanceof SchemaTooNewError) return new CliError("schema-too-new", error.message);
   if (error instanceof StoreFileModeError) return new CliError("store-file", error.message, "mode");
+  if (error instanceof StoreFileOwnerError) {
+    return new CliError("store-file", error.message, "owner");
+  }
   if (error instanceof StoreFileTypeError) return new CliError("store-file", error.message, "type");
   if (error instanceof StoreUnverifiedError) return new CliError("store-unverified", error.message);
   if (error instanceof StoreBusyError) return new CliError("store-busy", error.message);

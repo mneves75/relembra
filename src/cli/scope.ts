@@ -1,6 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { accessSync, constants, existsSync, lstatSync, realpathSync, statSync } from "node:fs";
+import {
+  accessSync,
+  constants,
+  existsSync,
+  lstatSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { findGuardViolation } from "../guard.js";
@@ -121,25 +129,37 @@ const noGit = () =>
 
 /**
  * The git to run: the first executable `git` on PATH, taking only absolute entries outside the
- * working directory and the repository around it. An empty or relative entry (`.`, `bin`) names
- * a folder the current directory chooses, and an entry inside the repository holds whatever the
- * repository holds: either would let a checked-out `git` run on every session start. The
- * executable is judged, and run, by its real path, so a `git` link on an outside entry that points
- * into the repository is passed over too. The same filtered list is git's own PATH.
+ * working directory and every enclosing repository (including a linked worktree's or submodule's
+ * main checkout). An empty or relative entry (`.`, `bin`) names a folder the current directory
+ * chooses, and an entry inside any enclosing repository holds whatever is checked out there:
+ * either would let a checked-out `git` run on every session start. The executable is judged, and
+ * run, by its real path, so a `git` link on an outside entry that points into a fenced checkout is
+ * passed over too. The same filtered list is git's own PATH.
  */
 function hostGit(env: CliEnv, cwd: string): { git: string; path: string } {
+  // Every enclosing repository, not only the nearest: a linked worktree or a nested repository
+  // may sit inside another checkout, or belong to a main checkout elsewhere, whose files a PATH
+  // entry can name. If $HOME is itself a repository, every git below it is fenced too.
   const fences = [safeRealpath(cwd)];
   for (let dir = fences[0] as string; ; dir = dirname(dir)) {
-    if (existsSync(join(dir, ".git"))) {
+    const hasDotGit = lstatSync(join(dir, ".git"), { throwIfNoEntry: false }) !== undefined;
+    if (hasDotGit || markerAt(dir) !== undefined) {
       fences.push(dir);
-      break;
+      const main = mainCheckout(dir);
+      if (main !== undefined) fences.push(main);
     }
     if (dirname(dir) === dir) break;
   }
   // Windows paths ignore case, so a fence compared by bytes would let C:\REPO\bin past C:\repo.
   const fold = (path: string) => (WINDOWS ? path.toLowerCase() : path);
-  const inside = (dir: string) =>
-    fences.some((f) => fold(dir) === fold(f) || fold(dir).startsWith(fold(`${f}${sep}`)));
+  const inside = (dir: string) => {
+    const folded = fold(dir);
+    return fences.some((f) => {
+      const target = fold(f);
+      const prefix = target.endsWith(sep) ? target : `${target}${sep}`;
+      return folded === target || folded.startsWith(prefix);
+    });
+  };
   const entries = (env.PATH ?? "")
     .split(delimiter)
     .filter((entry) => isAbsolute(entry) && !inside(safeRealpath(entry)));
@@ -177,7 +197,8 @@ function runGit(
     const value = env[name];
     if (value !== undefined && value !== "") gitEnv[name] = value;
   }
-  const result = spawnSync(git.git, args, {
+  // Git 2.38 and later then refuse a bare repository found by walking up, as repoMarker does.
+  const result = spawnSync(git.git, ["-c", "safe.bareRepository=explicit", ...args], {
     env: gitEnv,
     encoding: "utf8",
     timeout: GIT_TIMEOUT_MS,
@@ -211,25 +232,104 @@ function runGit(
  * `ls-remote --get-url origin` prints "origin" and exits 0, which reads like a relative remote;
  * `remote get-url` exits 2 (git 2.30 and later).
  */
-function hasGitMarker(startDir: string): boolean {
-  let dir = resolve(startDir);
-  for (;;) {
-    if (lstatSync(join(dir, ".git"), { throwIfNoEntry: false }) !== undefined) return true;
-    const head = lstatSync(join(dir, "HEAD"), { throwIfNoEntry: false });
-    if (
-      head?.isFile() &&
-      (lstatSync(join(dir, "objects"), { throwIfNoEntry: false })?.isDirectory() ||
-        lstatSync(join(dir, "config"), { throwIfNoEntry: false })?.isFile())
-    ) {
-      return true;
-    }
-    const parent = dirname(dir);
-    if (parent === dir) return false;
-    dir = parent;
+/**
+ * What git would find walking up from `startDir`: a folder holding `.git` (`"dotgit"`), or first a
+ * folder laid out as a git directory itself (`"bare"`). A git directory inside a `.git` folder
+ * (the folder itself, its worktrees and modules) counts as `"dotgit"`. A bare layout is anything
+ * a checkout can carry, so the CLI never takes a project from one, on every git version; git 2.38
+ * and later refuse it too (`safe.bareRepository=explicit`, see runGit).
+ */
+function repoMarker(startDir: string): "dotgit" | "bare" | undefined {
+  for (let dir = resolve(startDir); ; dir = dirname(dir)) {
+    const marker = markerAt(dir);
+    if (marker !== undefined || dirname(dir) === dir) return marker;
+  }
+}
+
+/**
+ * Whether `dir` has a git directory layout: `HEAD` beside an `objects` directory (following
+ * symlinks) or `commondir`; when `allowConfigOnly` is true (bare preflight), `config` also counts
+ * so partial bare layouts still fail closed.
+ */
+function isGitDir(dir: string, allowConfigOnly: boolean): boolean {
+  const at = (name: string) => lstatSync(join(dir, name), { throwIfNoEntry: false });
+  if (at("HEAD") === undefined) return false;
+  if (at("commondir") !== undefined) return true;
+  if (allowConfigOnly && at("config") !== undefined) return true;
+  try {
+    return statSync(join(dir, "objects")).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether `dir/.git` is an entry git stops at: a directory with `HEAD` plus `objects` or
+ * `commondir`, or a regular file carrying a `gitdir:` line. Invalid decoys (such as an empty `.git`
+ * or `HEAD`+`config` alone) are ignored so `repoMarker` walks past them just as git does.
+ */
+function isValidDotGit(dir: string): boolean {
+  const dotgit = join(dir, ".git");
+  let stats: ReturnType<typeof statSync>;
+  try {
+    stats = statSync(dotgit);
+  } catch {
+    return false;
+  }
+  if (stats.isDirectory()) return isGitDir(dotgit, false);
+  if (!stats.isFile()) return false;
+  try {
+    const line = stripCrlf(readFileSync(dotgit, "utf8"));
+    return line.startsWith("gitdir: ") && line.length > "gitdir: ".length;
+  } catch {
+    return false;
+  }
+}
+
+/** Strips only trailing CR and LF, matching git's gitfile and commondir parsers (keeping spaces). */
+function stripCrlf(value: string): string {
+  return value.replace(/[\r\n]+$/, "");
+}
+
+/** repoMarker's test for one folder. */
+function markerAt(dir: string): "dotgit" | "bare" | undefined {
+  if (isValidDotGit(dir)) return "dotgit";
+  if (!isGitDir(dir, true)) return undefined;
+  return dir.split(sep).includes(".git") ? "dotgit" : "bare";
+}
+
+/**
+ * For a folder whose `.git` is a file (a linked worktree, a submodule), the checkout that owns
+ * its git directory: `gitdir:` then `commondir` followed as git follows them, cut before the first
+ * `.git` component (the git directory itself when it has none). Undefined otherwise.
+ */
+function mainCheckout(dir: string): string | undefined {
+  try {
+    const gitfile = stripCrlf(readFileSync(join(dir, ".git"), "utf8"));
+    if (!gitfile.startsWith("gitdir: ")) return undefined;
+    const gitdir = resolve(dir, gitfile.slice("gitdir: ".length));
+    const commondir = join(gitdir, "commondir");
+    const common = existsSync(commondir)
+      ? resolve(gitdir, stripCrlf(readFileSync(commondir, "utf8")))
+      : gitdir;
+    const parts = safeRealpath(common).split(sep);
+    const dotgit = parts.indexOf(".git");
+    return dotgit < 0 ? parts.join(sep) : parts.slice(0, dotgit).join(sep) || sep;
+  } catch {
+    // A .git folder (EISDIR), or an unreadable file: nothing further to fence.
+    return undefined;
   }
 }
 
 function gitProject(env: CliEnv, cwd: string): { key: string; name: string } | undefined {
+  const marker = repoMarker(safeRealpath(cwd));
+  if (marker === "bare") {
+    throw new CliError(
+      "no-scope",
+      "no scope: a git directory without a .git folder (a bare repository) is not a project; set RELEMBRA_SCOPE",
+      "bare-repository",
+    );
+  }
   const git = hostGit(env, cwd);
   const common = runGit(git, env, [
     "-C",
@@ -239,7 +339,7 @@ function gitProject(env: CliEnv, cwd: string): { key: string; name: string } | u
     "--git-common-dir",
   ]);
   if (common.status !== 0) {
-    if (/not a git repository \(or any /i.test(common.stderr) && !hasGitMarker(cwd)) {
+    if (/not a git repository \(or any /i.test(common.stderr) && marker === undefined) {
       return undefined;
     }
     throw new CliError(

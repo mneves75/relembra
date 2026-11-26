@@ -124,8 +124,11 @@ records changes, not reads.
 
 An open that creates or migrates the schema needs, for the role relembra connects as, `CREATE`
 on the database (Postgres checks it even for a schema that exists) and `SELECT` on
-`pg_catalog.pg_namespace`, which every role has unless an operator revoked it: that open locks
-the catalog in `ACCESS SHARE` mode.
+`pg_catalog.pg_namespace` and `pg_catalog.pg_class`, which every role has unless an operator
+revoked them: that open locks `pg_namespace` in `ACCESS SHARE` mode and checks that the schema and
+every relation in it are owned by the connecting role or a role it is a member of (refusing
+otherwise with `SchemaOwnershipError`, so another role with `CREATE` on the database cannot
+pre-create a host's schema).
 
 ### Sharing across machines
 

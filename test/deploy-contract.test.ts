@@ -719,3 +719,16 @@ describe.skipIf(NO_RELEASE_TOOLING)("contract: quoting and portability", () => {
     expect(fullRun(f, f.env, "/bin/bash")).toEqual({ hmo: 0, prd: 0, stderr: "" });
   });
 });
+
+describe("contract: ci.yml release-artifact run never installs @latest", () => {
+  test("every job installing @latest or running bun add excludes push events", () => {
+    const ci = readFileSync(join(import.meta.dir, "..", ".github", "workflows", "ci.yml"), "utf8");
+    const jobsSection = ci.slice(ci.indexOf("\njobs:\n") + "\njobs:\n".length);
+    const jobBlocks = jobsSection.split(/\n(?= {2}[a-zA-Z0-9_-]+:\n)/);
+    const unpinned = jobBlocks.filter((block) => /\bbun add\b|@latest\b/.test(block));
+    expect(unpinned.length).toBeGreaterThan(0);
+    for (const block of unpinned) {
+      expect(block).toMatch(/^ {4}if: github\.event_name != 'push'$/m);
+    }
+  });
+});

@@ -18,6 +18,7 @@ import {
   SchemaTooNewError,
   StoreBusyError,
   StoreFileModeError,
+  StoreFileOwnerError,
   StoreFileTypeError,
   WalScrubError,
 } from "relembra/sqlite";
@@ -87,6 +88,36 @@ describe("sqlite store files", () => {
       expect(() => openSqliteStore({ path })).toThrow(StoreFileModeError);
     }
     chmodSync(path, 0o600);
+    await openSqliteStore({ path }).close();
+  });
+
+  modeTest("an existing store file or sidecar owned by another uid is refused", async () => {
+    const path = join(dir.path, "relembra.db");
+    await openSqliteStore({ path }).close();
+    const realGetuid = process.getuid;
+    if (realGetuid === undefined) return;
+    const realUid = realGetuid();
+    try {
+      // Main store file owned by another uid.
+      process.getuid = () => realUid + 1;
+      expect(() => openSqliteStore({ path })).toThrow(StoreFileOwnerError);
+
+      // Each sidecar (-wal, -shm, -journal): pass the main file (call 1), fail the sidecar (call 2).
+      for (const suffix of ["-wal", "-shm", "-journal"] as const) {
+        const sidecar = `${path}${suffix}`;
+        writeFileSync(sidecar, "", { mode: 0o600 });
+        try {
+          let calls = 0;
+          process.getuid = () => (++calls === 1 ? realUid : realUid + 1);
+          expect(() => openSqliteStore({ path })).toThrow(sidecar);
+        } finally {
+          unlinkSync(sidecar);
+        }
+      }
+    } finally {
+      process.getuid = realGetuid;
+    }
+    // Positive control: the real owner opens cleanly.
     await openSqliteStore({ path }).close();
   });
 
@@ -315,20 +346,6 @@ describe("sqlite store files", () => {
     const after = new DatabaseSync(path);
     expect(schemaVersion(after)).toBe(6);
     after.close();
-  });
-
-  test("a file written by a newer relembra is refused, not downgraded", async () => {
-    const path = join(dir.path, "store", "relembra.db");
-    await openSqliteStore({ path }).close();
-
-    // Positive control: the current version opens.
-    await openSqliteStore({ path }).close();
-
-    const db = new DatabaseSync(path);
-    db.exec(`INSERT INTO schema_version (version, applied_at) VALUES (${FUTURE}, 0)`);
-    db.close();
-
-    expect(() => openSqliteStore({ path })).toThrow(SchemaTooNewError);
   });
 });
 

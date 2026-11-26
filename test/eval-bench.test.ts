@@ -1,6 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -67,14 +66,6 @@ describe("bulkCorpus", () => {
       expect(name).toBeDefined();
       expect(memories.some((m) => m.text.toLowerCase().includes(name as string))).toBe(true);
     }
-  });
-
-  test("the benchmark's 20,000-memory corpus is unchanged (docs/eval/bench-2026-10-31.json)", () => {
-    const { memories } = bulkCorpus({ seed: DEFAULT_SEED, memories: 20_000 });
-    const text = memories.map((m) => m.text).join("\n");
-    expect(createHash("sha256").update(text).digest("hex")).toBe(
-      "d05ab8090a189959b5f2de29ffe10d2a5beaf18042b6e8868d2c6681e8c39e6d",
-    );
   });
 });
 

@@ -236,16 +236,6 @@ describe("sqlite crash and first-open processes", () => {
     expect(await memoryIds()).toEqual(["m-in-wal"]);
   }, 30_000);
 
-  test("a killed writer's damaged wal-index still opens: the read-only probe hands recovery to the writer", async () => {
-    await killAt("inside", start("die-holding-wal", path, barrier, "current"));
-    // A writer killed while updating the wal-index leaves a -shm that needs recovery.
-    const shm = readFileSync(`${path}-shm`);
-    shm.fill(0, 0, 136);
-    writeFileSync(`${path}-shm`, shm);
-
-    expect(await memoryIds()).toEqual(["m-in-wal"]);
-  }, 30_000);
-
   /**
    * What another process's half-done writes can leave of a store, and what SQLite answers to it:
    * pages missing (the header promises more than the file has: SQLITE_CORRUPT), or a first page

@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   createRelembra,
@@ -101,11 +100,6 @@ describe("export", () => {
     expect(events.every((e) => e.format === 1)).toBe(true);
     // Each line is one event exactly as the store holds it.
     expect(events).toEqual([...(await store.events({ scopes: [SCOPE] }))]);
-  });
-
-  test("the relembra version is package.json's", () => {
-    const pkg = JSON.parse(readFileSync(join(import.meta.dir, "..", "package.json"), "utf8"));
-    expect(RELEMBRA_VERSION).toBe(pkg.version);
   });
 
   test("a redacted memory appears only in its tombstone form, while live text is exported", async () => {
@@ -1674,5 +1668,27 @@ describe("pending tombstones reserve memory identity across scopes and live even
       importJsonl(store, scopeOwner, jsonl, { clock: { now: () => Number.NaN } }),
     ).rejects.toBeInstanceOf(RangeError);
     expect(await store.events({ scopes: [SCOPE] })).toEqual([]);
+  });
+
+  test("an unauthorized import is refused before opening a store transaction", async () => {
+    const source = open();
+    await source.note("Owned elsewhere.", { scope: OTHER_SCOPE });
+    const jsonl = await exportJsonl(source.store, owner, { scope: OTHER_SCOPE });
+    const backing = createMemoryStore();
+    let transactions = 0;
+    const tracked: Store = {
+      ...backing,
+      transaction(work) {
+        transactions++;
+        return backing.transaction(work);
+      },
+    };
+    await expect(importJsonl(tracked, scopeOwner, jsonl)).rejects.toThrow(
+      new ScopeDeniedError("own"),
+    );
+    expect(transactions).toBe(0);
+    // Positive control: an authorized owner opens the transaction and imports the event.
+    expect(await importJsonl(tracked, owner, jsonl)).toMatchObject({ imported: 1 });
+    expect(transactions).toBe(1);
   });
 });

@@ -18,8 +18,7 @@ is the library's host: it decides the scope and the principal, never the agent c
   - `<name>` is for people reading the scope only: the last segment of the normalized `origin`
     URL when there is one (so renaming the folder does not change the scope), else the
     repository's folder name: the folder holding `.git`, or the git directory itself, without a
-    trailing `.git`, for a bare repository or a separate git dir. Never a linked worktree's own
-    folder.
+    trailing `.git`, for a separate git dir. Never a linked worktree's own folder.
   - `<hash>` is the first 16 hex characters of the sha256 of the **project key**:
     `origin:<normalized URL>` when the repository has an `origin` remote, else
     `gitdir:<real path of the common git directory>`. The remote URL is normalized: the scheme,
@@ -35,7 +34,7 @@ is the library's host: it decides the scope and the principal, never the agent c
     refused (`unsupported-origin`), one decoding to a control character too (`unsupported-path`).
     A relative path is resolved as git
     resolves it, against the working tree's top (`git rev-parse --show-toplevel`, a third git
-    call made only for a relative origin), or the git directory in a bare repository. So two
+    call made only for a relative origin). So two
     `../upstream.git` beside different checkouts are two projects, a separate git dir included,
     and two linked worktrees in different places with a relative origin can name different
     upstreams, as they do to git.
@@ -47,18 +46,21 @@ is the library's host: it decides the scope and the principal, never the agent c
   - **Git answers, not a parser.** The CLI asks git itself, so quoting, comments, includes and
     `url.<base>.insteadOf` rewrites mean what they mean to every other git command:
     `git -C <cwd> rev-parse --path-format=absolute --git-common-dir` (real-pathed) names the
-    repository, which every linked worktree, a separate git dir's worktrees and a bare repository
-    all have; `git -C <cwd> remote get-url origin` gives the effective origin URL. Not
+    repository, which every linked worktree and a separate git dir's worktrees all have; `git -C <cwd> remote get-url origin` gives the effective origin URL. Not
     `ls-remote --get-url origin`: with no origin it prints `origin` and exits 0, which reads like
     a relative remote, where `remote get-url` exits 2. Needs git 2.31 or later
     (`--path-format`). A submodule is its own project.
   - **Which git.** The first executable `git` on `PATH`, taking only absolute entries outside the
-    working directory and the repository around it (the nearest folder above it holding `.git`).
-    An empty or relative entry (`.`, `bin`) names a folder the current directory chooses, and an
-    entry inside the repository holds whatever is checked out there; either would run a
-    repository's own `git` on every session start. The executable is judged by its real path
-    and run by it, so a `git` link on an outside entry that points into the repository is passed
-    over like an entry inside it. The filtered list is also git's `PATH`.
+    working directory and every repository around it: each folder above it holding `.git` or laid
+    out as a git directory, and, for a linked worktree or submodule, the checkout that owns its
+    git directory (followed through `gitdir:` and `commondir`). An empty or relative entry (`.`,
+    `bin`) names a folder the current directory chooses, and an entry inside any of those
+    checkouts holds whatever is checked out there; either would run a repository's own `git` on
+    every session start. If `$HOME` is itself a repository, a `git` installed only below it is
+    passed over too and there is no scope (`git-unavailable`): install git outside it or set
+    `RELEMBRA_SCOPE`. The executable is judged by its real path and run by it, so a `git` link on
+    an outside entry that points into a repository is passed over like an entry inside it. The
+    filtered list is also git's `PATH`.
   - Git's output is used whole, less its final newline: spaces, a trailing one included, are part
     of the path or URL, so origins `/x/upstream` and `/x/upstream ` are two projects. A path or
     URL holding another newline or any control character is refused (`no-scope`, rule
@@ -74,7 +76,13 @@ is the library's host: it decides the scope and the principal, never the agent c
     `RELEMBRA_GLOBAL_SCOPE` is set, and there is none otherwise (`no-scope`). When git is
     missing, times out or cannot read the origin, there is none either (`no-scope`, rule
     `git-unavailable` or `git-failed`), never a scope guessed without it, and never the global
-    scope: the working directory may be inside a project. Each command that needs
+    scope: the working directory may be inside a project.
+  - **No bare repository.** A folder laid out as a git directory itself (`HEAD` beside `objects`,
+    `commondir` or `config`) and not inside a `.git` folder is never a project (`no-scope`, rule
+    `bare-repository`), on every git version, before git runs: a checkout can carry one that names
+    another project's origin or git directory. Git runs with `-c safe.bareRepository=explicit`,
+    so git 2.38 and later refuse it too. A deliberate bare repository needs `RELEMBRA_SCOPE`, as
+    does an extracted tree that brings its own `.git` from elsewhere. Each command that needs
     a scope runs git twice, three times for a relative origin (measured in docs/bench).
   - **No argument changes the scope.** No flag names a scope, a home or a user, an undeclared
     flag is a usage error, and text that looks like a scope is stored as text.
@@ -188,7 +196,7 @@ is the library's host: it decides the scope and the principal, never the agent c
 | Code | Exit | When | Rule |
 |---|---|---|---|
 | `usage` | 2 | The command line does not parse | `missing-command`, `unknown-command`, `unknown-flag`, `missing-value`, `unexpected-value`, `repeated-flag`, `bad-value`, `extra-argument`, `missing-argument` |
-| `no-scope` | 2 | Outside a git repository with no `RELEMBRA_SCOPE`, or git could not answer | `git-unavailable`, `git-failed` when git did not answer; `unsupported-path` for a path or URL with a control character; `unsupported-origin` for a file URL naming another host, an encoded `/` or a malformed escape |
+| `no-scope` | 2 | Outside a git repository with no `RELEMBRA_SCOPE`, or git could not answer | `git-unavailable`, `git-failed` when git did not answer; `bare-repository` inside a bare repository; `unsupported-path` for a path or URL with a control character; `unsupported-origin` for a file URL naming another host, an encoded `/` or a malformed escape |
 | `bad-scope` | 2 | `RELEMBRA_SCOPE` or the derived scope is blank, over 256 bytes, or holds invisible or control characters | the guard rule |
 | `invalid-argument` | 2 | The library refused an out-of-range argument, or an identifier (principal id, memory id, fence key, carrier id or kind) that breaks the identifier rule (`docs/FORMAT.md`, "Identifiers") | `<field>:<rule>` for an identifier (`principal-id`, `memory-id`, `fence-key`, `carrier-id`, `carrier-kind`; a bad scope stops earlier as `bad-scope`), such as `memory-id:control-character` or `memory-id:ill-formed`; none for an out-of-range argument |
 | `unsafe-runtime-env` | 2 | `BUN_OPTIONS` or `BUN_BYTECODE_ORDER_OUT` is set, or a runtime option reached the binary | |
@@ -208,7 +216,7 @@ is the library's host: it decides the scope and the principal, never the agent c
 | `import` | 1 | `import` refused the file and wrote nothing ([`import`](#relembra-import)) | `format-too-new`, `malformed`, `malformed:summary-supersede`, `malformed:copy-replacement`, `malformed:summary-promote`, `malformed:<field>:<rule>` for an identifier, such as `malformed:memoryId:control-character`, `guard:<rule>`, `provenance:<field>:<rule>`, `future-time`, `redacted-in-target`, `conflict`, `denied:above-ceiling`, `denied:pin`, `denied:promote`, `truncated`, `modified`, `not-optmem`, `too-large:file`, `too-large:line`, `too-large:events`, `too-large:records` |
 | `no-store` | 3 | The store file does not exist; run `relembra init` | |
 | `schema-too-new` | 3 | A newer relembra wrote the store; it is left untouched | |
-| `store-file` | 3 | The store, a sidecar or its directory is not owner-only, or is not a regular file | `mode`, `type` |
+| `store-file` | 3 | The store, a sidecar or its directory is not owner-only, owned by the user, or a regular file/directory | `mode`, `type`, `owner` |
 | `store-unverified` | 3 | SQLite could not verify the store's schema | |
 | `store-busy` | 3 | Another writer held the lock past the busy timeout | |
 | `wal-scrub` | 3 | A redaction's old pages could not yet be truncated from the WAL | |
@@ -452,11 +460,12 @@ rule unattended.
 
 ### `relembra check`
 
-Verifies the store: opening it checks that the file and its sidecars are owner-only regular
-files, that the schema is not newer than this binary, and SQLite's schema verification; then
-`check` runs SQLite's `integrity_check`, parses every event and checks its format version (1, or
-2 for the promote events a library host may write; a newer one fails), and checks that the
-store's directory is owner-only. Any failure exits 3.
+Verifies the store: opening it checks that the store's directory is a real, owner-only directory
+owned by the user and that the file and its sidecars are owner-only regular files owned by the user
+(every store command runs these checks before opening), that the schema is not newer than this
+binary, and SQLite's schema verification; then `check` runs SQLite's `integrity_check` and parses
+every event and checks its format version (1, or 2 for the promote events a library host may write;
+a newer one fails). Any failure exits 3.
 
 `data`: `{ scope, store, integrity: "ok", schemaVersion, events, memories, walScrubPending,
 erasurePending: { work, carriers } }`. `walScrubPending: true` is a warning, not a failure.

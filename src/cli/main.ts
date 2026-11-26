@@ -44,7 +44,7 @@ import {
   type NoteProvenance,
   type Relembra,
 } from "../relembra.js";
-import { identityEgress, renderMemory } from "../render.js";
+import { escapeText, identityEgress, renderMemory } from "../render.js";
 import { OWNER_MODES, resolveStorePath } from "../sqlite/database.js";
 import { openSqliteStore, type SqliteStore } from "../sqlite/index.js";
 import { exportJsonl, type ImportReport, importJsonl, MAX_IMPORT_BYTES } from "../transfer.js";
@@ -189,30 +189,32 @@ const lines = (memories: readonly Memory[]) =>
     )
     .join("\n");
 
+/** Every stored string is escaped like the memory line: provenance and ids are writer-supplied. */
 function zoomText(memory: StoredMemory, sources: readonly ZoomSource[]): string {
+  const e = escapeText;
   if (memory.status === "redacted") {
-    return [`id: ${memory.id}`, `scope: ${memory.scope}`, "status: redacted"].join("\n");
+    return [`id: ${e(memory.id)}`, `scope: ${e(memory.scope)}`, "status: redacted"].join("\n");
   }
   const { revision } = memory;
   const p = revision.provenance;
   return [
     renderMemory(memory),
-    `status: ${memory.status}${memory.supersededBy === undefined ? "" : ` by ${memory.supersededBy}`}`,
+    `status: ${memory.status}${memory.supersededBy === undefined ? "" : ` by ${e(memory.supersededBy)}`}`,
     `pinned: ${memory.pinned}`,
     `noted: ${new Date(memory.notedAt).toISOString()}`,
     `trust: ${p.trust}`,
-    `agent: ${p.agent}`,
-    `harness: ${p.harness}`,
-    `model: ${p.model}`,
-    `host: ${p.host}`,
-    ...(p.source === undefined ? [] : [`source: ${p.source}`]),
-    `op: ${p.opId}`,
+    `agent: ${e(p.agent)}`,
+    `harness: ${e(p.harness)}`,
+    `model: ${e(p.model)}`,
+    `host: ${e(p.host)}`,
+    ...(p.source === undefined ? [] : [`source: ${e(p.source)}`]),
+    `op: ${e(p.opId)}`,
     ...(memory.origin === undefined
       ? []
-      : [`origin: ${memory.origin.memoryId}@${memory.origin.revision}`]),
+      : [`origin: ${e(memory.origin.memoryId)}@${memory.origin.revision}`]),
     ...sources.map(
       (s) =>
-        `source memory: ${s.memoryId}@${s.revision} ${s.memory === null ? "not visible" : s.memory.status}`,
+        `source memory: ${e(s.memoryId)}@${s.revision} ${s.memory === null ? "not visible" : s.memory.status}`,
     ),
   ].join("\n");
 }
@@ -645,7 +647,10 @@ function reportText(report: ImportReport): string {
 }
 
 function redactionText(redaction: { redacted: readonly string[]; derived: readonly string[] }) {
-  return [`redacted: ${redaction.redacted.join(" ")}`, `derived: ${redaction.derived.join(" ")}`]
+  return [
+    `redacted: ${redaction.redacted.map(escapeText).join(" ")}`,
+    `derived: ${redaction.derived.map(escapeText).join(" ")}`,
+  ]
     .map((line) => line.trimEnd())
     .join("\n");
 }
@@ -661,25 +666,34 @@ function parseSource(value: string): { memoryId: string; revision: number } {
   return { memoryId, revision: Number(revision) };
 }
 
-/** Verifies the store's parent directory is a real, owner-only directory before any write-capable open. */
+/** Verifies the store's parent directory is a real, owner-only directory owned by the user before any open. */
 function checkStoreHome(path: string): void {
   const homeStat = lstatSync(dirname(path));
   if (!homeStat.isDirectory()) {
     throw new CliError("store-file", "the store's directory is not a regular directory", "type");
   }
-  const homeMode = Number(homeStat.mode) & 0o777;
-  if (OWNER_MODES && (homeMode & 0o077) !== 0) {
-    throw new CliError("store-file", "the store's directory grants group or others access", "mode");
+  if (OWNER_MODES) {
+    const uid = process.getuid?.();
+    if (uid !== undefined && homeStat.uid !== uid) {
+      throw new CliError("store-file", "the store's directory is owned by another user", "owner");
+    }
+    const homeMode = Number(homeStat.mode) & 0o777;
+    if ((homeMode & 0o077) !== 0) {
+      throw new CliError(
+        "store-file",
+        "the store's directory grants group or others access",
+        "mode",
+      );
+    }
   }
 }
 
 /**
- * The store's integrity: the open itself checks file types and modes, the schema version and
- * SQLite's verification; then SQLite's integrity_check, every event's JSON and format, and the
- * home directory's mode. Any failure is a store error.
+ * The store's integrity: the open itself checks the store directory, file types, ownership and
+ * modes, the schema version and SQLite's verification; then SQLite's integrity_check and every
+ * event's JSON and format. Any failure is a store error.
  */
 async function check(scope: string, store: SqliteStore, path: string): Promise<Output> {
-  checkStoreHome(path);
   const db = new DatabaseSync(pathToFileURL(resolveStorePath(path)).href, { readOnly: true });
   let schemaVersion: number;
   let events = 0;
@@ -756,6 +770,8 @@ function plural(count: number, noun: string): string {
 
 function init(env: CliEnv, cwd: string): { output: Output; store: SqliteStore } {
   const path = storePath(env, cwd);
+  // If the store directory already exists (including as a symlink), verify it before opening or creating.
+  if (lstatSync(dirname(path), { throwIfNoEntry: false }) !== undefined) checkStoreHome(path);
   const created = !existsSync(path);
   let scope: string | null;
   try {
@@ -860,7 +876,7 @@ export async function main(
       );
     }
     if (!existsSync(path)) throw new CliError("no-store", `no store at ${path}: run relembra init`);
-    if (name === "check") checkStoreHome(path);
+    checkStoreHome(path);
     store = openSqliteStore({ path });
     if (server) {
       await serveStdio(env, scopes, store);

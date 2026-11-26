@@ -1220,13 +1220,6 @@ describe("op ids: the JSON-RPC id is correlation only; writes carry their own op
   });
 });
 
-describe("relembra mcp is in the CLI's command table", () => {
-  cliTest("relembra --help lists it", () => {
-    const box = initializedSandbox();
-    expect(run(box, ["--help"]).stdout).toContain("relembra mcp");
-  });
-});
-
 describe("erasure: what the client received is recorded under the server process's carrier", () => {
   cliTest(
     "a redaction lists each server process as a pending carrier, check counts it, and nothing claims the client deleted it",

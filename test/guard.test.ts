@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { GuardError, type GuardRule } from "relembra";
+import { findGuardViolation } from "../src/guard.js";
 import { openTestRelembra, provenance, SCOPE } from "./support.js";
 
 /** Synthetic, deterministic filler: `length` characters cycling through `alphabet`. */
@@ -420,5 +421,27 @@ describe("guard: credentials", () => {
       "credential",
     );
     await expectRejected(`Carrier pi-durable:${filler(24, BASE62)}:1`, "credential");
+  });
+
+  test("catches assignments after digits, dots or quotes and scales linearly on long runs and compound values", async () => {
+    await expectRejected("123token=abc123456", "credential");
+    await expectRejected("service.api_key=abc123456", "credential");
+    await expectRejected('"secret_token": "abc123456"', "credential");
+    await expectRejected("x=password=my=secret123", "credential");
+    const longId = `a${"b".repeat(249)}000000`;
+    await expectAccepted(longId);
+    const start = performance.now();
+    for (let i = 0; i < 2000; i++) expect(findGuardViolation(longId, 256)).toBeUndefined();
+    // Quadratic regex backtracking took ~200 ms for 2000 calls on 256-byte runs; linear is <20 ms.
+    expect(performance.now() - start).toBeLessThan(150);
+    // Compound unquoted assignments (`a=b=c=...`) must also scale linearly, not quadratically.
+    const small = `${"a=".repeat(256)}x`;
+    const large = `${"a=".repeat(2048)}x`;
+    // Warm up JIT, then compare 8x input size.
+    expect(findGuardViolation(small, small.length)).toBeUndefined();
+    expect(findGuardViolation(large, large.length)).toBeUndefined();
+    const t0 = performance.now();
+    for (let i = 0; i < 50; i++) expect(findGuardViolation(large, large.length)).toBeUndefined();
+    expect(performance.now() - t0).toBeLessThan(200);
   });
 });
