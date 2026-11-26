@@ -44,7 +44,7 @@ import {
   type NoteProvenance,
   type Relembra,
 } from "../relembra.js";
-import { identityEgress, renderMemory } from "../render.js";
+import { escapeText, identityEgress, renderMemory } from "../render.js";
 import { OWNER_MODES, resolveStorePath } from "../sqlite/database.js";
 import { openSqliteStore, type SqliteStore } from "../sqlite/index.js";
 import { exportJsonl, type ImportReport, importJsonl, MAX_IMPORT_BYTES } from "../transfer.js";
@@ -189,30 +189,32 @@ const lines = (memories: readonly Memory[]) =>
     )
     .join("\n");
 
+/** Every stored string is escaped like the memory line: provenance and ids are writer-supplied. */
 function zoomText(memory: StoredMemory, sources: readonly ZoomSource[]): string {
+  const e = escapeText;
   if (memory.status === "redacted") {
-    return [`id: ${memory.id}`, `scope: ${memory.scope}`, "status: redacted"].join("\n");
+    return [`id: ${e(memory.id)}`, `scope: ${e(memory.scope)}`, "status: redacted"].join("\n");
   }
   const { revision } = memory;
   const p = revision.provenance;
   return [
     renderMemory(memory),
-    `status: ${memory.status}${memory.supersededBy === undefined ? "" : ` by ${memory.supersededBy}`}`,
+    `status: ${memory.status}${memory.supersededBy === undefined ? "" : ` by ${e(memory.supersededBy)}`}`,
     `pinned: ${memory.pinned}`,
     `noted: ${new Date(memory.notedAt).toISOString()}`,
     `trust: ${p.trust}`,
-    `agent: ${p.agent}`,
-    `harness: ${p.harness}`,
-    `model: ${p.model}`,
-    `host: ${p.host}`,
-    ...(p.source === undefined ? [] : [`source: ${p.source}`]),
-    `op: ${p.opId}`,
+    `agent: ${e(p.agent)}`,
+    `harness: ${e(p.harness)}`,
+    `model: ${e(p.model)}`,
+    `host: ${e(p.host)}`,
+    ...(p.source === undefined ? [] : [`source: ${e(p.source)}`]),
+    `op: ${e(p.opId)}`,
     ...(memory.origin === undefined
       ? []
-      : [`origin: ${memory.origin.memoryId}@${memory.origin.revision}`]),
+      : [`origin: ${e(memory.origin.memoryId)}@${memory.origin.revision}`]),
     ...sources.map(
       (s) =>
-        `source memory: ${s.memoryId}@${s.revision} ${s.memory === null ? "not visible" : s.memory.status}`,
+        `source memory: ${e(s.memoryId)}@${s.revision} ${s.memory === null ? "not visible" : s.memory.status}`,
     ),
   ].join("\n");
 }
@@ -645,7 +647,10 @@ function reportText(report: ImportReport): string {
 }
 
 function redactionText(redaction: { redacted: readonly string[]; derived: readonly string[] }) {
-  return [`redacted: ${redaction.redacted.join(" ")}`, `derived: ${redaction.derived.join(" ")}`]
+  return [
+    `redacted: ${redaction.redacted.map(escapeText).join(" ")}`,
+    `derived: ${redaction.derived.map(escapeText).join(" ")}`,
+  ]
     .map((line) => line.trimEnd())
     .join("\n");
 }
