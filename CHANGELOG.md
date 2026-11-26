@@ -5,6 +5,39 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [1.0.0-beta.13] - 2026-11-26
+
+Security-audit hardening across the CLI, core guard and transfer, SQLite and Postgres stores, and
+CI workflow, plus configurable wake budgets on `relembra hook`. The export format, SQLite and
+Postgres schemas, and CLI exit codes are unchanged.
+
+### Added
+
+- CLI hook: `relembra hook` accepts `--budget` and `RELEMBRA_WAKE_BUDGET` to cap the emitted
+  `additionalContext` UTF-8 bytes (#37).
+
+### Fixed
+
+- CLI output and scope: escapes every stored field printed by `relembra zoom` and `relembra redact`
+  (provenance, ids, scope, origin, sources, redacted and derived lists); refuses bare repositories
+  and `HEAD`+`commondir` layouts before invoking `git` (`bare-repository`) and passes
+  `-c safe.bareRepository=explicit` (deliberate bare repositories now require `RELEMBRA_SCOPE`);
+  fences every enclosing checkout, bare layout, and linked worktree's main checkout (preserving
+  trailing spaces in gitfiles and `commondir`) from `hostGit`'s `PATH`; enforces `RELEMBRA_HOME`
+  directory type, owner-only mode, and UID checks on `init` and every store command (#43).
+- Core transfer and guard: validates file cap, line 1 header, scope ownership/write rights, and
+  bounds in `importJsonl` before opening `store.transaction` and checks event scopes against a
+  `Set`; replaces backtracking assignment regex and recursive compound-token rescanning in
+  `guard.ts` with a linear scanner (#43).
+- SQLite and Postgres: verifies POSIX `st_uid` on SQLite store files and `-wal`/`-shm`/`-journal`
+  sidecars (`StoreFileOwnerError`, CLI `store-file`/`owner`); verifies Postgres schema and relation
+  ownership (`pg_namespace.nspowner` and `pg_class.relowner` via
+  `pg_has_role(current_user, owner, 'MEMBER')`) in one atomic `pg_catalog` query before reading
+  `schema_version` and again under the migration lock (`SchemaOwnershipError`) (#43).
+- CI and tests: excludes the informational `pi-durable@latest` probe from `push` runs in `ci.yml`
+  (`if: github.event_name != 'push'`), prunes duplicate/implementation-bound tests (#43), and bumps
+  `zizmor-action` (#28) and dev dependencies (#29).
+
 ## [1.0.0-beta.12] - 2026-11-24
 
 Repository-wide hardening across the core library, SQLite and Postgres adapters, CLI, MCP server,
