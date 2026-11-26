@@ -1,6 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { accessSync, constants, existsSync, lstatSync, realpathSync, statSync } from "node:fs";
+import {
+  accessSync,
+  constants,
+  existsSync,
+  lstatSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { findGuardViolation } from "../guard.js";
@@ -121,25 +129,36 @@ const noGit = () =>
 
 /**
  * The git to run: the first executable `git` on PATH, taking only absolute entries outside the
- * working directory and the repository around it. An empty or relative entry (`.`, `bin`) names
- * a folder the current directory chooses, and an entry inside the repository holds whatever the
- * repository holds: either would let a checked-out `git` run on every session start. The
- * executable is judged, and run, by its real path, so a `git` link on an outside entry that points
- * into the repository is passed over too. The same filtered list is git's own PATH.
+ * working directory and every enclosing repository (including a linked worktree's or submodule's
+ * main checkout). An empty or relative entry (`.`, `bin`) names a folder the current directory
+ * chooses, and an entry inside any enclosing repository holds whatever is checked out there:
+ * either would let a checked-out `git` run on every session start. The executable is judged, and
+ * run, by its real path, so a `git` link on an outside entry that points into a fenced checkout is
+ * passed over too. The same filtered list is git's own PATH.
  */
 function hostGit(env: CliEnv, cwd: string): { git: string; path: string } {
+  // Every enclosing repository, not only the nearest: a linked worktree or a nested repository
+  // may sit inside another checkout, or belong to a main checkout elsewhere, whose files a PATH
+  // entry can name. If $HOME is itself a repository, every git below it is fenced too.
   const fences = [safeRealpath(cwd)];
   for (let dir = fences[0] as string; ; dir = dirname(dir)) {
-    if (existsSync(join(dir, ".git"))) {
+    if (markerAt(dir) !== undefined) {
       fences.push(dir);
-      break;
+      const main = mainCheckout(dir);
+      if (main !== undefined) fences.push(main);
     }
     if (dirname(dir) === dir) break;
   }
   // Windows paths ignore case, so a fence compared by bytes would let C:\REPO\bin past C:\repo.
   const fold = (path: string) => (WINDOWS ? path.toLowerCase() : path);
-  const inside = (dir: string) =>
-    fences.some((f) => fold(dir) === fold(f) || fold(dir).startsWith(fold(`${f}${sep}`)));
+  const inside = (dir: string) => {
+    const folded = fold(dir);
+    return fences.some((f) => {
+      const target = fold(f);
+      const prefix = target.endsWith(sep) ? target : `${target}${sep}`;
+      return folded === target || folded.startsWith(prefix);
+    });
+  };
   const entries = (env.PATH ?? "")
     .split(delimiter)
     .filter((entry) => isAbsolute(entry) && !inside(safeRealpath(entry)));
@@ -220,19 +239,41 @@ function runGit(
  * and later refuse it too (`safe.bareRepository=explicit`, see runGit).
  */
 function repoMarker(startDir: string): "dotgit" | "bare" | undefined {
-  const at = (dir: string, name: string) => lstatSync(join(dir, name), { throwIfNoEntry: false });
-  let dir = resolve(startDir);
-  for (;;) {
-    if (at(dir, ".git") !== undefined) return "dotgit";
-    if (
-      at(dir, "HEAD") !== undefined &&
-      (at(dir, "objects")?.isDirectory() || at(dir, "commondir") || at(dir, "config"))
-    ) {
-      return dir.split(sep).includes(".git") ? "dotgit" : "bare";
-    }
-    const parent = dirname(dir);
-    if (parent === dir) return undefined;
-    dir = parent;
+  for (let dir = resolve(startDir); ; dir = dirname(dir)) {
+    const marker = markerAt(dir);
+    if (marker !== undefined || dirname(dir) === dir) return marker;
+  }
+}
+
+/** repoMarker's test for one folder. */
+function markerAt(dir: string): "dotgit" | "bare" | undefined {
+  const at = (name: string) => lstatSync(join(dir, name), { throwIfNoEntry: false });
+  if (at(".git") !== undefined) return "dotgit";
+  if (at("HEAD") === undefined) return undefined;
+  if (!(at("objects")?.isDirectory() || at("commondir") || at("config"))) return undefined;
+  return dir.split(sep).includes(".git") ? "dotgit" : "bare";
+}
+
+/**
+ * For a folder whose `.git` is a file (a linked worktree, a submodule), the checkout that owns
+ * its git directory: `gitdir:` then `commondir` followed as git follows them, cut before the first
+ * `.git` component (the git directory itself when it has none). Undefined otherwise.
+ */
+function mainCheckout(dir: string): string | undefined {
+  try {
+    const gitfile = readFileSync(join(dir, ".git"), "utf8").trimEnd();
+    if (!gitfile.startsWith("gitdir: ")) return undefined;
+    const gitdir = resolve(dir, gitfile.slice("gitdir: ".length));
+    const commondir = join(gitdir, "commondir");
+    const common = existsSync(commondir)
+      ? resolve(gitdir, readFileSync(commondir, "utf8").trimEnd())
+      : gitdir;
+    const parts = safeRealpath(common).split(sep);
+    const dotgit = parts.indexOf(".git");
+    return dotgit < 0 ? parts.join(sep) : parts.slice(0, dotgit).join(sep) || sep;
+  } catch {
+    // A .git folder (EISDIR), or an unreadable file: nothing further to fence.
+    return undefined;
   }
 }
 

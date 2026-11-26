@@ -427,6 +427,58 @@ describe("scope comes from the git project and the OS user, or RELEMBRA_SCOPE, n
     },
   );
 
+  posixCliTest("a git in any enclosing checkout, or a worktree's main one, never runs", () => {
+    const base = join(dirname(box.repo), "enclosing");
+    const main = join(base, "main");
+    gitInit(main);
+    git(main, "commit", "-q", "--allow-empty", "-m", "first");
+    const realGit = Bun.which("git") as string;
+    const marker = join(box.home, "enclosing-git-ran");
+    mkdirSync(join(main, "bin"), { recursive: true });
+    writeFileSync(
+      join(main, "bin", "git"),
+      `#!/bin/sh\necho ran >> '${marker}'\nexec '${realGit}' "$@"\n`,
+    );
+    chmodSync(join(main, "bin", "git"), 0o755);
+    const nested = join(main, ".worktrees", "feature");
+    git(main, "worktree", "add", "-q", nested);
+    const elsewhere = join(base, "elsewhere");
+    git(main, "worktree", "add", "-q", elsewhere);
+    const inner = join(main, "vendor", "inner");
+    gitInit(inner);
+    const decoy = join(main, "decoy");
+    mkdirSync(join(decoy, ".git"), { recursive: true });
+    const bare = join(base, "bare");
+    mkdirSync(join(bare, "bin"), { recursive: true });
+    mkdirSync(join(bare, "objects"), { recursive: true });
+    mkdirSync(join(bare, "sub"), { recursive: true });
+    writeFileSync(join(bare, "HEAD"), "ref: refs/heads/main\n");
+    writeFileSync(
+      join(bare, "bin", "git"),
+      `#!/bin/sh\necho ran >> '${marker}'\nexec '${realGit}' "$@"\n`,
+    );
+    chmodSync(join(bare, "bin", "git"), 0o755);
+    const mainPath = `${join(main, "bin")}:${dirname(realGit)}:/usr/bin:/bin`;
+    const barePath = `${join(bare, "bin")}:${dirname(realGit)}:/usr/bin:/bin`;
+    // Regression: the fence stopped at the nearest .git, so main/bin/git ran from each of these.
+    for (const [cwd, scope] of [
+      [nested, scopeFor(main)],
+      [elsewhere, scopeFor(main)],
+      [inner, scopeFor(inner)],
+      [decoy, scopeFor(main)],
+    ] as const) {
+      expect(ok(box, ["check"], { cwd, env: { PATH: mainPath } }).scope).toBe(scope);
+      run(box, ["hook"], { cwd, env: { PATH: mainPath } });
+    }
+    expect(run(box, ["check"], { cwd: join(bare, "sub"), env: { PATH: barePath } }).status).toBe(2);
+    expect(existsSync(marker)).toBe(false);
+    // Positive control: outside every checkout the same PATH does run it.
+    const plain = join(base, "plain");
+    mkdirSync(plain);
+    run(box, ["check"], { cwd: plain, env: { PATH: mainPath } });
+    expect(readFileSync(marker, "utf8")).toContain("ran\n");
+  });
+
   posixCliTest("a git on an outside PATH entry that links into the repository never runs", () => {
     const repo = join(dirname(box.repo), "symlink-repo");
     gitInit(repo);

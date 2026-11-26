@@ -51,12 +51,16 @@ is the library's host: it decides the scope and the principal, never the agent c
     a relative remote, where `remote get-url` exits 2. Needs git 2.31 or later
     (`--path-format`). A submodule is its own project.
   - **Which git.** The first executable `git` on `PATH`, taking only absolute entries outside the
-    working directory and the repository around it (the nearest folder above it holding `.git`).
-    An empty or relative entry (`.`, `bin`) names a folder the current directory chooses, and an
-    entry inside the repository holds whatever is checked out there; either would run a
-    repository's own `git` on every session start. The executable is judged by its real path
-    and run by it, so a `git` link on an outside entry that points into the repository is passed
-    over like an entry inside it. The filtered list is also git's `PATH`.
+    working directory and every repository around it: each folder above it holding `.git` or laid
+    out as a git directory, and, for a linked worktree or submodule, the checkout that owns its
+    git directory (followed through `gitdir:` and `commondir`). An empty or relative entry (`.`,
+    `bin`) names a folder the current directory chooses, and an entry inside any of those
+    checkouts holds whatever is checked out there; either would run a repository's own `git` on
+    every session start. If `$HOME` is itself a repository, a `git` installed only below it is
+    passed over too and there is no scope (`git-unavailable`): install git outside it or set
+    `RELEMBRA_SCOPE`. The executable is judged by its real path and run by it, so a `git` link on
+    an outside entry that points into a repository is passed over like an entry inside it. The
+    filtered list is also git's `PATH`.
   - Git's output is used whole, less its final newline: spaces, a trailing one included, are part
     of the path or URL, so origins `/x/upstream` and `/x/upstream ` are two projects. A path or
     URL holding another newline or any control character is refused (`no-scope`, rule
